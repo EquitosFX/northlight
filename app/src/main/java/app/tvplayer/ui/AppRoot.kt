@@ -38,6 +38,10 @@ import app.tvplayer.R
 import app.tvplayer.player.LivePlayerController
 import app.tvplayer.player.PlayerHost
 import app.tvplayer.player.PlayerMode
+import app.tvplayer.player.VodItem
+import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.ui.vod.VodBrowseState
+import app.tvplayer.ui.vod.VodScreen
 import app.tvplayer.ui.components.Dest
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.TopNavBar
@@ -90,6 +94,30 @@ fun AppRoot(
     fun play(channelId: Long?) {
         controller.open(channelId)
         mode = PlayerMode.FULL
+    }
+
+    fun playVod(item: VodItem) {
+        controller.playVod(item)
+        mode = PlayerMode.FULL
+    }
+
+    // Kept here so Films and Series reopen where the viewer left them after watching something.
+    val filmsState = remember { VodBrowseState() }
+    val seriesState = remember { VodBrowseState() }
+
+    val progress by container.channels.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
+    val continueWatching = remember(progress) {
+        progress.map { saved ->
+            val minutesLeft = ((saved.durationMs - saved.positionMs) / 60_000).coerceAtLeast(1)
+            Tile(
+                title = saved.title,
+                caption = if (saved.durationMs > 0) "$minutesLeft min left" else "Carry on watching",
+                color = tileColors[(saved.url.hashCode() and 0x7fffffff) % tileColors.size],
+                progress = if (saved.durationMs > 0) (saved.positionMs.toFloat() / saved.durationMs).coerceIn(0f, 1f) else null,
+                logo = saved.poster,
+                vod = VodItem(saved.url, saved.title, saved.poster, saved.userAgent, saved.referrer),
+            )
+        }
     }
 
     // Back returns to Home from any other section; from Home it leaves the app as usual.
@@ -151,8 +179,30 @@ fun AppRoot(
                 when (dest) {
                     Dest.HOME -> HomeScreen(
                         yourChannels = yourChannels,
+                        continueWatching = continueWatching,
                         onPlayChannel = { id -> play(id) },
+                        onPlayVod = { item -> playVod(item) },
                         onLiveTv = { play(null) },
+                        onShortcut = { label ->
+                            when (label) {
+                                "Films" -> dest = Dest.FILMS
+                                "Series" -> dest = Dest.SERIES
+                            }
+                        },
+                    )
+                    Dest.FILMS -> VodScreen(
+                        kind = ChannelEntity.KIND_MOVIE,
+                        state = filmsState,
+                        channels = container.channels,
+                        playlists = container.playlists,
+                        onPlay = { item -> playVod(item) },
+                    )
+                    Dest.SERIES -> VodScreen(
+                        kind = ChannelEntity.KIND_SERIES,
+                        state = seriesState,
+                        channels = container.channels,
+                        playlists = container.playlists,
+                        onPlay = { item -> playVod(item) },
                     )
                     Dest.GUIDE -> GuideScreen(
                         channels = container.channels,

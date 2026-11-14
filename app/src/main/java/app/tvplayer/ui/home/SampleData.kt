@@ -21,6 +21,8 @@ data class Tile(
     /** Set for the viewer's own channels; selecting the tile plays it. */
     val channelId: Long? = null,
     val logo: String? = null,
+    /** Set for a film or episode to carry on watching. */
+    val vod: app.tvplayer.player.VodItem? = null,
 )
 
 object SampleData {

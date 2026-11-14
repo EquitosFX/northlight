@@ -39,10 +39,16 @@ private val SideMargin = 48.dp
 fun HomeScreen(
     modifier: Modifier = Modifier,
     yourChannels: List<Tile> = emptyList(),
+    continueWatching: List<Tile> = emptyList(),
     onPlayChannel: (Long) -> Unit = {},
+    onPlayVod: (app.tvplayer.player.VodItem) -> Unit = {},
     onLiveTv: () -> Unit = {},
+    onShortcut: (String) -> Unit = {},
 ) {
-    val playTile: (Tile) -> Unit = { tile -> tile.channelId?.let(onPlayChannel) }
+    val playTile: (Tile) -> Unit = { tile ->
+        val vod = tile.vod
+        if (vod != null) onPlayVod(vod) else tile.channelId?.let(onPlayChannel)
+    }
 
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
@@ -53,12 +59,15 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { Hero(item = SampleData.hero, watchFocus = firstFocus) }
-        // Real channels from the user's playlists; everything below is still sample content.
+        // Real content from the user's playlists; the "For you" and "On now" rails are still sample content.
+        if (continueWatching.isNotEmpty()) {
+            item { Rail(title = "Continue watching", tiles = continueWatching, onTileClick = playTile) }
+        }
         if (yourChannels.isNotEmpty()) {
             item { Rail(title = "Your channels", tiles = yourChannels, onTileClick = playTile) }
         }
         item { Rail(title = "For you", tiles = SampleData.forYou) }
-        item { ShortcutRow(labels = SampleData.shortcuts, onClick = { label -> if (label == "Live TV") onLiveTv() }) }
+        item { ShortcutRow(labels = SampleData.shortcuts, onClick = { label -> if (label == "Live TV") onLiveTv() else onShortcut(label) }) }
         item { Rail(title = "On now and next", tiles = SampleData.onNow) }
     }
 }

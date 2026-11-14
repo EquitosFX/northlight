@@ -28,6 +28,7 @@ import app.tvplayer.data.ChannelsRepository
 import app.tvplayer.data.SettingsRepository
 import app.tvplayer.data.db.ChannelEntity
 import app.tvplayer.data.db.ProgrammeEntity
+import app.tvplayer.data.db.ProgressEntity
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -44,7 +45,17 @@ sealed interface PlaybackStatus {
     data object TryingBackup : PlaybackStatus
     data object Failed : PlaybackStatus
     data object NoChannels : PlaybackStatus
+    data object Finished : PlaybackStatus
 }
+
+/** A film or episode to play. */
+data class VodItem(
+    val url: String,
+    val title: String,
+    val poster: String? = null,
+    val userAgent: String? = null,
+    val referrer: String? = null,
+)
 
 /**
  * Plays live channels and keeps them playing.
@@ -88,6 +99,14 @@ class LivePlayerController(
     var nowNext by mutableStateOf<List<ProgrammeEntity>>(emptyList())
         private set
 
+    /** The film or episode playing, or null when watching live TV. */
+    var vod by mutableStateOf<VodItem?>(null)
+        private set
+
+    /** Goes up by one whenever the film controls should appear. */
+    var controlsToken by mutableIntStateOf(0)
+        private set
+
     /** Goes up by one whenever the info banner should appear. */
     var bannerToken by mutableIntStateOf(0)
         private set
@@ -102,6 +121,8 @@ class LivePlayerController(
     private var retryJob: Job? = null
     private var stallJob: Job? = null
     private var guideJob: Job? = null
+    private var progressJob: Job? = null
+    private var resumeAt = 0L
 
     // Lets players start on any frame in a TS stream, which makes channel changes noticeably quicker.
     private val extractors = DefaultExtractorsFactory().setTsExtractorFlags(
@@ -120,6 +141,7 @@ class LivePlayerController(
 
     /** Loads the channel list and plays [channelId], or else the last channel watched, or else the first. */
     fun open(channelId: Long?) {
+        leaveVod()
         loadJob?.cancel()
         cancelRecovery()
         status = PlaybackStatus.Loading
@@ -143,6 +165,7 @@ class LivePlayerController(
     }
 
     fun tune(channel: LineupChannel) {
+        leaveVod()
         cancelRecovery()
         current = channel
         variantIndex = 0
@@ -152,6 +175,113 @@ class LivePlayerController(
         scope.launch { settings.setLastChannel(channel.key) }
         followGuide(channel)
         playVariant(PlaybackStatus.Loading)
+    }
+
+    /** Plays a film or episode, carrying on from where the viewer left it if they got part-way. */
+    fun playVod(item: VodItem) {
+        leaveVod()
+        loadJob?.cancel()
+        tuneJob?.cancel()
+        guideJob?.cancel()
+        cancelRecovery()
+        current = null
+        playingRow = null
+        nowNext = emptyList()
+        streamInfo = null
+        vod = item
+        attempt = 0
+        status = PlaybackStatus.Loading
+        controlsToken++
+        tuneJob = scope.launch {
+            val saved = channels.progressFor(item.url)
+            resumeAt = saved?.positionMs?.takeIf { position ->
+                position > MIN_RESUME_MILLIS && (saved.durationMs <= 0 || position < saved.durationMs - END_MARGIN_MILLIS)
+            } ?: 0L
+            startVod(item, resumeAt)
+        }
+    }
+
+    fun togglePause() {
+        if (player.isPlaying) player.pause() else player.play()
+        controlsToken++
+    }
+
+    fun seekBy(millis: Long) {
+        val duration = player.duration
+        var target = (player.currentPosition + millis).coerceAtLeast(0)
+        if (duration > 0) target = target.coerceAtMost(duration - 1_000)
+        player.seekTo(target)
+        controlsToken++
+    }
+
+    fun showControls() {
+        controlsToken++
+    }
+
+    private fun startVod(item: VodItem, from: Long) {
+        if (stopped) return
+        player.setMediaSource(sourceFor(item.url, item.userAgent, item.referrer))
+        player.prepare()
+        if (from > 0) player.seekTo(from)
+        player.play()
+        watchForStall()
+        progressJob?.cancel()
+        progressJob = scope.launch {
+            while (true) {
+                delay(PROGRESS_SAVE_MILLIS)
+                saveVodProgress()
+            }
+        }
+    }
+
+    private fun saveVodProgress() {
+        val item = vod ?: return
+        val position = player.currentPosition
+        val duration = player.duration.coerceAtLeast(0)
+        if (position < MIN_RESUME_MILLIS) return
+        scope.launch {
+            if (duration > 0 && position > duration - END_MARGIN_MILLIS) {
+                channels.clearProgress(item.url)
+            } else {
+                channels.saveProgress(
+                    ProgressEntity(
+                        url = item.url,
+                        title = item.title,
+                        poster = item.poster,
+                        userAgent = item.userAgent,
+                        referrer = item.referrer,
+                        positionMs = position,
+                        durationMs = duration,
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }
+    }
+
+    /** Saves where a film got to before something else plays. */
+    private fun leaveVod() {
+        if (vod == null) return
+        saveVodProgress()
+        progressJob?.cancel()
+        vod = null
+    }
+
+    private fun recoverVod() {
+        val item = vod ?: return
+        if (attempt < Reconnect.MAX_ATTEMPTS) {
+            attempt++
+            status = PlaybackStatus.Reconnecting(attempt)
+            val position = player.currentPosition
+            retryJob = scope.launch {
+                delay(Reconnect.delayMillis(attempt))
+                player.stop()
+                startVod(item, position)
+            }
+        } else {
+            player.stop()
+            status = PlaybackStatus.Failed
+        }
     }
 
     /** What's on [channel] now, for the channel list. */
@@ -188,6 +318,13 @@ class LivePlayerController(
 
     /** Starts the current channel again from its best copy. */
     fun retry() {
+        vod?.let { item ->
+            cancelRecovery()
+            attempt = 0
+            status = PlaybackStatus.Loading
+            startVod(item, player.currentPosition)
+            return
+        }
         if (current == null) return
         cancelRecovery()
         variantIndex = 0
@@ -197,6 +334,11 @@ class LivePlayerController(
 
     /** The app went into the background: let go of the stream. */
     fun onStop() {
+        if (vod != null) {
+            saveVodProgress()
+            resumeAt = player.currentPosition
+            progressJob?.cancel()
+        }
         stopped = true
         cancelRecovery()
         tuneJob?.cancel()
@@ -207,7 +349,12 @@ class LivePlayerController(
     fun onStart() {
         if (!stopped) return
         stopped = false
-        if (current != null) {
+        val item = vod
+        if (item != null) {
+            attempt = 0
+            status = PlaybackStatus.Loading
+            startVod(item, resumeAt)
+        } else if (current != null) {
             attempt = 0
             playVariant(PlaybackStatus.Loading)
         }
@@ -215,6 +362,7 @@ class LivePlayerController(
 
     /** Stops playing and forgets the channel. */
     fun close() {
+        leaveVod()
         loadJob?.cancel()
         tuneJob?.cancel()
         guideJob?.cancel()
@@ -251,7 +399,7 @@ class LivePlayerController(
             }
             playingRow = row
             if (stopped) return@launch
-            player.setMediaSource(sourceFor(row))
+            player.setMediaSource(sourceFor(row.url, row.userAgent, row.referrer))
             player.prepare()
             player.play()
             watchForStall()
@@ -259,8 +407,13 @@ class LivePlayerController(
     }
 
     private fun recover() {
-        val channel = current ?: return
         if (stopped) return
+        if (vod != null) {
+            cancelRecovery()
+            recoverVod()
+            return
+        }
+        val channel = current ?: return
         cancelRecovery()
         when {
             attempt < Reconnect.MAX_ATTEMPTS -> {
@@ -300,12 +453,12 @@ class LivePlayerController(
         stallJob?.cancel()
     }
 
-    private fun sourceFor(row: ChannelEntity): MediaSource {
-        val data = OkHttpDataSource.Factory(http).setUserAgent(row.userAgent ?: USER_AGENT)
-        row.referrer?.let { data.setDefaultRequestProperties(mapOf("Referer" to it)) }
+    private fun sourceFor(url: String, userAgent: String?, referrer: String?): MediaSource {
+        val data = OkHttpDataSource.Factory(http).setUserAgent(userAgent ?: USER_AGENT)
+        referrer?.let { data.setDefaultRequestProperties(mapOf("Referer" to it)) }
 
-        val item = MediaItem.Builder().setUri(row.url)
-        if (row.url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)) {
+        val item = MediaItem.Builder().setUri(url)
+        if (url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)) {
             item.setMimeType(MimeTypes.APPLICATION_M3U8)
         }
         return DefaultMediaSourceFactory(data, extractors).createMediaSource(item.build())
@@ -345,14 +498,25 @@ class LivePlayerController(
                     updateStreamInfo()
                 }
                 Player.STATE_BUFFERING -> if (status == PlaybackStatus.Playing) watchForStall()
-                // A live stream should never end; the server has dropped it.
-                Player.STATE_ENDED -> recover()
+                Player.STATE_ENDED -> {
+                    val item = vod
+                    if (item != null) {
+                        // A film that reaches its end is done: nothing to resume.
+                        progressJob?.cancel()
+                        stallJob?.cancel()
+                        scope.launch { channels.clearProgress(item.url) }
+                        status = PlaybackStatus.Finished
+                    } else {
+                        // A live stream should never end; the server has dropped it.
+                        recover()
+                    }
+                }
                 else -> Unit
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+            if (vod == null && error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                 player.seekToDefaultPosition()
                 player.prepare()
                 return
@@ -372,6 +536,9 @@ class LivePlayerController(
     private companion object {
         const val STALL_MILLIS = 20_000L
         const val GUIDE_REFRESH_MILLIS = 60_000L
+        const val PROGRESS_SAVE_MILLIS = 10_000L
+        const val MIN_RESUME_MILLIS = 30_000L
+        const val END_MARGIN_MILLIS = 120_000L
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
     }
 }

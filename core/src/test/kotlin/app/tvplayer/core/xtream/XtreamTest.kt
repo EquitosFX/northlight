@@ -158,4 +158,45 @@ class XtreamTest {
         }
         assertTrue(failed)
     }
+
+    @Test
+    fun readsSeriesEpisodesKeyedBySeason() {
+        val info = XtreamParser.parseSeriesInfo(
+            """
+            {"info":{"name":"The Paper Round","plot":"A village paper, a lot of gossip."},
+             "episodes":{
+               "2":[{"id":"902","episode_num":1,"title":"S2 E1","container_extension":"mkv","season":2}],
+               "1":[{"id":"900","episode_num":"1","title":"Pilot","container_extension":"mp4",
+                     "info":{"plot":"It begins.","duration_secs":"2700","movie_image":"http://l.example/e1.jpg"}},
+                    {"id":901,"episode_num":2,"title":"Second"}]
+             }}
+            """.trimIndent(),
+        )
+        assertEquals("A village paper, a lot of gossip.", info.plot)
+        assertEquals(listOf(900L, 901L, 902L), info.episodes.map { it.id })
+        assertEquals(XtreamEpisode(900, 1, 1, "Pilot", "mp4", "It begins.", 2700, "http://l.example/e1.jpg"), info.episodes[0])
+        assertEquals(2, info.episodes[2].season)
+        assertEquals("http://host.example:8080/series/user/pass/902.mkv", XtreamUrls.episode(account, 902, "mkv"))
+    }
+
+    @Test
+    fun readsSeriesEpisodesSentAsAListOfLists() {
+        val info = XtreamParser.parseSeriesInfo(
+            """{"episodes":[[{"id":1,"episode_num":1,"title":"A","season":1}],[{"id":2,"episode_num":1,"title":"B","season":2}]]}""",
+        )
+        assertEquals(listOf(1 to 1, 2 to 1), info.episodes.map { it.season to it.number })
+        assertNull(info.plot)
+    }
+
+    @Test
+    fun aSeriesWithNoEpisodesIsEmptyAndGarbageIsRefused() {
+        assertTrue(XtreamParser.parseSeriesInfo("""{"episodes":[]}""").episodes.isEmpty())
+        val failed = try {
+            XtreamParser.parseSeriesInfo("<html></html>")
+            false
+        } catch (e: XtreamException) {
+            true
+        }
+        assertTrue(failed)
+    }
 }

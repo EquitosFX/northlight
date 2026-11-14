@@ -48,6 +48,8 @@ enum class Dest(val label: String) {
     ACCOUNT("Account"),
     SEARCH("Search"),
     SETTINGS("Settings"),
+    FILMS("Films"),
+    SERIES("Series"),
 }
 
 private val tabs = listOf(Dest.HOME, Dest.GUIDE, Dest.LIBRARY, Dest.SPORT, Dest.ACCOUNT)

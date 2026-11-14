@@ -3,6 +3,7 @@ package app.tvplayer.data.db
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Update
@@ -47,6 +48,21 @@ data class LiveRow(
     val epgId: String?,
 )
 
+/** A film or series for the browse screens. */
+data class VodRow(
+    val id: Long,
+    val playlistId: Long,
+    val kind: String,
+    val name: String,
+    val logo: String?,
+    val url: String,
+    val remoteId: Long?,
+    val userAgent: String?,
+    val referrer: String?,
+)
+
+data class GroupCount(val groupName: String?, val count: Int)
+
 /** One live channel (all its quality copies together), for matching against a guide. */
 data class MatchRow(val variantKey: String, val name: String, val guideId: String?)
 
@@ -73,6 +89,18 @@ interface ChannelDao {
     )
     fun matchRowsBlocking(playlistId: Long): List<MatchRow>
 
+    @Query(
+        "SELECT groupName, COUNT(*) AS count FROM channels WHERE kind = :kind " +
+            "GROUP BY groupName ORDER BY MIN(playlistId), MIN(position)",
+    )
+    suspend fun groups(kind: String): List<GroupCount>
+
+    @Query(
+        "SELECT id, playlistId, kind, name, logo, url, remoteId, userAgent, referrer FROM channels " +
+            "WHERE kind = :kind AND groupName IS :group ORDER BY playlistId, position",
+    )
+    suspend fun inGroup(kind: String, group: String?): List<VodRow>
+
     @Query("UPDATE channels SET epgId = :epgId WHERE playlistId = :playlistId AND variantKey = :variantKey")
     fun setEpgIdBlocking(playlistId: Long, variantKey: String, epgId: String?)
 
@@ -96,13 +124,29 @@ interface ProgrammeDao {
     suspend fun inRange(playlistId: Long, guideId: String, from: Long, to: Long): List<ProgrammeEntity>
 }
 
+@Dao
+interface ProgressDao {
+    @Query("SELECT * FROM progress ORDER BY updatedAt DESC LIMIT 20")
+    fun observeRecent(): Flow<List<ProgressEntity>>
+
+    @Query("SELECT * FROM progress WHERE url = :url")
+    suspend fun get(url: String): ProgressEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun save(progress: ProgressEntity)
+
+    @Query("DELETE FROM progress WHERE url = :url")
+    suspend fun delete(url: String)
+}
+
 @Database(
-    entities = [PlaylistEntity::class, ChannelEntity::class, ProgrammeEntity::class],
-    version = 2,
+    entities = [PlaylistEntity::class, ChannelEntity::class, ProgrammeEntity::class, ProgressEntity::class],
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun playlists(): PlaylistDao
     abstract fun channels(): ChannelDao
     abstract fun programmes(): ProgrammeDao
+    abstract fun progress(): ProgressDao
 }

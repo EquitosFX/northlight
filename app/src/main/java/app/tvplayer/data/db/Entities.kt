@@ -114,3 +114,19 @@ data class ProgrammeEntity(
     val season: Int? = null,
     val episode: Int? = null,
 )
+
+/**
+ * How far the viewer got through a film or episode. Keyed by the stream address, which stays the
+ * same when a playlist is refreshed (row ids do not). Holds enough to play it again from Home.
+ */
+@Entity(tableName = "progress")
+data class ProgressEntity(
+    @PrimaryKey val url: String,
+    val title: String,
+    val poster: String? = null,
+    val userAgent: String? = null,
+    val referrer: String? = null,
+    val positionMs: Long,
+    val durationMs: Long,
+    val updatedAt: Long,
+)

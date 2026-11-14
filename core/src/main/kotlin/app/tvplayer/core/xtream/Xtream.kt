@@ -6,6 +6,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.DecodeSequenceMode
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -65,6 +66,20 @@ data class XtreamSeries(
     val categoryId: String? = null,
 )
 
+/** One episode of a series, from `get_series_info`. Season and episode count from 1. */
+data class XtreamEpisode(
+    val id: Long,
+    val season: Int,
+    val number: Int,
+    val title: String,
+    val extension: String? = null,
+    val plot: String? = null,
+    val durationSecs: Int? = null,
+    val image: String? = null,
+)
+
+data class XtreamSeriesInfo(val plot: String?, val episodes: List<XtreamEpisode>)
+
 /** Builds the addresses an Xtream Codes server understands. */
 object XtreamUrls {
 
@@ -85,6 +100,9 @@ object XtreamUrls {
     /** Series are listed without episodes; this address stands for the series until its episodes are fetched. */
     fun series(account: XtreamAccount, seriesId: Long): String =
         "${account.baseUrl}/series/${account.username}/${account.password}/$seriesId"
+
+    fun episode(account: XtreamAccount, episodeId: Long, extension: String?): String =
+        "${account.baseUrl}/series/${account.username}/${account.password}/$episodeId.${extension ?: "mp4"}"
 
     /** The full TV guide for the account, in XMLTV form. */
     fun guide(account: XtreamAccount): String =
@@ -164,6 +182,48 @@ object XtreamParser {
             )
             true
         }
+
+    /**
+     * Reads the answer to `get_series_info`. Servers send the episodes either as an object keyed by
+     * season number or as a list of lists; both are accepted. Episodes come back in season order.
+     */
+    fun parseSeriesInfo(text: String): XtreamSeriesInfo {
+        val root = try {
+            json.parseToJsonElement(text) as? JsonObject
+        } catch (e: SerializationException) {
+            null
+        } ?: throw XtreamException("The server didn't send this series' episodes.")
+
+        val groups: List<Pair<String?, JsonElement>> = when (val episodes = root["episodes"]) {
+            is JsonObject -> episodes.entries.map { (season, list) -> season to list }
+            is JsonArray -> episodes.map { null to it }
+            else -> emptyList()
+        }
+        val found = ArrayList<XtreamEpisode>()
+        for ((seasonKey, list) in groups) {
+            val items = list as? JsonArray ?: continue
+            for (element in items) {
+                val item = element as? JsonObject ?: continue
+                val id = item.long("id") ?: continue
+                val info = item["info"] as? JsonObject
+                val season = item.long("season")?.toInt() ?: seasonKey?.toIntOrNull() ?: 1
+                found.add(
+                    XtreamEpisode(
+                        id = id,
+                        season = season,
+                        number = item.long("episode_num")?.toInt() ?: (found.count { it.season == season } + 1),
+                        title = item.str("title") ?: "Episode",
+                        extension = item.str("container_extension"),
+                        plot = info?.str("plot"),
+                        durationSecs = info?.long("duration_secs")?.toInt(),
+                        image = info?.str("movie_image"),
+                    ),
+                )
+            }
+        }
+        val plot = (root["info"] as? JsonObject)?.str("plot")
+        return XtreamSeriesInfo(plot, found.sortedWith(compareBy({ it.season }, { it.number })))
+    }
 
     /** Calls [block] for each object in a JSON list and returns how many it accepted. */
     @OptIn(ExperimentalSerializationApi::class)

@@ -5,6 +5,10 @@ import app.tvplayer.core.live.LineupChannel
 import app.tvplayer.core.live.LineupRow
 import app.tvplayer.data.db.AppDatabase
 import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.data.db.GroupCount
+import app.tvplayer.data.db.ProgressEntity
+import app.tvplayer.data.db.VodRow
+import kotlinx.coroutines.flow.Flow
 import app.tvplayer.data.db.ProgrammeEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -46,6 +50,19 @@ class ChannelsRepository(private val db: AppDatabase) {
         val now = System.currentTimeMillis()
         return programmes(channel, now, now + 12 * HOUR).take(2)
     }
+
+    suspend fun groups(kind: String): List<GroupCount> = db.channels().groups(kind)
+
+    suspend fun inGroup(kind: String, group: String?): List<VodRow> = db.channels().inGroup(kind, group)
+
+    /** Films and episodes started but not finished, most recent first. */
+    val continueWatching: Flow<List<ProgressEntity>> = db.progress().observeRecent()
+
+    suspend fun progressFor(url: String): ProgressEntity? = db.progress().get(url)
+
+    suspend fun saveProgress(progress: ProgressEntity) = db.progress().save(progress)
+
+    suspend fun clearProgress(url: String) = db.progress().delete(url)
 
     private companion object {
         const val HOUR = 3_600_000L

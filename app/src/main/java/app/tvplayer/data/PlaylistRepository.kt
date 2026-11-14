@@ -15,6 +15,7 @@ import app.tvplayer.data.db.ChannelEntity
 import app.tvplayer.data.db.MatchRow
 import app.tvplayer.data.db.PlaylistEntity
 import app.tvplayer.data.db.ProgrammeEntity
+import app.tvplayer.data.db.VodRow
 import java.io.IOException
 import java.io.InputStream
 import java.net.ConnectException
@@ -29,8 +30,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+
+data class Episode(
+    val season: Int,
+    val number: Int,
+    val title: String,
+    val url: String,
+    val plot: String?,
+    val durationSecs: Int?,
+)
+
+data class SeriesDetails(val plot: String?, val episodes: List<Episode>)
 
 /** Where an import has got to, for the Settings screen to show. */
 sealed interface ImportState {
@@ -133,6 +146,24 @@ class PlaylistRepository(
             }
         }
     }
+
+    /** Fetches a series' seasons and episodes from its Xtream Codes server. */
+    suspend fun seriesDetails(series: VodRow): SeriesDetails = withContext(Dispatchers.IO) {
+        val playlist = db.playlists().getBlocking(series.playlistId) ?: throw IOException("That playlist no longer exists.")
+        val seriesId = series.remoteId
+        if (playlist.type != PlaylistEntity.TYPE_XTREAM || seriesId == null) return@withContext SeriesDetails(null, emptyList())
+        val account = XtreamAccount(playlist.address, playlist.username.orEmpty(), playlist.password.orEmpty())
+        val info = XtreamParser.parseSeriesInfo(fetchText(XtreamUrls.api(account, "get_series_info") + "&series_id=$seriesId"))
+        SeriesDetails(
+            plot = info.plot,
+            episodes = info.episodes.map {
+                Episode(it.season, it.number, it.title, XtreamUrls.episode(account, it.id, it.extension), it.plot, it.durationSecs)
+            },
+        )
+    }
+
+    /** A plain-English reason for a failed download, for showing on screen. */
+    fun explainError(e: Exception): String = explain(e)
 
     /** Clears a finished or failed message once the user has moved on. */
     fun acknowledge() {

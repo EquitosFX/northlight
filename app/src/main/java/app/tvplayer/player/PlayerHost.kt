@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -98,7 +99,9 @@ fun PlayerHost(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (mode == PlayerMode.FULL) {
+        if (mode == PlayerMode.FULL && controller.vod != null) {
+            VodLayer(controller = controller, onClose = onClose)
+        } else if (mode == PlayerMode.FULL) {
             FullScreenLayer(controller = controller, onMinimise = onMinimise, onClose = onClose)
         } else {
             MiniLayer(onExpand = onExpand)
@@ -167,6 +170,119 @@ private fun FullScreenLayer(controller: LivePlayerController, onMinimise: () -> 
             )
         }
     }
+}
+
+/** Controls for a film or episode: OK pauses, Left and Right skip 10 seconds, Back stops and saves the place. */
+@Composable
+private fun VodLayer(controller: LivePlayerController, onClose: () -> Unit) {
+    val colors = AppTheme.colors
+    val item = controller.vod ?: return
+    val focus = remember { FocusRequester() }
+    var visible by remember { mutableStateOf(true) }
+    var position by remember { mutableLongStateOf(0L) }
+    var duration by remember { mutableLongStateOf(0L) }
+    var playing by remember { mutableStateOf(true) }
+
+    BackHandler { onClose() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    LaunchedEffect(controller.controlsToken) {
+        visible = true
+        delay(BANNER_MILLIS)
+        visible = false
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            position = controller.player.currentPosition
+            duration = controller.player.duration.coerceAtLeast(0)
+            playing = controller.player.isPlaying
+            delay(500)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRequester(focus)
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        if (controller.status == PlaybackStatus.Failed) controller.retry() else controller.togglePause()
+                        true
+                    }
+                    Key.DirectionLeft, Key.MediaRewind -> {
+                        controller.seekBy(-SKIP_MILLIS)
+                        true
+                    }
+                    Key.DirectionRight, Key.MediaFastForward -> {
+                        controller.seekBy(SKIP_MILLIS)
+                        true
+                    }
+                    Key.DirectionUp, Key.DirectionDown, Key.Info -> {
+                        controller.showControls()
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .focusable(),
+    ) {
+        StatusMessage(status = controller.status, modifier = Modifier.align(Alignment.Center))
+        AnimatedVisibility(
+            visible = visible || !playing,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, colors.scrim)))
+                    .padding(start = 48.dp, end = 48.dp, top = 48.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Label(text = item.title, style = AppType.headline)
+                val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = 0.25f)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction)
+                            .background(colors.accent),
+                    )
+                }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Label(
+                        text = "${playTime(position)} / ${if (duration > 0) playTime(duration) else "--:--"}",
+                        style = AppType.label,
+                        color = colors.textDim,
+                    )
+                    Box(modifier = Modifier.weight(1f))
+                    Label(
+                        text = if (playing) "OK pause · Left/Right skip 10 s · Back to stop" else "Paused · OK to play",
+                        style = AppType.label,
+                        color = colors.textDim,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun playTime(millis: Long): String {
+    val totalSeconds = millis / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
 }
 
 @Composable
@@ -283,6 +399,7 @@ private fun StatusMessage(status: PlaybackStatus, modifier: Modifier = Modifier)
         PlaybackStatus.TryingBackup -> "Trying another copy of this channel…"
         PlaybackStatus.Failed -> "This channel isn't playing right now.\nOK to try again · Up or Down for another channel"
         PlaybackStatus.NoChannels -> "No live channels yet.\nAdd a playlist in Settings › Playlists."
+        PlaybackStatus.Finished -> "Finished · Back to return"
         PlaybackStatus.Idle, PlaybackStatus.Playing -> null
     } ?: return
 
@@ -486,3 +603,4 @@ private fun GroupList(groups: List<String>, selected: String?, onPick: (String?)
 
 private const val BANNER_MILLIS = 5_000L
 private const val LOADING_DELAY_MILLIS = 600L
+private const val SKIP_MILLIS = 10_000L
