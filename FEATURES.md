@@ -1,6 +1,6 @@
 # Feature checklist
 
-Status key: **Tested** = compiled and unit-tested (51 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
+Status key: **Tested** = compiled and unit-tested (52 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
 
 ## Foundation and design system
 
@@ -25,7 +25,8 @@ Status key: **Tested** = compiled and unit-tested (51 tests in `core/`). **Built
 | Settings › Playlists (add Xtream Codes or M3U, refresh, remove) | Built |
 | Home: rail of the user's imported channels | Built |
 | Settings: other sections | Designed (list only) |
-| TV Guide with info header, filters and mini player | Designed |
+| TV Guide: info header, time ruler, programme grid, mini player over it | Built |
+| TV Guide: group filter chips, jump by day | Not started |
 | Programme actions panel | Designed |
 | Live TV: full-screen player, channel list with groups, info banner | Built |
 | Voice search overlay | Designed |
@@ -46,7 +47,8 @@ Status key: **Tested** = compiled and unit-tested (51 tests in `core/`). **Built
 | Per-playlist User-Agent, referrer, backup hosts, auto-refresh | Not started |
 | XMLTV guide parsing (streaming, gzip-aware) | Tested |
 | Automatic guide-to-channel matching | Tested |
-| Multiple guide sources, manual matching, time offset, catch-up backfill | Not started |
+| Importing guides (several per playlist), automatic matching, refresh when older than 12 hours | Built |
+| Manual matching, time offset, extra guide addresses, catch-up backfill | Not started |
 | Channel variant grouping (SD/HD/FHD/4K/backup) | Tested |
 | Check playlist tool | Not started |
 | TMDB metadata | Not started |
@@ -63,7 +65,8 @@ Status key: **Tested** = compiled and unit-tested (51 tests in `core/`). **Built
 | Guide grid behaviour (day jump, on-now filter, genre colours) | Not started |
 | Favourites, custom groups, hide/rename/renumber, PIN-locked groups | Not started |
 | Channel up/down with wrap-around, last channel remembered | Built |
-| Number entry, mini-guide with programme details | Not started |
+| Now and next in the info banner and channel list | Built |
+| Number entry | Not started |
 | Catch-up: watch from start, go live, seek | Not started |
 | Timeshift (pause and rewind live) | Not started |
 | Recording: one-off, series, recurring, manual; USB/NAS; conflicts | Not started |
