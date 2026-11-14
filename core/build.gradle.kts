@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// Plain Kotlin, no Android: playlist and guide parsing, channel grouping and guide matching.
+// Plain Kotlin, no Android: playlist, guide and Xtream Codes parsing, channel grouping and guide matching.
 // Keeping this separate means it can be compiled and tested on any machine.
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -18,5 +18,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.kotlinx.serialization.json)
+
     testImplementation(libs.junit)
 }

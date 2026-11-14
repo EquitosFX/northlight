@@ -12,13 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.tvplayer.ui.components.FocusSurface
@@ -30,18 +26,16 @@ import app.tvplayer.ui.theme.paletteFor
 
 /** Settings › Appearance: pick one of the colour themes. The whole app re-colours as soon as one is chosen. */
 @Composable
-fun AppearanceScreen(themeId: ThemeId, onThemeChange: (ThemeId) -> Unit) {
+fun AppearancePane(themeId: ThemeId, onThemeChange: (ThemeId) -> Unit) {
     val colors = AppTheme.colors
-    val currentFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { currentFocus.requestFocus() } }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 12.dp),
+            .padding(horizontal = 6.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Label(text = "Settings · Appearance", style = AppType.headline)
+        Label(text = "Appearance", style = AppType.headline)
         Label(text = "Theme", style = AppType.body, color = colors.textDim)
 
         Row(
@@ -51,18 +45,11 @@ fun AppearanceScreen(themeId: ThemeId, onThemeChange: (ThemeId) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(15.dp),
         ) {
             ThemeId.entries.forEach { id ->
-                val inUse = id == themeId
                 ThemeTile(
                     id = id,
-                    inUse = inUse,
+                    inUse = id == themeId,
                     onClick = { onThemeChange(id) },
-                    modifier = if (inUse) {
-                        Modifier
-                            .weight(1f)
-                            .focusRequester(currentFocus)
-                    } else {
-                        Modifier.weight(1f)
-                    },
+                    modifier = Modifier.weight(1f),
                 )
             }
         }

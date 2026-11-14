@@ -35,7 +35,7 @@ import app.tvplayer.ui.theme.AppType
 private val SideMargin = 48.dp
 
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier) {
+fun HomeScreen(modifier: Modifier = Modifier, yourChannels: List<Tile> = emptyList()) {
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
@@ -45,6 +45,10 @@ fun HomeScreen(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { Hero(item = SampleData.hero, watchFocus = firstFocus) }
+        // Real channels from the user's playlists; everything below is still sample content.
+        if (yourChannels.isNotEmpty()) {
+            item { Rail(title = "Your channels", tiles = yourChannels) }
+        }
         item { Rail(title = "For you", tiles = SampleData.forYou) }
         item { ShortcutRow(labels = SampleData.shortcuts) }
         item { Rail(title = "On now and next", tiles = SampleData.onNow) }

@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.tvplayer.data.SettingsRepository
 import app.tvplayer.ui.AppRoot
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.ThemeId
@@ -16,7 +15,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val settings = SettingsRepository(applicationContext)
+        val container = (application as NorthlightApp).container
+        val settings = container.settings
 
         setContent {
             val themeId by settings.theme.collectAsStateWithLifecycle(initialValue = ThemeId.LAGOON)
@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
                 AppRoot(
                     themeId = themeId,
                     onThemeChange = { chosen -> scope.launch { settings.setTheme(chosen) } },
+                    playlists = container.playlists,
                 )
             }
         }
