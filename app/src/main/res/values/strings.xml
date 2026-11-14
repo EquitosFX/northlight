@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Working title. Change this one line when the name is chosen. -->
+    <string name="app_name">Northlight</string>
+</resources>

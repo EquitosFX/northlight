@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder home-screen banner (320x180). Replace with artwork carrying the app name once it is chosen. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#063039"
+        android:pathData="M0,0h320v180h-320z" />
+    <group
+        android:scaleX="2.2857"
+        android:scaleY="2.2857"
+        android:translateX="128"
+        android:translateY="58">
+        <path
+            android:fillColor="#FFB84D"
+            android:pathData="M9,1h10a8,8 0,0 1,8 8v10a8,8 0,0 1,-8 8h-10a8,8 0,0 1,-8 -8v-10a8,8 0,0 1,8 -8z" />
+        <path
+            android:fillColor="#1A1205"
+            android:pathData="M11,8l9,6l-9,6z" />
+    </group>
+</vector>
