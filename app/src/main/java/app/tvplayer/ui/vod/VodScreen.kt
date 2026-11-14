@@ -73,7 +73,7 @@ fun VodScreen(
     state: VodBrowseState,
     channels: ChannelsRepository,
     playlists: PlaylistRepository,
-    onPlay: (VodItem) -> Unit,
+    onPlay: (VodItem, List<VodItem>) -> Unit,
 ) {
     val colors = AppTheme.colors
     val series = state.series
@@ -181,7 +181,8 @@ fun VodScreen(
                         if (row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null) {
                             state.series = row
                         } else {
-                            onPlay(VodItem(row.url, row.name, row.logo, row.userAgent, row.referrer))
+                            val item = VodItem(row.url, row.name, row.logo, row.userAgent, row.referrer)
+                            onPlay(item, listOf(item))
                         }
                     },
                 )
@@ -224,7 +225,12 @@ private fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-private fun EpisodesPane(series: VodRow, playlists: PlaylistRepository, onPlay: (VodItem) -> Unit, onBack: () -> Unit) {
+private fun EpisodesPane(
+    series: VodRow,
+    playlists: PlaylistRepository,
+    onPlay: (VodItem, List<VodItem>) -> Unit,
+    onBack: () -> Unit,
+) {
     val colors = AppTheme.colors
     var details by remember(series.id) { mutableStateOf<SeriesDetails?>(null) }
     var problem by remember(series.id) { mutableStateOf<String?>(null) }
@@ -275,6 +281,16 @@ private fun EpisodesPane(series: VodRow, playlists: PlaylistRepository, onPlay: 
                 return@Column
             }
 
+            // Every episode in order, so playback can carry on into the next one, across seasons.
+            val queue = loaded.episodes.map { episode ->
+                VodItem(
+                    url = episode.url,
+                    title = "${series.name} · S${episode.season} E${episode.number}",
+                    poster = series.logo,
+                    userAgent = series.userAgent,
+                    referrer = series.referrer,
+                )
+            }
             val seasons = loaded.episodes.map { it.season }.distinct()
             val shown = if (season in seasons) season else seasons.first()
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -303,15 +319,7 @@ private fun EpisodesPane(series: VodRow, playlists: PlaylistRepository, onPlay: 
                 itemsIndexed(episodes, key = { _, episode -> episode.url }) { index, episode ->
                     FocusSurface(
                         onClick = {
-                            onPlay(
-                                VodItem(
-                                    url = episode.url,
-                                    title = "${series.name} · S${episode.season} E${episode.number}",
-                                    poster = series.logo,
-                                    userAgent = series.userAgent,
-                                    referrer = series.referrer,
-                                ),
-                            )
+                            queue.firstOrNull { it.url == episode.url }?.let { item -> onPlay(item, queue) }
                         },
                         modifier = Modifier
                             .fillMaxWidth()

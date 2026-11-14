@@ -46,7 +46,11 @@ sealed interface PlaybackStatus {
     data object Failed : PlaybackStatus
     data object NoChannels : PlaybackStatus
     data object Finished : PlaybackStatus
+    data class UpNext(val title: String, val seconds: Int) : PlaybackStatus
 }
+
+/** The group name that stands for the viewer's favourite channels. */
+const val FAVOURITES_GROUP = "\u0000favourites"
 
 /** A film or episode to play. */
 data class VodItem(
@@ -111,7 +115,16 @@ class LivePlayerController(
     var bannerToken by mutableIntStateOf(0)
         private set
 
-    val visibleChannels: List<LineupChannel> get() = lineup.inGroup(group)
+    /** Keys of the viewer's favourite channels. */
+    var favourites by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    val visibleChannels: List<LineupChannel>
+        get() = if (group == FAVOURITES_GROUP) {
+            lineup.channels.filter { it.key in favourites }
+        } else {
+            lineup.inGroup(group)
+        }
 
     private var variantIndex = 0
     private var attempt = 0
@@ -123,6 +136,8 @@ class LivePlayerController(
     private var guideJob: Job? = null
     private var progressJob: Job? = null
     private var resumeAt = 0L
+    private var queue: List<VodItem> = emptyList()
+    private var upNextJob: Job? = null
 
     // Lets players start on any frame in a TS stream, which makes channel changes noticeably quicker.
     private val extractors = DefaultExtractorsFactory().setTsExtractorFlags(
@@ -138,6 +153,14 @@ class LivePlayerController(
             exo.playWhenReady = true
             exo.addListener(Listener())
         }
+
+    init {
+        scope.launch { channels.favouriteKeys.collect { favourites = it } }
+    }
+
+    fun toggleFavourite(channel: LineupChannel) {
+        scope.launch { channels.toggleFavourite(channel.key) }
+    }
 
     /** Loads the channel list and plays [channelId], or else the last channel watched, or else the first. */
     fun open(channelId: Long?) {
@@ -178,8 +201,9 @@ class LivePlayerController(
     }
 
     /** Plays a film or episode, carrying on from where the viewer left it if they got part-way. */
-    fun playVod(item: VodItem) {
+    fun playVod(item: VodItem, episodes: List<VodItem> = listOf(item)) {
         leaveVod()
+        queue = episodes
         loadJob?.cancel()
         tuneJob?.cancel()
         guideJob?.cancel()
@@ -199,6 +223,13 @@ class LivePlayerController(
             } ?: 0L
             startVod(item, resumeAt)
         }
+    }
+
+    /** Moves to the next (+1) or previous (-1) episode, when playing from a series. */
+    fun skipEpisode(delta: Int) {
+        val index = queue.indexOfFirst { it.url == vod?.url }
+        val target = queue.getOrNull(index + delta) ?: return
+        playVod(target, queue)
     }
 
     fun togglePause() {
@@ -261,6 +292,7 @@ class LivePlayerController(
 
     /** Saves where a film got to before something else plays. */
     private fun leaveVod() {
+        upNextJob?.cancel()
         if (vod == null) return
         saveVodProgress()
         progressJob?.cancel()
@@ -505,7 +537,19 @@ class LivePlayerController(
                         progressJob?.cancel()
                         stallJob?.cancel()
                         scope.launch { channels.clearProgress(item.url) }
-                        status = PlaybackStatus.Finished
+                        val next = queue.getOrNull(queue.indexOfFirst { it.url == item.url } + 1)
+                        if (next == null) {
+                            status = PlaybackStatus.Finished
+                        } else {
+                            upNextJob?.cancel()
+                            upNextJob = scope.launch {
+                                for (seconds in UP_NEXT_SECONDS downTo 1) {
+                                    status = PlaybackStatus.UpNext(next.title, seconds)
+                                    delay(1_000)
+                                }
+                                playVod(next, queue)
+                            }
+                        }
                     } else {
                         // A live stream should never end; the server has dropped it.
                         recover()
@@ -539,6 +583,7 @@ class LivePlayerController(
         const val PROGRESS_SAVE_MILLIS = 10_000L
         const val MIN_RESUME_MILLIS = 30_000L
         const val END_MARGIN_MILLIS = 120_000L
+        const val UP_NEXT_SECONDS = 10
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
     }
 }

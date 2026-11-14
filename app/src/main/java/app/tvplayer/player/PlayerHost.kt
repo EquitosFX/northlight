@@ -207,7 +207,19 @@ private fun VodLayer(controller: LivePlayerController, onClose: () -> Unit) {
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
-                        if (controller.status == PlaybackStatus.Failed) controller.retry() else controller.togglePause()
+                        when (controller.status) {
+                            PlaybackStatus.Failed -> controller.retry()
+                            is PlaybackStatus.UpNext -> controller.skipEpisode(+1)
+                            else -> controller.togglePause()
+                        }
+                        true
+                    }
+                    Key.MediaNext -> {
+                        controller.skipEpisode(+1)
+                        true
+                    }
+                    Key.MediaPrevious -> {
+                        controller.skipEpisode(-1)
                         true
                     }
                     Key.DirectionLeft, Key.MediaRewind -> {
@@ -400,6 +412,7 @@ private fun StatusMessage(status: PlaybackStatus, modifier: Modifier = Modifier)
         PlaybackStatus.Failed -> "This channel isn't playing right now.\nOK to try again · Up or Down for another channel"
         PlaybackStatus.NoChannels -> "No live channels yet.\nAdd a playlist in Settings › Playlists."
         PlaybackStatus.Finished -> "Finished · Back to return"
+        is PlaybackStatus.UpNext -> "Next: ${status.title} in ${status.seconds} s\nOK to play now · Back to stop"
         PlaybackStatus.Idle, PlaybackStatus.Playing -> null
     } ?: return
 
@@ -452,7 +465,8 @@ private fun ChannelListOverlay(
                 selected = controller.group,
                 onPick = { name ->
                     controller.chooseGroup(name)
-                    showGroups = false
+                    // An empty group (no favourites yet) keeps the group list open so focus has somewhere to go.
+                    if (controller.visibleChannels.isNotEmpty()) showGroups = false
                 },
             )
         }
@@ -463,9 +477,20 @@ private fun ChannelListOverlay(
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Label(text = controller.group ?: "All channels", style = AppType.headline)
-            val hint = if (controller.lineup.groups.isEmpty()) "" else " · Left for groups"
-            Label(text = "${channels.size} channels$hint", style = AppType.caption, color = colors.textDim)
+            Label(text = groupLabel(controller.group), style = AppType.headline)
+            Label(
+                text = "${channels.size} channels · Left for groups · Right to add or remove a favourite",
+                style = AppType.caption,
+                color = colors.textDim,
+            )
+            if (channels.isEmpty() && controller.group == FAVOURITES_GROUP) {
+                Label(
+                    text = "No favourites yet. Press Right on a channel to add it.",
+                    style = AppType.body,
+                    color = colors.textDim,
+                    maxLines = 2,
+                )
+            }
 
             LazyColumn(
                 state = listState,
@@ -476,8 +501,7 @@ private fun ChannelListOverlay(
                     .onPreviewKeyEvent { event ->
                         val opensGroups = !showGroups &&
                             event.type == KeyEventType.KeyDown &&
-                            event.key == Key.DirectionLeft &&
-                            controller.lineup.groups.isNotEmpty()
+                            event.key == Key.DirectionLeft
                         if (opensGroups) showGroups = true
                         opensGroups
                     },
@@ -487,8 +511,15 @@ private fun ChannelListOverlay(
                         channel = channel,
                         controller = controller,
                         playing = channel.key == currentKey,
+                        favourite = channel.key in controller.favourites,
                         onClick = { onPick(channel) },
-                        modifier = if (index == startIndex) Modifier.focusRequester(itemFocus) else Modifier,
+                        modifier = Modifier
+                            .onPreviewKeyEvent { event ->
+                                val toggles = event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight
+                                if (toggles) controller.toggleFavourite(channel)
+                                toggles
+                            }
+                            .then(if (index == startIndex) Modifier.focusRequester(itemFocus) else Modifier),
                     )
                 }
             }
@@ -501,6 +532,7 @@ private fun ChannelRow(
     channel: LineupChannel,
     controller: LivePlayerController,
     playing: Boolean,
+    favourite: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -532,7 +564,7 @@ private fun ChannelRow(
             )
             Logo(url = channel.logo, modifier = Modifier.size(32.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Label(text = channel.name, style = AppType.title)
+                Label(text = if (favourite) "★ ${channel.name}" else channel.name, style = AppType.title)
                 val group = channel.group
                 val programme = onNow
                 when {
@@ -552,7 +584,7 @@ private fun ChannelRow(
 @Composable
 private fun GroupList(groups: List<String>, selected: String?, onPick: (String?) -> Unit) {
     val colors = AppTheme.colors
-    val entries = remember(groups) { listOf<String?>(null) + groups }
+    val entries = remember(groups) { listOf<String?>(null, FAVOURITES_GROUP) + groups }
     val startIndex = remember(entries, selected) { entries.indexOf(selected).coerceAtLeast(0) }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startIndex - 3).coerceAtLeast(0))
     val itemFocus = remember { FocusRequester() }
@@ -569,7 +601,7 @@ private fun GroupList(groups: List<String>, selected: String?, onPick: (String?)
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Label(text = "Groups", style = AppType.headline)
-        Label(text = "${groups.size} groups", style = AppType.caption, color = colors.textDim)
+        Label(text = "${groups.size + 1} groups", style = AppType.caption, color = colors.textDim)
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(vertical = 6.dp),
@@ -589,7 +621,7 @@ private fun GroupList(groups: List<String>, selected: String?, onPick: (String?)
                     focusScale = 1.02f,
                 ) {
                     Label(
-                        text = name ?: "All channels",
+                        text = groupLabel(name),
                         style = AppType.title,
                         modifier = Modifier
                             .align(Alignment.CenterStart)
@@ -599,6 +631,12 @@ private fun GroupList(groups: List<String>, selected: String?, onPick: (String?)
             }
         }
     }
+}
+
+private fun groupLabel(name: String?): String = when (name) {
+    null -> "All channels"
+    FAVOURITES_GROUP -> "Favourites"
+    else -> name
 }
 
 private const val BANNER_MILLIS = 5_000L

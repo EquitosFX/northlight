@@ -5,10 +5,12 @@ import app.tvplayer.core.live.LineupChannel
 import app.tvplayer.core.live.LineupRow
 import app.tvplayer.data.db.AppDatabase
 import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.data.db.FavouriteEntity
 import app.tvplayer.data.db.GroupCount
 import app.tvplayer.data.db.ProgressEntity
 import app.tvplayer.data.db.VodRow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import app.tvplayer.data.db.ProgrammeEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -63,6 +65,24 @@ class ChannelsRepository(private val db: AppDatabase) {
     suspend fun saveProgress(progress: ProgressEntity) = db.progress().save(progress)
 
     suspend fun clearProgress(url: String) = db.progress().delete(url)
+
+    /** Channels, films and series whose names contain [text]. Quality copies of a channel appear once. */
+    suspend fun search(text: String): List<VodRow> {
+        val escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return db.channels().search("%$escaped%")
+            .distinctBy { if (it.kind == ChannelEntity.KIND_LIVE) "${it.playlistId}|${it.variantKey}" else it.id.toString() }
+            .take(100)
+    }
+
+    val favouriteKeys: Flow<Set<String>> = db.favourites().observeKeys().map { it.toSet() }
+
+    suspend fun toggleFavourite(key: String) {
+        if (db.favourites().count(key) > 0) {
+            db.favourites().remove(key)
+        } else {
+            db.favourites().add(FavouriteEntity(key, System.currentTimeMillis()))
+        }
+    }
 
     private companion object {
         const val HOUR = 3_600_000L

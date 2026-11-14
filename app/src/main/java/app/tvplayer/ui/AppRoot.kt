@@ -40,6 +40,7 @@ import app.tvplayer.player.PlayerHost
 import app.tvplayer.player.PlayerMode
 import app.tvplayer.player.VodItem
 import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.ui.search.SearchScreen
 import app.tvplayer.ui.vod.VodBrowseState
 import app.tvplayer.ui.vod.VodScreen
 import app.tvplayer.ui.components.Dest
@@ -96,8 +97,8 @@ fun AppRoot(
         mode = PlayerMode.FULL
     }
 
-    fun playVod(item: VodItem) {
-        controller.playVod(item)
+    fun playVod(item: VodItem, episodes: List<VodItem> = listOf(item)) {
+        controller.playVod(item, episodes)
         mode = PlayerMode.FULL
     }
 
@@ -195,14 +196,27 @@ fun AppRoot(
                         state = filmsState,
                         channels = container.channels,
                         playlists = container.playlists,
-                        onPlay = { item -> playVod(item) },
+                        onPlay = { item, episodes -> playVod(item, episodes) },
                     )
                     Dest.SERIES -> VodScreen(
                         kind = ChannelEntity.KIND_SERIES,
                         state = seriesState,
                         channels = container.channels,
                         playlists = container.playlists,
-                        onPlay = { item -> playVod(item) },
+                        onPlay = { item, episodes -> playVod(item, episodes) },
+                    )
+                    Dest.SEARCH -> SearchScreen(
+                        channels = container.channels,
+                        onOpen = { row ->
+                            when {
+                                row.kind == ChannelEntity.KIND_LIVE -> play(row.id)
+                                row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null -> {
+                                    seriesState.series = row
+                                    dest = Dest.SERIES
+                                }
+                                else -> playVod(VodItem(row.url, row.name, row.logo, row.userAgent, row.referrer))
+                            }
+                        },
                     )
                     Dest.GUIDE -> GuideScreen(
                         channels = container.channels,

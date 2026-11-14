@@ -130,3 +130,10 @@ data class ProgressEntity(
     val durationMs: Long,
     val updatedAt: Long,
 )
+
+/** A favourite live channel, keyed like the channel line-up ("playlistId|variantKey") so it survives refreshes. */
+@Entity(tableName = "favourites")
+data class FavouriteEntity(
+    @PrimaryKey val key: String,
+    val addedAt: Long,
+)

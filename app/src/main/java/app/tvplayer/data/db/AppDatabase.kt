@@ -54,6 +54,7 @@ data class VodRow(
     val playlistId: Long,
     val kind: String,
     val name: String,
+    val variantKey: String,
     val logo: String?,
     val url: String,
     val remoteId: Long?,
@@ -96,10 +97,18 @@ interface ChannelDao {
     suspend fun groups(kind: String): List<GroupCount>
 
     @Query(
-        "SELECT id, playlistId, kind, name, logo, url, remoteId, userAgent, referrer FROM channels " +
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
             "WHERE kind = :kind AND groupName IS :group ORDER BY playlistId, position",
     )
     suspend fun inGroup(kind: String, group: String?): List<VodRow>
+
+    /** Names containing the search text: live channels first, then films, then series; shorter names first. */
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
+            "WHERE name LIKE :pattern ESCAPE '\\' " +
+            "ORDER BY CASE kind WHEN 'live' THEN 0 WHEN 'movie' THEN 1 ELSE 2 END, LENGTH(name) LIMIT 300",
+    )
+    suspend fun search(pattern: String): List<VodRow>
 
     @Query("UPDATE channels SET epgId = :epgId WHERE playlistId = :playlistId AND variantKey = :variantKey")
     fun setEpgIdBlocking(playlistId: Long, variantKey: String, epgId: String?)
@@ -139,9 +148,30 @@ interface ProgressDao {
     suspend fun delete(url: String)
 }
 
+@Dao
+interface FavouriteDao {
+    @Query("SELECT key FROM favourites ORDER BY addedAt")
+    fun observeKeys(): Flow<List<String>>
+
+    @Query("SELECT COUNT(*) FROM favourites WHERE key = :key")
+    suspend fun count(key: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun add(favourite: FavouriteEntity)
+
+    @Query("DELETE FROM favourites WHERE key = :key")
+    suspend fun remove(key: String)
+}
+
 @Database(
-    entities = [PlaylistEntity::class, ChannelEntity::class, ProgrammeEntity::class, ProgressEntity::class],
-    version = 3,
+    entities = [
+        PlaylistEntity::class,
+        ChannelEntity::class,
+        ProgrammeEntity::class,
+        ProgressEntity::class,
+        FavouriteEntity::class,
+    ],
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -149,4 +179,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun channels(): ChannelDao
     abstract fun programmes(): ProgrammeDao
     abstract fun progress(): ProgressDao
+    abstract fun favourites(): FavouriteDao
 }
