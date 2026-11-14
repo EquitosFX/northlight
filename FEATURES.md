@@ -1,27 +1,29 @@
 # Feature checklist
 
-Status key: **Tested** = compiled and unit-tested (31 tests passing), not yet used by the app. **Written** = code exists but has not been compiled or run. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
+Status key: **Tested** = compiled and unit-tested (42 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
 
 ## Foundation and design system
 
 | Feature | Status |
 | --- | --- |
-| Project, build files, Android TV launcher entry | Written |
-| Three colour themes, selectable in Settings, saved on device | Written |
-| Colour tokens and type scale | Written |
-| Focus component (fill, ring, scale) | Written |
-| Top navigation bar with clock | Written |
+| Project, build files, Android TV launcher entry | Built |
+| Three colour themes, selectable in Settings, saved on device | Built |
+| Colour tokens and type scale | Built |
+| Focus component (fill, ring, scale) | Built |
+| Top navigation bar with clock | Built |
 | Bundled fonts (Inter, Space Grotesk) | Not started |
 | Final app name, icon and home-screen banner | Not started (placeholders in place) |
-| Automatic APK build recipe | Written (needs a GitHub repository) |
+| Automatic APK build recipe | Built (publishes `northlight.apk` as the latest release) |
 
 ## Screens
 
 | Feature | Status |
 | --- | --- |
-| Home: hero, rails, shortcuts (sample content) | Written |
+| Home: hero, rails, shortcuts (sample content) | Built |
 | Home: hero trailer on Up, reorder/hide rails per profile | Not started |
-| Settings › Appearance (theme picker) | Written |
+| Settings › Appearance (theme picker) | Built |
+| Settings › Playlists (add Xtream Codes or M3U, refresh, remove) | Built |
+| Home: rail of the user's imported channels | Built |
 | Settings: other sections | Designed (list only) |
 | TV Guide with info header, filters and mini player | Designed |
 | Programme actions panel | Designed |
@@ -36,8 +38,11 @@ Status key: **Tested** = compiled and unit-tested (31 tests passing), not yet us
 | Feature | Status |
 | --- | --- |
 | M3U playlist parsing (streaming, 100k entries in about half a second) | Tested |
-| Xtream Codes, Stalker/MAC portals, downloading and storing playlists | Not started |
-| Multiple playlists, quick switcher, merged view | Not started |
+| Xtream Codes login and list parsing | Tested |
+| Importing Xtream Codes accounts and M3U links into the database | Built |
+| Stalker/MAC portals, local M3U files | Not started |
+| Multiple playlists | Built |
+| Quick switcher, merged view | Not started |
 | Per-playlist User-Agent, referrer, backup hosts, auto-refresh | Not started |
 | XMLTV guide parsing (streaming, gzip-aware) | Tested |
 | Automatic guide-to-channel matching | Tested |
@@ -46,8 +51,10 @@ Status key: **Tested** = compiled and unit-tested (31 tests passing), not yet us
 | Check playlist tool | Not started |
 | TMDB metadata | Not started |
 | Plex / Jellyfin / Emby libraries | Not started |
-| Backup and restore, encrypted credentials | Not started |
-| Local database sized for 100k+ channels | Not started |
+| Backup and restore | Not started |
+| Encrypted credentials | Not started (passwords are currently stored unencrypted in the app's private storage) |
+| Local database: playlists and channels | Built |
+| Local database: guide tables, search index, timing with 100k+ channels on a Shield | Not started |
 
 ## Live TV
 
@@ -94,7 +101,7 @@ Status key: **Tested** = compiled and unit-tested (31 tests passing), not yet us
 
 | Feature | Status |
 | --- | --- |
-| First successful build on real tooling | Not started |
+| First successful build on real tooling | Done |
 | Tested on a Shield TV | Not started |
 | Unit tests: parsers, variant grouping, guide matching | Tested |
 | Unit tests: recording scheduler | Not started |
