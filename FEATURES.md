@@ -1,6 +1,6 @@
 # Feature checklist
 
-Status key: **Tested** = compiled and unit-tested (52 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
+Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
 
 ## Foundation and design system
 
@@ -79,8 +79,11 @@ Status key: **Tested** = compiled and unit-tested (52 tests in `core/`). **Built
 
 | Feature | Status |
 | --- | --- |
-| Browsing, metadata, resume, watched states, sorting | Not started |
-| Watchlist, Continue Watching, autoplay next, episode buttons | Not started |
+| Films and Series screens: groups, poster grid, series seasons and episodes | Built |
+| Playback with pause and 10-second skip, resume where left off | Built |
+| TMDB metadata, watched marks, sorting | Not started |
+| Continue Watching rail on Home | Built |
+| Watchlist, autoplay next episode, next/previous episode buttons | Not started |
 | Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | Not started |
 
 ## Player

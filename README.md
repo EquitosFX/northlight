@@ -6,7 +6,7 @@ An IPTV player for Android TV, tuned for the NVIDIA Shield TV and its remote. Th
 
 Two parts, at different levels of confidence:
 
-- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, channel line-up and reconnect timing, with 52 passing tests.
+- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, channel line-up and reconnect timing, with 55 passing tests.
 - **`app/` (the Android TV app): compiles in the automatic build, not yet tried on a Shield.** Expect adjustments once it has been used on a real device.
 
 What is in place:
@@ -20,6 +20,7 @@ What is in place:
 - Settings › Playlists: add an Xtream Codes account or an M3U link, refresh, remove
 - A database of playlists and channels, filled in batches as a playlist downloads
 - TV guide: downloaded after each playlist import and refreshed when older than 12 hours; TV Guide tab with a programme grid; now and next in the player
+- Films and Series (from the Home shortcuts): poster grid by group; series open their episodes; playback resumes where you left off; Continue watching rail on Home
 - Live TV player: Up/Down changes channel, OK opens the channel list (Left for groups), Left/Right shows the info banner, Back shrinks the picture to the corner (hold Back to bring it back)
 
 Everything else is listed in `FEATURES.md`.
@@ -46,6 +47,7 @@ The newest build is always at:
 | `app/src/main/java/app/tvplayer/data/db/` | The database tables |
 | `app/src/main/java/app/tvplayer/player/` | The live TV player and its screens |
 | `app/src/main/java/app/tvplayer/ui/guide/` | The TV Guide screen |
+| `app/src/main/java/app/tvplayer/ui/vod/` | Films and Series screens |
 | `app/src/main/java/app/tvplayer/data/ChannelsRepository.kt` | Channel line-up and programme look-ups |
 | `core/src/main/kotlin/app/tvplayer/core/live/` | Channel line-up and reconnect timing |
 | `app/src/main/java/app/tvplayer/ui/components/` | Shared pieces: focus surface, text, top navigation |
