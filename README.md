@@ -6,7 +6,7 @@ An IPTV player for Android TV, tuned for the NVIDIA Shield TV and its remote. Th
 
 Two parts, at different levels of confidence:
 
-- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, with 42 passing tests.
+- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, channel line-up and reconnect timing, with 51 passing tests.
 - **`app/` (the Android TV app): compiles in the automatic build, not yet tried on a Shield.** Expect adjustments once it has been used on a real device.
 
 What is in place:
@@ -19,6 +19,7 @@ What is in place:
 - Settings › Appearance with the theme picker
 - Settings › Playlists: add an Xtream Codes account or an M3U link, refresh, remove
 - A database of playlists and channels, filled in batches as a playlist downloads
+- Live TV player: Up/Down changes channel, OK opens the channel list (Left for groups), Left/Right shows the info banner, Back shrinks the picture to the corner (hold Back to bring it back)
 
 Everything else is listed in `FEATURES.md`.
 
@@ -42,6 +43,8 @@ The newest build is always at:
 | `app/src/main/java/app/tvplayer/data/SettingsRepository.kt` | Saved settings (the chosen theme) |
 | `app/src/main/java/app/tvplayer/data/PlaylistRepository.kt` | Adding, refreshing and removing playlists |
 | `app/src/main/java/app/tvplayer/data/db/` | The database tables |
+| `app/src/main/java/app/tvplayer/player/` | The live TV player and its screens |
+| `core/src/main/kotlin/app/tvplayer/core/live/` | Channel line-up and reconnect timing |
 | `app/src/main/java/app/tvplayer/ui/components/` | Shared pieces: focus surface, text, top navigation |
 | `app/src/main/java/app/tvplayer/ui/home/` | Home screen and its sample content |
 | `app/src/main/java/app/tvplayer/ui/settings/` | Settings: Playlists and Appearance |

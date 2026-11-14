@@ -1,6 +1,6 @@
 # Feature checklist
 
-Status key: **Tested** = compiled and unit-tested (42 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
+Status key: **Tested** = compiled and unit-tested (51 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
 
 ## Foundation and design system
 
@@ -27,7 +27,7 @@ Status key: **Tested** = compiled and unit-tested (42 tests in `core/`). **Built
 | Settings: other sections | Designed (list only) |
 | TV Guide with info header, filters and mini player | Designed |
 | Programme actions panel | Designed |
-| Live TV channel list and info banner | Designed |
+| Live TV: full-screen player, channel list with groups, info banner | Built |
 | Voice search overlay | Designed |
 | Recents | Not started |
 | Library and Recordings | Not started |
@@ -62,13 +62,15 @@ Status key: **Tested** = compiled and unit-tested (42 tests in `core/`). **Built
 | --- | --- |
 | Guide grid behaviour (day jump, on-now filter, genre colours) | Not started |
 | Favourites, custom groups, hide/rename/renumber, PIN-locked groups | Not started |
-| Number entry, last channel, zap overlay, mini-guide | Not started |
+| Channel up/down with wrap-around, last channel remembered | Built |
+| Number entry, mini-guide with programme details | Not started |
 | Catch-up: watch from start, go live, seek | Not started |
 | Timeshift (pause and rewind live) | Not started |
 | Recording: one-off, series, recurring, manual; USB/NAS; conflicts | Not started |
 | Reminders | Not started |
 | Multiview | Not started |
-| Picture-in-picture and the bottom-right mini player | Not started |
+| Bottom-right mini player while browsing (hold Back to return) | Built |
+| Android picture-in-picture outside the app | Not started |
 
 ## Films and series
 
@@ -82,9 +84,11 @@ Status key: **Tested** = compiled and unit-tested (42 tests in `core/`). **Built
 
 | Feature | Status |
 | --- | --- |
-| ExoPlayer default, VLC fallback, external player hand-off | Not started |
-| Frame-rate matching, HDR, audio passthrough, audio delay | Not started |
-| Stream info badge, restart channel, auto-reconnect | Not started |
+| ExoPlayer playback (TS and HLS), per-channel User-Agent and referrer | Built |
+| VLC fallback, FFmpeg software decoders, external player hand-off | Not started |
+| Frame-rate matching, HDR, audio passthrough | Built on the player's defaults; needs checking on a Shield |
+| Audio delay | Not started |
+| Stream info, auto-reconnect, fall-through to backup copies, retry | Built |
 | Sleep timer, zoom modes, deinterlacing, buffer settings | Not started |
 
 ## Profiles, sport, voice, system
@@ -103,7 +107,7 @@ Status key: **Tested** = compiled and unit-tested (42 tests in `core/`). **Built
 | --- | --- |
 | First successful build on real tooling | Done |
 | Tested on a Shield TV | Not started |
-| Unit tests: parsers, variant grouping, guide matching | Tested |
+| Unit tests: parsers, variant grouping, guide matching, line-up, reconnect timing | Tested |
 | Unit tests: recording scheduler | Not started |
 | Focus-navigation UI tests | Not started |
 | Performance targets (cold start under 2s, zap under 1s) | Not started |
