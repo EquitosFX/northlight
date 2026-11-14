@@ -11,6 +11,8 @@ data class LineupRow(
     val logo: String? = null,
     val group: String? = null,
     val number: Int? = null,
+    /** The TV guide's id for this channel, when it has been matched to one. */
+    val guideId: String? = null,
 )
 
 /** A channel as the viewer sees it: one entry however many quality copies the provider lists. */
@@ -23,6 +25,8 @@ data class LineupChannel(
     val number: Int,
     /** Row ids of every copy, best first, backups last. Playback falls through them in order. */
     val variantIds: List<Long>,
+    val playlistId: Long = 0,
+    val guideId: String? = null,
 )
 
 /** The live channels across all playlists, in the order the providers list them. */
@@ -66,6 +70,8 @@ class Lineup private constructor(val channels: List<LineupChannel>) {
                     group = first.group,
                     number = members.firstNotNullOfOrNull { it.number } ?: position,
                     variantIds = ordered.map { it.id },
+                    playlistId = first.playlistId,
+                    guideId = members.firstNotNullOfOrNull { it.guideId },
                 )
             }
             return Lineup(channels)

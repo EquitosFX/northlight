@@ -94,6 +94,18 @@ class LineupTest {
     }
 
     @Test
+    fun carriesThePlaylistAndTheFirstGuideIdAnyCopyHas() {
+        val lineup = Lineup.build(
+            listOf(
+                LineupRow(1, 7, "North One", "northone", 1, false),
+                LineupRow(2, 7, "North One", "northone", 3, false, guideId = "north.one"),
+            ),
+        )
+        assertEquals(7L, lineup.channels.single().playlistId)
+        assertEquals("north.one", lineup.channels.single().guideId)
+    }
+
+    @Test
     fun stepsWrapAroundAtBothEnds() {
         assertEquals(1, Lineup.step(5, 0, 1))
         assertEquals(0, Lineup.step(5, 4, 1))

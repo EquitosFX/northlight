@@ -35,6 +35,7 @@ import app.tvplayer.data.db.PlaylistEntity
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.TvTextField
+import app.tvplayer.ui.components.clockTime
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import java.net.URI
@@ -125,13 +126,18 @@ private fun StatusLine(state: ImportState) {
                 color = colors.accent,
             )
         }
-        is ImportState.Done -> Label(
-            text = "${state.playlistName} is ready: ${count(state.live)} live channels, " +
-                "${count(state.movies)} films, ${count(state.series)} series",
-            style = AppType.body,
-            color = colors.accent,
-            maxLines = 2,
-        )
+        is ImportState.Done -> {
+            Label(
+                text = "${state.playlistName} is ready: ${count(state.live)} live channels, " +
+                    "${count(state.movies)} films, ${count(state.series)} series, " +
+                    "${count(state.programmes)} programmes in the TV guide",
+                style = AppType.body,
+                color = colors.accent,
+                maxLines = 2,
+            )
+            val note = state.guideNote
+            if (note != null) Label(text = note, style = AppType.body, color = colors.textDim, maxLines = 2)
+        }
         is ImportState.Failed -> Label(text = state.message, style = AppType.body, color = colors.accent, maxLines = 3)
     }
 }
@@ -165,6 +171,16 @@ private fun PlaylistRow(playlist: PlaylistEntity, busy: Boolean, onRefresh: () -
             Label(
                 text = "${count(playlist.liveCount)} live · ${count(playlist.movieCount)} films · " +
                     "${count(playlist.seriesCount)} series",
+                style = AppType.caption,
+                color = colors.textDim,
+            )
+            val guideUpdated = playlist.guideRefreshedAt
+            Label(
+                text = if (guideUpdated == null) {
+                    "TV guide: not loaded"
+                } else {
+                    "TV guide: ${count(playlist.programmeCount)} programmes · updated ${clockTime(guideUpdated)}"
+                },
                 style = AppType.caption,
                 color = colors.textDim,
             )

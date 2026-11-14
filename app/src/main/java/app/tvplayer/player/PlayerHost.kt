@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -52,6 +53,9 @@ import androidx.media3.ui.PlayerView
 import app.tvplayer.core.channels.Quality
 import app.tvplayer.core.live.LineupChannel
 import app.tvplayer.core.live.Reconnect
+import app.tvplayer.data.db.ProgrammeEntity
+import app.tvplayer.ui.components.ProgressLine
+import app.tvplayer.ui.components.clockTime
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.Logo
@@ -228,12 +232,35 @@ private fun InfoBanner(controller: LivePlayerController, modifier: Modifier = Mo
                 Logo(url = channel.logo, modifier = Modifier.size(56.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Label(text = "${channel.number}  ${channel.name}", style = AppType.headline)
+                    NowNextLines(controller.nowNext)
                     if (details.isNotEmpty()) {
-                        Label(text = details, style = AppType.body, color = colors.textDim)
+                        Label(text = details, style = AppType.caption, color = colors.textDim)
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NowNextLines(programmes: List<ProgrammeEntity>) {
+    val colors = AppTheme.colors
+    val now = System.currentTimeMillis()
+    val current = programmes.firstOrNull { it.start <= now }
+    val next = programmes.firstOrNull { it.start > now }
+    if (current != null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Label(
+                text = "${clockTime(current.start)}–${clockTime(current.stop)}",
+                style = AppType.label,
+                color = colors.accent,
+            )
+            Label(text = current.title, style = AppType.title, modifier = Modifier.width(420.dp))
+        }
+        ProgressLine(start = current.start, stop = current.stop, modifier = Modifier.width(300.dp))
+    }
+    if (next != null) {
+        Label(text = "Next  ${clockTime(next.start)}  ${next.title}", style = AppType.body, color = colors.textDim)
     }
 }
 
@@ -341,6 +368,7 @@ private fun ChannelListOverlay(
                 itemsIndexed(channels, key = { _, channel -> channel.key }) { index, channel ->
                     ChannelRow(
                         channel = channel,
+                        controller = controller,
                         playing = channel.key == currentKey,
                         onClick = { onPick(channel) },
                         modifier = if (index == startIndex) Modifier.focusRequester(itemFocus) else Modifier,
@@ -352,8 +380,17 @@ private fun ChannelListOverlay(
 }
 
 @Composable
-private fun ChannelRow(channel: LineupChannel, playing: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ChannelRow(
+    channel: LineupChannel,
+    controller: LivePlayerController,
+    playing: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = AppTheme.colors
+    val onNow by produceState<ProgrammeEntity?>(initialValue = null, channel.key) {
+        value = controller.nowOn(channel)
+    }
     FocusSurface(
         onClick = onClick,
         modifier = modifier
@@ -380,7 +417,13 @@ private fun ChannelRow(channel: LineupChannel, playing: Boolean, onClick: () -> 
             Column(modifier = Modifier.weight(1f)) {
                 Label(text = channel.name, style = AppType.title)
                 val group = channel.group
+                val programme = onNow
                 when {
+                    programme != null -> Label(
+                        text = programme.title,
+                        style = AppType.caption,
+                        color = if (playing) colors.accent else colors.textDim,
+                    )
                     playing -> Label(text = "Playing now", style = AppType.caption, color = colors.accent)
                     group != null -> Label(text = group, style = AppType.caption, color = colors.textDim)
                 }

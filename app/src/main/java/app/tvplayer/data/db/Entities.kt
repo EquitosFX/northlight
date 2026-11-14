@@ -24,6 +24,8 @@ data class PlaylistEntity(
     val seriesCount: Int = 0,
     val accountStatus: String? = null,
     val expiresAt: Long? = null,
+    val guideRefreshedAt: Long? = null,
+    val programmeCount: Int = 0,
 ) {
     companion object {
         const val TYPE_XTREAM = "xtream"
@@ -67,7 +69,10 @@ data class ChannelEntity(
     val logo: String? = null,
     val groupName: String? = null,
     val number: Int? = null,
+    /** The guide id the playlist gave this channel (tvg-id). */
     val guideId: String? = null,
+    /** The guide channel actually matched to this one when the guide was last imported. */
+    val epgId: String? = null,
     val catchupDays: Int? = null,
     val catchupType: String? = null,
     val catchupSource: String? = null,
@@ -82,3 +87,30 @@ data class ChannelEntity(
         const val KIND_SERIES = "series"
     }
 }
+
+/** One programme from a playlist's TV guide. Times are UTC milliseconds. */
+@Entity(
+    tableName = "programmes",
+    foreignKeys = [
+        ForeignKey(
+            entity = PlaylistEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["playlistId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("playlistId", "channelGuideId", "start")],
+)
+data class ProgrammeEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val playlistId: Long,
+    val channelGuideId: String,
+    val start: Long,
+    val stop: Long,
+    val title: String,
+    val subTitle: String? = null,
+    val description: String? = null,
+    val category: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+)

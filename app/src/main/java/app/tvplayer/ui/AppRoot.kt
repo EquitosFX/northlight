@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +41,7 @@ import app.tvplayer.player.PlayerMode
 import app.tvplayer.ui.components.Dest
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.TopNavBar
+import app.tvplayer.ui.guide.GuideScreen
 import app.tvplayer.ui.home.HomeScreen
 import app.tvplayer.ui.home.Tile
 import app.tvplayer.ui.settings.SettingsScreen
@@ -60,7 +62,7 @@ fun AppRoot(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val controller = remember {
-        LivePlayerController(context.applicationContext, container.http, container.database, container.settings, scope)
+        LivePlayerController(context.applicationContext, container.http, container.channels, container.settings, scope)
     }
     DisposableEffect(controller) { onDispose { controller.release() } }
 
@@ -77,6 +79,9 @@ fun AppRoot(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+
+    // Bring TV guides up to date in the background when the app opens.
+    LaunchedEffect(Unit) { container.playlists.refreshStaleGuides() }
 
     var dest by rememberSaveable { mutableStateOf(Dest.HOME) }
     var mode by remember { mutableStateOf(PlayerMode.NONE) }
@@ -148,6 +153,10 @@ fun AppRoot(
                         yourChannels = yourChannels,
                         onPlayChannel = { id -> play(id) },
                         onLiveTv = { play(null) },
+                    )
+                    Dest.GUIDE -> GuideScreen(
+                        channels = container.channels,
+                        onPlay = { channel -> play(channel.variantIds.first()) },
                     )
                     Dest.SETTINGS -> SettingsScreen(
                         themeId = themeId,

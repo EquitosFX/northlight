@@ -23,19 +23,17 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import app.tvplayer.core.live.Lineup
 import app.tvplayer.core.live.LineupChannel
-import app.tvplayer.core.live.LineupRow
 import app.tvplayer.core.live.Reconnect
+import app.tvplayer.data.ChannelsRepository
 import app.tvplayer.data.SettingsRepository
-import app.tvplayer.data.db.AppDatabase
 import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.data.db.ProgrammeEntity
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 
 sealed interface PlaybackStatus {
@@ -61,7 +59,7 @@ sealed interface PlaybackStatus {
 class LivePlayerController(
     context: Context,
     private val http: OkHttpClient,
-    private val db: AppDatabase,
+    private val channels: ChannelsRepository,
     private val settings: SettingsRepository,
     private val scope: CoroutineScope,
 ) {
@@ -86,6 +84,10 @@ class LivePlayerController(
     var streamInfo by mutableStateOf<String?>(null)
         private set
 
+    /** What's on the current channel now and next, when the TV guide knows. */
+    var nowNext by mutableStateOf<List<ProgrammeEntity>>(emptyList())
+        private set
+
     /** Goes up by one whenever the info banner should appear. */
     var bannerToken by mutableIntStateOf(0)
         private set
@@ -99,6 +101,7 @@ class LivePlayerController(
     private var tuneJob: Job? = null
     private var retryJob: Job? = null
     private var stallJob: Job? = null
+    private var guideJob: Job? = null
 
     // Lets players start on any frame in a TS stream, which makes channel changes noticeably quicker.
     private val extractors = DefaultExtractorsFactory().setTsExtractorFlags(
@@ -121,24 +124,7 @@ class LivePlayerController(
         cancelRecovery()
         status = PlaybackStatus.Loading
         loadJob = scope.launch {
-            val rows = withContext(Dispatchers.IO) { db.channels().liveRowsBlocking() }
-            val built = withContext(Dispatchers.Default) {
-                Lineup.build(
-                    rows.map {
-                        LineupRow(
-                            id = it.id,
-                            playlistId = it.playlistId,
-                            name = it.baseName,
-                            variantKey = it.variantKey,
-                            quality = it.quality,
-                            isBackup = it.isBackup,
-                            logo = it.logo,
-                            group = it.groupName,
-                            number = it.number,
-                        )
-                    },
-                )
-            }
+            val built = channels.lineup()
             lineup = built
             group = null
             if (built.isEmpty) {
@@ -164,7 +150,24 @@ class LivePlayerController(
         streamInfo = null
         bannerToken++
         scope.launch { settings.setLastChannel(channel.key) }
+        followGuide(channel)
         playVariant(PlaybackStatus.Loading)
+    }
+
+    /** What's on [channel] now, for the channel list. */
+    suspend fun nowOn(channel: LineupChannel): ProgrammeEntity? = channels.nowAndNext(channel).firstOrNull()
+
+    /** Keeps [nowNext] up to date for as long as [channel] is playing. */
+    private fun followGuide(channel: LineupChannel) {
+        guideJob?.cancel()
+        nowNext = emptyList()
+        if (channel.guideId == null) return
+        guideJob = scope.launch {
+            while (true) {
+                nowNext = channels.nowAndNext(channel)
+                delay(GUIDE_REFRESH_MILLIS)
+            }
+        }
     }
 
     /** Channel up (+1) or down (-1) within the chosen group, wrapping round at the ends. */
@@ -214,6 +217,8 @@ class LivePlayerController(
     fun close() {
         loadJob?.cancel()
         tuneJob?.cancel()
+        guideJob?.cancel()
+        nowNext = emptyList()
         cancelRecovery()
         player.stop()
         player.clearMediaItems()
@@ -238,7 +243,7 @@ class LivePlayerController(
         tuneJob?.cancel()
         status = showing
         tuneJob = scope.launch {
-            val row = withContext(Dispatchers.IO) { db.channels().getBlocking(id) }
+            val row = channels.row(id)
             if (row == null) {
                 // The playlist was refreshed or removed underneath us.
                 status = PlaybackStatus.Failed
@@ -366,6 +371,7 @@ class LivePlayerController(
 
     private companion object {
         const val STALL_MILLIS = 20_000L
+        const val GUIDE_REFRESH_MILLIS = 60_000L
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
     }
 }

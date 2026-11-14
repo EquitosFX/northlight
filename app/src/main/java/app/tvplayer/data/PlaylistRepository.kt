@@ -1,6 +1,10 @@
 package app.tvplayer.data
 
 import app.tvplayer.core.channels.ChannelVariants
+import app.tvplayer.core.guide.ChannelRef
+import app.tvplayer.core.guide.EpgMatcher
+import app.tvplayer.core.guide.GuideChannel
+import app.tvplayer.core.guide.XmltvParser
 import app.tvplayer.core.playlist.M3uParser
 import app.tvplayer.core.xtream.XtreamAccount
 import app.tvplayer.core.xtream.XtreamException
@@ -8,7 +12,9 @@ import app.tvplayer.core.xtream.XtreamParser
 import app.tvplayer.core.xtream.XtreamUrls
 import app.tvplayer.data.db.AppDatabase
 import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.data.db.MatchRow
 import app.tvplayer.data.db.PlaylistEntity
+import app.tvplayer.data.db.ProgrammeEntity
 import java.io.IOException
 import java.io.InputStream
 import java.net.ConnectException
@@ -30,16 +36,25 @@ import okhttp3.Request
 sealed interface ImportState {
     data object Idle : ImportState
     data class Working(val playlistName: String, val step: String, val count: Int) : ImportState
-    data class Done(val playlistName: String, val live: Int, val movies: Int, val series: Int) : ImportState
+    data class Done(
+        val playlistName: String,
+        val live: Int,
+        val movies: Int,
+        val series: Int,
+        val programmes: Int,
+        /** Set when the channels came in but the TV guide did not. */
+        val guideNote: String? = null,
+    ) : ImportState
     data class Failed(val message: String) : ImportState
 }
 
 /**
- * Adds, refreshes and removes playlists.
+ * Adds, refreshes and removes playlists, and brings in their TV guides.
  *
  * Imports run in the app-wide [scope], so they carry on if the user leaves the Settings screen.
  * Rows go into the database in batches as they are parsed; the full list is never held in memory.
  * A refresh is all-or-nothing: if the download fails part-way, the previous channels stay.
+ * A guide that fails to download never undoes a successful channel import.
  */
 class PlaylistRepository(
     private val db: AppDatabase,
@@ -100,6 +115,25 @@ class PlaylistRepository(
         scope.launch(Dispatchers.IO) { db.playlists().deleteBlocking(playlistId) }
     }
 
+    /** Re-downloads any TV guide not updated in the last 12 hours. Called when the app starts. */
+    fun refreshStaleGuides() {
+        if (state.value is ImportState.Working) return
+        scope.launch(Dispatchers.IO) {
+            val cutoff = System.currentTimeMillis() - GUIDE_MAX_AGE
+            val stale = db.playlists().getAllBlocking().filter { playlist ->
+                playlist.guideUrls.isNotBlank() &&
+                    playlist.refreshedAt != null &&
+                    (playlist.guideRefreshedAt ?: 0L) < cutoff
+            }
+            for (playlist in stale) {
+                if (state.value is ImportState.Working) return@launch
+                runCatching { importGuide(playlist) }
+                // A quiet background refresh: no message unless something is already showing.
+                if (state.value is ImportState.Working) state.value = ImportState.Idle
+            }
+        }
+    }
+
     /** Clears a finished or failed message once the user has moved on. */
     fun acknowledge() {
         if (state.value !is ImportState.Working) state.value = ImportState.Idle
@@ -119,8 +153,8 @@ class PlaylistRepository(
 
     private fun importInto(playlistId: Long, isNew: Boolean) {
         val playlist = db.playlists().getBlocking(playlistId) ?: throw IOException("That playlist no longer exists.")
-        try {
-            val result = db.runInTransaction(
+        val imported = try {
+            db.runInTransaction(
                 Callable {
                     db.channels().deleteForPlaylistBlocking(playlistId)
                     val batch = Batch(playlist)
@@ -131,24 +165,151 @@ class PlaylistRepository(
                     }
                     batch.flush()
                     if (batch.total == 0) throw IOException("Nothing was found at that address.")
-                    db.playlists().updateBlocking(
-                        playlist.copy(
-                            guideUrls = guideUrls,
-                            refreshedAt = System.currentTimeMillis(),
-                            liveCount = batch.live,
-                            movieCount = batch.movies,
-                            seriesCount = batch.series,
-                        ),
+                    val updated = playlist.copy(
+                        guideUrls = guideUrls,
+                        refreshedAt = System.currentTimeMillis(),
+                        liveCount = batch.live,
+                        movieCount = batch.movies,
+                        seriesCount = batch.series,
                     )
-                    batch
+                    db.playlists().updateBlocking(updated)
+                    updated to batch
                 },
             )
-            state.value = ImportState.Done(playlist.name, result.live, result.movies, result.series)
         } catch (e: Exception) {
             // A playlist that never finished its first import is not kept.
             if (isNew) db.playlists().deleteBlocking(playlistId)
             throw e
         }
+
+        val (updated, batch) = imported
+        var programmes = 0
+        var guideNote: String? = null
+        if (updated.guideUrls.isBlank()) {
+            guideNote = "This playlist doesn't name a TV guide."
+        } else {
+            try {
+                programmes = importGuide(updated)
+            } catch (e: Exception) {
+                guideNote = "The TV guide didn't load: ${explain(e)}"
+            }
+        }
+        state.value = ImportState.Done(updated.name, batch.live, batch.movies, batch.series, programmes, guideNote)
+    }
+
+    /**
+     * Downloads every guide the playlist names, links guide channels to the playlist's channels,
+     * and stores programmes from a day ago to a week ahead for the channels that matched.
+     * Returns the number of programmes stored.
+     */
+    private fun importGuide(playlist: PlaylistEntity): Int {
+        val urls = playlist.guideUrls.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (urls.isEmpty()) return 0
+        val channels = db.channels().matchRowsBlocking(playlist.id)
+        val now = System.currentTimeMillis()
+        val keepFrom = now - DAY
+        val keepTo = now + 7 * DAY
+        state.value = ImportState.Working(playlist.name, "TV guide", 0)
+
+        val total = db.runInTransaction(
+            Callable {
+                db.programmes().deleteForPlaylistBlocking(playlist.id)
+                val matched = HashMap<String, String>() // variantKey -> guide channel id
+                val rows = ArrayList<ProgrammeEntity>(GUIDE_BATCH)
+                var stored = 0
+
+                fun flush() {
+                    if (rows.isEmpty()) return
+                    db.programmes().insertAllBlocking(rows.toList())
+                    stored += rows.size
+                    rows.clear()
+                    state.value = ImportState.Working(playlist.name, "TV guide", stored)
+                }
+
+                for (url in urls) {
+                    val guideChannels = ArrayList<GuideChannel>()
+                    var wanted: Set<String>? = null
+                    try {
+                        fetch(url) { input ->
+                            XmltvParser.parse(
+                                input,
+                                onChannel = { guideChannels.add(it) },
+                                onProgramme = { programme ->
+                                    // Guides list their channels first, so matching happens once, at the first programme.
+                                    val ids = wanted ?: matchNew(channels, guideChannels, matched).also { wanted = it }
+                                    if (programme.channelId in ids &&
+                                        programme.stopMillis > keepFrom &&
+                                        programme.startMillis < keepTo
+                                    ) {
+                                        rows.add(
+                                            ProgrammeEntity(
+                                                playlistId = playlist.id,
+                                                channelGuideId = programme.channelId,
+                                                start = programme.startMillis,
+                                                stop = programme.stopMillis,
+                                                title = programme.title,
+                                                subTitle = programme.subTitle,
+                                                description = programme.description,
+                                                category = programme.categories.firstOrNull(),
+                                                season = programme.season,
+                                                episode = programme.episode,
+                                            ),
+                                        )
+                                        if (rows.size >= GUIDE_BATCH) flush()
+                                    }
+                                },
+                            )
+                        }
+                    } catch (e: Exception) {
+                        // One broken guide out of several should not lose the others.
+                        if (urls.size == 1) throw e
+                    }
+                    if (wanted == null) matchNew(channels, guideChannels, matched)
+                }
+                flush()
+
+                for (channel in channels) {
+                    db.channels().setEpgIdBlocking(playlist.id, channel.variantKey, matched[channel.variantKey])
+                }
+                db.playlists().getBlocking(playlist.id)?.let { current ->
+                    db.playlists().updateBlocking(
+                        current.copy(guideRefreshedAt = System.currentTimeMillis(), programmeCount = stored),
+                    )
+                }
+                stored
+            },
+        )
+        return total
+    }
+
+    /**
+     * Matches the channels not matched yet against one guide's channel list, records the matches in
+     * [matched], and returns the guide channel ids newly matched (the ones to keep programmes for).
+     * A guide with no channel list is matched on the playlist's own guide ids alone.
+     */
+    private fun matchNew(
+        channels: List<MatchRow>,
+        guideChannels: List<GuideChannel>,
+        matched: MutableMap<String, String>,
+    ): Set<String> {
+        val pending = channels.filter { it.variantKey !in matched }
+        val found = HashSet<String>()
+        if (guideChannels.isEmpty()) {
+            for (channel in pending) {
+                val id = channel.guideId?.takeIf { it.isNotBlank() } ?: continue
+                matched[channel.variantKey] = id
+                found.add(id)
+            }
+            return found
+        }
+        val results = EpgMatcher.match(pending.map { ChannelRef(name = it.name, tvgId = it.guideId) }, guideChannels)
+        pending.zip(results).forEach { (channel, match) ->
+            if (match != null) {
+                matched[channel.variantKey] = match.guideId
+                found.add(match.guideId)
+            }
+        }
+        return found
     }
 
     /** Returns the guide address for the account. */
@@ -297,6 +458,8 @@ class PlaylistRepository(
                     groupName = group,
                     number = number,
                     guideId = guideId,
+                    // Until a guide is imported, trust the playlist's own guide id.
+                    epgId = guideId?.takeIf { it.isNotBlank() },
                     catchupDays = catchupDays,
                     catchupType = catchupType,
                     catchupSource = catchupSource,
@@ -339,6 +502,7 @@ class PlaylistRepository(
         is SocketTimeoutException -> "The server took too long to answer."
         is ConnectException -> "Couldn't connect to that server."
         is IllegalArgumentException -> "That address doesn't look right."
+        is org.xml.sax.SAXException -> "The guide file couldn't be read."
         is IOException -> e.message ?: "The download failed."
         else -> "Something went wrong: ${e.message ?: e.javaClass.simpleName}"
     }
@@ -352,6 +516,9 @@ class PlaylistRepository(
 
     private companion object {
         const val BATCH_SIZE = 500
+        const val GUIDE_BATCH = 1000
+        const val DAY = 86_400_000L
+        const val GUIDE_MAX_AGE = 12 * 3_600_000L
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
     }
 }
