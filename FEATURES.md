@@ -30,6 +30,8 @@ Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built
 | Programme actions panel | Designed |
 | Live TV: full-screen player, channel list with groups, info banner | Built |
 | Voice search overlay | Designed |
+| Search: channels, films and series by name | Built |
+| Voice search | Not started |
 | Recents | Not started |
 | Library and Recordings | Not started |
 | Sport hub and team pages | Not started |
@@ -54,7 +56,7 @@ Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built
 | TMDB metadata | Not started |
 | Plex / Jellyfin / Emby libraries | Not started |
 | Backup and restore | Not started |
-| Encrypted credentials | Not started (passwords are currently stored unencrypted in the app's private storage) |
+| Encrypted credentials | Not started. Xtream stream addresses contain the username and password, so encrypting the password field alone would not help; it needs stream addresses built at play time instead |
 | Local database: playlists and channels | Built |
 | Local database: guide tables, search index, timing with 100k+ channels on a Shield | Not started |
 
@@ -63,7 +65,8 @@ Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built
 | Feature | Status |
 | --- | --- |
 | Guide grid behaviour (day jump, on-now filter, genre colours) | Not started |
-| Favourites, custom groups, hide/rename/renumber, PIN-locked groups | Not started |
+| Favourite channels (Right in the channel list) and a Favourites group | Built |
+| Custom groups, hide/rename/renumber, PIN-locked groups | Not started |
 | Channel up/down with wrap-around, last channel remembered | Built |
 | Now and next in the info banner and channel list | Built |
 | Number entry | Not started |
@@ -83,7 +86,8 @@ Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built
 | Playback with pause and 10-second skip, resume where left off | Built |
 | TMDB metadata, watched marks, sorting | Not started |
 | Continue Watching rail on Home | Built |
-| Watchlist, autoplay next episode, next/previous episode buttons | Not started |
+| Autoplay next episode with countdown, next/previous episode media keys | Built |
+| Watchlist | Not started |
 | Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | Not started |
 
 ## Player
