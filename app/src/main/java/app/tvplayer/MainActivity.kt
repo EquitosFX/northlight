@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
                 AppRoot(
                     themeId = themeId,
                     onThemeChange = { chosen -> scope.launch { settings.setTheme(chosen) } },
-                    playlists = container.playlists,
+                    container = container,
                 )
             }
         }

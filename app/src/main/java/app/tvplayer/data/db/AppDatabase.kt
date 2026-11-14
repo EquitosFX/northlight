@@ -30,6 +30,19 @@ interface PlaylistDao {
     fun deleteBlocking(id: Long)
 }
 
+/** The few columns the channel list needs, so a large playlist loads quickly. */
+data class LiveRow(
+    val id: Long,
+    val playlistId: Long,
+    val baseName: String,
+    val variantKey: String,
+    val quality: Int,
+    val isBackup: Boolean,
+    val logo: String?,
+    val groupName: String?,
+    val number: Int?,
+)
+
 @Dao
 interface ChannelDao {
     @Insert
@@ -37,6 +50,15 @@ interface ChannelDao {
 
     @Query("DELETE FROM channels WHERE playlistId = :playlistId")
     fun deleteForPlaylistBlocking(playlistId: Long)
+
+    @Query(
+        "SELECT id, playlistId, baseName, variantKey, quality, isBackup, logo, groupName, number " +
+            "FROM channels WHERE kind = 'live' ORDER BY playlistId, position",
+    )
+    fun liveRowsBlocking(): List<LiveRow>
+
+    @Query("SELECT * FROM channels WHERE id = :id")
+    fun getBlocking(id: Long): ChannelEntity?
 
     @Query("SELECT * FROM channels WHERE kind = 'live' ORDER BY playlistId, position LIMIT :limit")
     fun observeFirstLive(limit: Int): Flow<List<ChannelEntity>>

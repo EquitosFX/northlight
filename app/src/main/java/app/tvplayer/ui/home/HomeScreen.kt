@@ -29,13 +29,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
+import app.tvplayer.ui.components.Logo
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 
 private val SideMargin = 48.dp
 
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier, yourChannels: List<Tile> = emptyList()) {
+fun HomeScreen(
+    modifier: Modifier = Modifier,
+    yourChannels: List<Tile> = emptyList(),
+    onPlayChannel: (Long) -> Unit = {},
+    onLiveTv: () -> Unit = {},
+) {
+    val playTile: (Tile) -> Unit = { tile -> tile.channelId?.let(onPlayChannel) }
+
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
@@ -47,10 +55,10 @@ fun HomeScreen(modifier: Modifier = Modifier, yourChannels: List<Tile> = emptyLi
         item { Hero(item = SampleData.hero, watchFocus = firstFocus) }
         // Real channels from the user's playlists; everything below is still sample content.
         if (yourChannels.isNotEmpty()) {
-            item { Rail(title = "Your channels", tiles = yourChannels) }
+            item { Rail(title = "Your channels", tiles = yourChannels, onTileClick = playTile) }
         }
         item { Rail(title = "For you", tiles = SampleData.forYou) }
-        item { ShortcutRow(labels = SampleData.shortcuts) }
+        item { ShortcutRow(labels = SampleData.shortcuts, onClick = { label -> if (label == "Live TV") onLiveTv() }) }
         item { Rail(title = "On now and next", tiles = SampleData.onNow) }
     }
 }
@@ -115,7 +123,7 @@ private fun Hero(item: HeroItem, watchFocus: FocusRequester) {
 }
 
 @Composable
-private fun Rail(title: String, tiles: List<Tile>) {
+private fun Rail(title: String, tiles: List<Tile>, onTileClick: (Tile) -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Label(
             text = title,
@@ -128,24 +136,33 @@ private fun Rail(title: String, tiles: List<Tile>) {
             contentPadding = PaddingValues(horizontal = SideMargin, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(tiles) { tile -> TileCard(tile) }
+            items(tiles) { tile -> TileCard(tile = tile, onClick = { onTileClick(tile) }) }
         }
     }
 }
 
 @Composable
-private fun TileCard(tile: Tile) {
+private fun TileCard(tile: Tile, onClick: () -> Unit) {
     val colors = AppTheme.colors
     val art = Color(tile.color)
 
     FocusSurface(
-        onClick = { },
+        onClick = onClick,
         modifier = Modifier.size(width = 163.dp, height = 92.dp),
         shape = RoundedCornerShape(9.dp),
         container = art,
         focusedContainer = art,
         outlined = false,
     ) {
+        if (tile.logo != null) {
+            Logo(
+                url = tile.logo,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 12.dp)
+                    .size(width = 72.dp, height = 44.dp),
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -176,7 +193,7 @@ private fun TileCard(tile: Tile) {
 }
 
 @Composable
-private fun ShortcutRow(labels: List<String>) {
+private fun ShortcutRow(labels: List<String>, onClick: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -185,7 +202,7 @@ private fun ShortcutRow(labels: List<String>) {
     ) {
         labels.forEach { label ->
             FocusSurface(
-                onClick = { },
+                onClick = { onClick(label) },
                 modifier = Modifier
                     .weight(1f)
                     .height(42.dp),

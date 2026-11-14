@@ -12,14 +12,22 @@ import kotlinx.coroutines.flow.map
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-/** App-wide settings saved on the device. The chosen theme survives restarts. */
+/** App-wide settings saved on the device. They survive restarts. */
 class SettingsRepository(private val context: Context) {
 
     private val themeKey = stringPreferencesKey("theme")
+    private val lastChannelKey = stringPreferencesKey("last_channel")
 
     val theme: Flow<ThemeId> = context.settingsStore.data.map { prefs -> ThemeId.fromKey(prefs[themeKey]) }
 
     suspend fun setTheme(id: ThemeId) {
         context.settingsStore.edit { prefs -> prefs[themeKey] = id.key }
+    }
+
+    /** The channel watched last, so Live TV opens where the viewer left off. */
+    val lastChannel: Flow<String?> = context.settingsStore.data.map { prefs -> prefs[lastChannelKey] }
+
+    suspend fun setLastChannel(key: String) {
+        context.settingsStore.edit { prefs -> prefs[lastChannelKey] = key }
     }
 }

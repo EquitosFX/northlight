@@ -18,6 +18,9 @@ data class Tile(
     val color: Long,
     val badge: String? = null,
     val progress: Float? = null,
+    /** Set for the viewer's own channels; selecting the tile plays it. */
+    val channelId: Long? = null,
+    val logo: String? = null,
 )
 
 object SampleData {
