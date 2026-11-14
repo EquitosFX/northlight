@@ -379,9 +379,10 @@ private fun ChannelRow(channel: LineupChannel, playing: Boolean, onClick: () -> 
             Logo(url = channel.logo, modifier = Modifier.size(32.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Label(text = channel.name, style = AppType.title)
+                val group = channel.group
                 when {
                     playing -> Label(text = "Playing now", style = AppType.caption, color = colors.accent)
-                    channel.group != null -> Label(text = channel.group, style = AppType.caption, color = colors.textDim)
+                    group != null -> Label(text = group, style = AppType.caption, color = colors.textDim)
                 }
             }
         }
