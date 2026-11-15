@@ -17,6 +17,7 @@ What is in place:
 - Three colour themes (Lagoon, Orchid, Midnight), chosen in Settings and saved on the device
 - `FocusSurface`, the one focusable building block for the remote
 - Side panel with the clock, the live picture and the menu; Figtree typeface
+- Settings › Updates: checks GitHub daily (dot on Settings when a build is ready), downloads with progress, verifies size and SHA-256, installs over the top
 - Skyfall branding: launcher icon, Android TV banner, start-up screen and a Skyfall colour theme (default), from the artwork in `branding/`
 - Home screen: your own content only (welcome when there is no playlist yet)
 - Recents: recent channels and films to carry on with
