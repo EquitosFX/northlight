@@ -211,7 +211,10 @@ private fun TileCard(tile: Tile, onClick: () -> Unit) {
         focusedContainer = art,
         outlined = false,
     ) {
-        if (tile.logo != null) {
+        if (tile.vod != null && tile.logo != null) {
+            // Films and episodes fill the card with their artwork.
+            AsyncImage(model = tile.logo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else if (tile.logo != null) {
             Logo(
                 url = tile.logo,
                 modifier = Modifier

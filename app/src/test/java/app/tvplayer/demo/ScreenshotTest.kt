@@ -8,7 +8,11 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.core.app.ApplicationProvider
@@ -61,7 +65,17 @@ class ScreenshotTest {
             }
         }
         settle()
+        // Robolectric's window may not hand focus over by itself; put it on the open section's menu item.
+        println("Focused after opening ${dest.label}: ${focusedCount()}")
+        if (focusedCount() == 0) {
+            runCatching { rule.onAllNodesWithText(dest.label)[0].performSemanticsAction(SemanticsActions.RequestFocus) }
+                .onFailure { println("Couldn't focus ${dest.label}: $it") }
+            settle()
+            println("Focused after asking: ${focusedCount()}")
+        }
     }
+
+    private fun focusedCount() = rule.onAllNodes(isFocused()).fetchSemanticsNodes().size
 
     /** Lets database reads, artwork loading and animations finish. */
     private fun settle() {
@@ -76,7 +90,8 @@ class ScreenshotTest {
     private fun press(vararg names: String) {
         val keys = names.map { mapOf("right" to Key.DirectionRight, "down" to Key.DirectionDown, "ok" to Key.DirectionCenter).getValue(it) }
         for (key in keys) {
-            runCatching { rule.onRoot().performKeyInput { pressKey(key) } }
+            val target = if (focusedCount() > 0) rule.onNode(isFocused()) else rule.onRoot()
+            runCatching { target.performKeyInput { pressKey(key) } }
                 .onFailure { println("Key $key not delivered: $it") }
             settle()
         }

@@ -139,10 +139,12 @@ fun VodScreen(
     val autoFocus = LocalAutoFocus.current
     val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = state.lastIndex)
     // The header shows the highlighted poster's details, looked up once the highlight settles.
-    var highlighted by remember(kind) { mutableStateOf<VodRow?>(null) }
-    val highlightInfo by produceState<MetadataEntity?>(initialValue = null, highlighted?.id) {
-        val row = highlighted ?: return@produceState
-        delay(350)
+    // Until a poster is highlighted, the header shows the group's first title.
+    var highlighted by remember(kind, state.group) { mutableStateOf<VodRow?>(null) }
+    val shown = highlighted ?: items?.firstOrNull()
+    val highlightInfo by produceState<MetadataEntity?>(initialValue = null, shown?.id) {
+        val row = shown ?: return@produceState
+        if (highlighted != null) delay(350)
         value = metadata.lookup(row.name, row.kind)
     }
 
@@ -156,7 +158,7 @@ fun VodScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    val backdrop = highlightInfo?.backdrop?.takeIf { highlighted != null }
+    val backdrop = highlightInfo?.backdrop?.takeIf { shown != null }
     if (backdrop != null) {
         Box(
             modifier = Modifier
@@ -177,7 +179,7 @@ fun VodScreen(
     ) {
         LazyColumn(
             modifier = Modifier
-                .width(200.dp)
+                .width(180.dp)
                 .fillMaxHeight(),
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -216,9 +218,10 @@ fun VodScreen(
 
         val rows = items.orEmpty()
         Column(modifier = Modifier.weight(1f)) {
-        HighlightHeader(row = highlighted, info = highlightInfo)
+        HighlightHeader(row = shown, info = highlightInfo)
         LazyVerticalGrid(
-            columns = GridCells.Fixed(6),
+            // Posters stay a readable size: about three across with the side panel open, five with it tucked away.
+            columns = GridCells.Adaptive(minSize = 118.dp),
             state = gridState,
             contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
