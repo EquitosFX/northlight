@@ -420,7 +420,7 @@ class ScreenshotTest {
         expectShown("Season 1", "An Xtream series lists its seasons")
         expectShown("Season 2", "An Xtream series lists its seasons")
         expectFocus("E1", "Opening a series lands on its first episode")
-        expectShown("The Night Shift", "Episode titles from the server")
+        expectShown("Cold Case", "Episode titles from the server")
         shot("17-series-episodes")
         press("back")
         expectFocus("Cobalt Street", "Back from a series returns to its poster")
