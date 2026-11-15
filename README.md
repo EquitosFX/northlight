@@ -14,7 +14,7 @@ What is in place:
 - Project and build files (Kotlin, Jetpack Compose, minSdk 26, Android TV launcher entry)
 - Three colour themes (Lagoon, Orchid, Midnight), chosen in Settings and saved on the device
 - `FocusSurface`, the one focusable building block for the remote
-- Top navigation bar with a live clock
+- Side panel with the clock, the live picture and the menu; Figtree typeface
 - Home screen: your own content only (welcome when there is no playlist yet)
 - Recents: recent channels and films to carry on with
 - Voice search: Speak button in Search, or the remote's search/voice key
@@ -28,7 +28,7 @@ What is in place:
 - Series: next episode starts after a 10-second countdown
 - TMDB film and series details using your own free key (Settings › Film info); films open a details page with Play, Resume and Start over
 - People (needs the TMDB key): search finds actors and directors; cast and directors on title pages are selectable and open a page of their titles in your playlists
-- Live TV player: Up/Down changes channel, OK opens the channel list (Left for groups), Left/Right shows the info banner, Back shrinks the picture to the corner (hold Back to bring it back)
+- Live TV player: Up/Down changes channel, OK opens the channel list (Left for groups), Left/Right shows the info banner, Back shrinks the picture into the side panel (hold Back to bring it back)
 
 Everything else is listed in `FEATURES.md`.
 
@@ -72,5 +72,5 @@ The newest build is always at:
 - **Room is the database. Hilt is not used:** the few shared objects are created by hand in `NorthlightApp.kt`, which is simpler at this size. Media3 arrives with the player.
 - **Signing:** builds are signed with the fixed key in `app/debug.keystore` so each new APK updates the installed one. The key is public in this repository, which is fine for personal sideloading but not for publishing to a store.
 - **Never commit playlist addresses, usernames, passwords or a TMDB key.** This repository is public. The TMDB key is entered on the device and stored there only.
-- **Fonts:** the design uses Inter and Space Grotesk. The font files are not bundled yet, so the system sans-serif is used.
+- **Font:** Figtree, bundled in `app/src/main/res/font/` under the SIL Open Font License (`third_party/figtree/OFL.txt`).
 - **Package name** is `app.tvplayer`, deliberately neutral so it does not depend on the final app name.

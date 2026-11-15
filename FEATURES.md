@@ -10,8 +10,8 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Three colour themes, selectable in Settings, saved on device | Built |
 | Colour tokens and type scale | Built |
 | Focus component (fill, ring, scale) | Built |
-| Top navigation bar with clock | Built |
-| Bundled fonts (Inter, Space Grotesk) | Not started |
+| Side panel: clock, live picture, menu that previews sections, tucks away while browsing | Built |
+| Bundled typeface (Figtree, SIL Open Font License) | Built |
 | Final app name, icon and home-screen banner | Not started (placeholders in place) |
 | Automatic APK build recipe | Built (publishes `northlight.apk` as the latest release) |
 
@@ -26,7 +26,8 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Settings › Playlists (add Xtream Codes or M3U, refresh, remove) | Built |
 | Settings: other sections | Designed (list only) |
 | TV Guide: info header, time ruler, programme grid, mini player over it | Built |
-| TV Guide: group filter chips, jump by day | Not started |
+| TV Guide: category list (Favourites, All channels, groups) | Built |
+| TV Guide: jump by day | Not started |
 | Programme actions panel | Designed |
 | Live TV: full-screen player, channel list with groups, info banner | Built |
 | Voice search overlay | Designed |
@@ -76,7 +77,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Recording: one-off, series, recurring, manual; USB/NAS; conflicts | Not started |
 | Reminders | Not started |
 | Multiview | Not started |
-| Bottom-right mini player while browsing (hold Back to return) | Built |
+| Live picture in the side panel while browsing (hold Back or select it to return) | Built |
 | Android picture-in-picture outside the app | Not started |
 
 ## Films and series
