@@ -73,7 +73,6 @@ class ScreenshotTest {
     fun fill() {
         Coil.setImageLoader(ImageLoader.Builder(app).allowHardware(false).crossfade(false).build())
         app.container.testResponder = DemoData.responder()
-        if (testName.methodName == "catchup") org.robolectric.shadows.ShadowLog.stream = System.out
         // The welcome test starts from a fresh install with no playlist.
         if (testName.methodName != "welcome") runBlocking(Dispatchers.IO) { DemoData.fill(app.container, ::image) }
     }

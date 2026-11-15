@@ -1,6 +1,7 @@
 package app.tvplayer.ui.guide
 
-import androidx.compose.runtime.DisposableEffect
+import kotlinx.coroutines.delay
+import app.tvplayer.ui.components.LocalHoldFocus
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import app.tvplayer.core.catchup.Catchup
@@ -131,8 +132,24 @@ fun GuideScreen(
         return
     }
 
+    // Sliding the grid rebuilds its cells, so focus is parked while it happens and put back on the
+    // programme that had it once the new hours have loaded.
+    val holdFocus = LocalHoldFocus.current
+    var refocus by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(refocus) {
+        // If the programme can't be found again, focus goes to the first channel rather than staying parked.
+        if (refocus == null) return@LaunchedEffect
+        delay(2_000)
+        refocus = null
+        runCatching { entryFocus.requestFocus() }
+    }
+
     fun shift(by: Long) {
-        windowStart = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
+        val target = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
+        if (target == windowStart) return
+        refocus = focused?.programme?.id
+        if (refocus != null) holdFocus()
+        windowStart = target
     }
 
     // Once a category is chosen the categories step aside and the listings fill the screen.
@@ -164,8 +181,7 @@ fun GuideScreen(
             // Once anything in the guide has focus, it never jumps to the first programme by itself.
             // Leaving the guide altogether (to the side menu) brings the categories back for next time.
             .onFocusChanged {
-                android.util.Log.d("GuideDebug", "guide focus $it", Throwable())
-                if (it.hasFocus) placedFocus = true else listings = false
+                if (it.hasFocus) placedFocus = true else if (refocus == null) listings = false
             }
             .focusGroup(),
     ) {
@@ -215,6 +231,8 @@ fun GuideScreen(
                     onFocusPlaced = { placedFocus = true },
                     onFocus = { programme -> focused = Focused(channel, programme) },
                     onShift = ::shift,
+                    refocus = refocus,
+                    onRefocused = { refocus = null },
                     onPlay = { onPlay(channel) },
                     onCatchup = { programme -> onCatchup(channel, programme) },
                 )
@@ -394,14 +412,19 @@ private fun GuideRow(
     onFocusPlaced: () -> Unit,
     onFocus: (ProgrammeEntity?) -> Unit,
     onShift: (Long) -> Unit,
+    refocus: Long?,
+    onRefocused: () -> Unit,
     onPlay: () -> Unit,
     onCatchup: (ProgrammeEntity) -> Unit,
 ) {
     val colors = AppTheme.colors
     val windowEnd = windowStart + WINDOW
     // Keeps showing the previous programmes while new ones load, so the grid doesn't flash.
-    val programmes by produceState<List<ProgrammeEntity>?>(initialValue = null, channel.key, windowStart) {
-        value = channels.programmes(channel, windowStart, windowEnd)
+    var programmes by remember { mutableStateOf<List<ProgrammeEntity>?>(null) }
+    var loadedFor by remember { mutableLongStateOf(-1L) }
+    LaunchedEffect(channel.key, windowStart) {
+        programmes = channels.programmes(channel, windowStart, windowEnd)
+        loadedFor = windowStart
     }
 
     Row(
@@ -447,7 +470,6 @@ private fun GuideRow(
                         true
                     }
                     event.key == Key.DirectionLeft && start <= windowStart && canGoBack -> {
-                        android.util.Log.d("GuideDebug", "shift back from ${channel.name}")
                         onShift(-HOUR)
                         true
                     }
@@ -489,6 +511,8 @@ private fun GuideRow(
                         live = live,
                         catchup = catchup,
                         onFocus = { onFocus(programme) },
+                        refocus = programme.id == refocus && loadedFor == windowStart,
+                        onRefocused = onRefocused,
                         onClick = {
                             when {
                                 live -> onPlay()
@@ -524,11 +548,22 @@ private fun GuideCell(
     onFocus: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    refocus: Boolean = false,
+    onRefocused: () -> Unit = {},
 ) {
     val colors = AppTheme.colors
+    val requester = remember { FocusRequester() }
+    if (refocus) {
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            runCatching { requester.requestFocus() }
+            onRefocused()
+        }
+    }
     FocusSurface(
         onClick = onClick,
         modifier = modifier
+            .focusRequester(requester)
             .offset(x = x)
             .width(width.coerceAtLeast(4.dp))
             .fillMaxHeight(),
@@ -539,7 +574,6 @@ private fun GuideCell(
         focusScale = 1f,
     ) { focused ->
         LaunchedEffect(focused) { if (focused) onFocus() }
-        DisposableEffect(Unit) { onDispose { android.util.Log.d("GuideDebug", "cell disposed $title focused=$focused") } }
         val tint = when {
             focused -> colors.onAccent
             past && !catchup -> colors.textFaint
