@@ -257,8 +257,8 @@ fun VodScreen(
                         holdFocus()
                         state.lastIndex = index
                         state.returnToGrid = true
-                        // Xtream Codes series are listed as whole series; M3U lists each episode on its own.
-                        if (row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null) {
+                        // A series opens its episode list (M3U episodes are gathered under their show).
+                        if (row.kind == ChannelEntity.KIND_SERIES) {
                             state.series = row
                         } else {
                             state.film = row

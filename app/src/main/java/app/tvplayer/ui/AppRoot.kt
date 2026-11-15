@@ -2,6 +2,7 @@
 
 package app.tvplayer.ui
 
+import app.tvplayer.data.ChannelsRepository
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -178,12 +179,9 @@ fun AppRoot(
         holdFocus()
         person = null
         when {
-            row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null -> {
-                seriesState.series = row
-                dest = Dest.SERIES
-            }
             row.kind == ChannelEntity.KIND_SERIES -> {
-                seriesState.film = row
+                // An M3U episode opens its show's episode list.
+                seriesState.series = ChannelsRepository.asShow(row)
                 dest = Dest.SERIES
             }
             else -> {
@@ -510,8 +508,8 @@ fun AppRoot(
                             holdFocus()
                             when {
                                 row.kind == ChannelEntity.KIND_LIVE -> play(row.id)
-                                row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null -> {
-                                    seriesState.series = row
+                                row.kind == ChannelEntity.KIND_SERIES -> {
+                                    seriesState.series = ChannelsRepository.asShow(row)
                                     dest = Dest.SERIES
                                 }
                                 row.kind == ChannelEntity.KIND_MOVIE -> {

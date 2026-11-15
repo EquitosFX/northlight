@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.vod.EpisodeNames
 import app.tvplayer.core.live.Lineup
 import app.tvplayer.core.live.LineupChannel
 import app.tvplayer.core.live.LineupRow
@@ -85,9 +86,41 @@ class ChannelsRepository(private val db: AppDatabase) {
         return programmes(channel, now, now + 12 * HOUR).take(2)
     }
 
-    suspend fun groups(kind: String): List<GroupCount> = db.channels().groups(kind)
+    suspend fun groups(kind: String): List<GroupCount> {
+        val groups = db.channels().groups(kind)
+        if (kind != ChannelEntity.KIND_SERIES) return groups
+        // Count shows, not the separate episodes an M3U playlist lists.
+        return groups.map { group -> group.copy(count = showsIn(db.channels().inGroup(kind, group.groupName)).size) }
+    }
 
-    suspend fun inGroup(kind: String, group: String?): List<VodRow> = db.channels().inGroup(kind, group)
+    suspend fun inGroup(kind: String, group: String?): List<VodRow> {
+        val rows = db.channels().inGroup(kind, group)
+        return if (kind == ChannelEntity.KIND_SERIES) showsIn(rows) else rows
+    }
+
+    companion object {
+        private const val HOUR = 3_600_000L
+
+        /**
+         * One entry per show. M3U playlists list each episode separately ("Hollow Fen S01 E03"); those are
+         * gathered under the show's name, and opening it lists the episodes. Xtream series are already whole.
+         */
+        fun showsIn(rows: List<VodRow>): List<VodRow> {
+            val seen = HashSet<String>()
+            return rows.mapNotNull { row ->
+                val show = asShow(row)
+                val key = "${row.playlistId}|${EpisodeNames.showKey(show.name)}"
+                if (row.kind == ChannelEntity.KIND_SERIES && row.remoteId == null && !seen.add(key)) null else show
+            }
+        }
+
+        /** An M3U episode entry renamed as its show; anything else unchanged. */
+        fun asShow(row: VodRow): VodRow {
+            if (row.kind != ChannelEntity.KIND_SERIES || row.remoteId != null) return row
+            val episode = EpisodeNames.parse(row.name) ?: return row
+            return row.copy(name = episode.show)
+        }
+    }
 
     /** Films and episodes started but not finished, most recent first. */
     val continueWatching: Flow<List<ProgressEntity>> = db.progress().observeRecent()
@@ -103,6 +136,8 @@ class ChannelsRepository(private val db: AppDatabase) {
         val escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         return db.channels().search("%$escaped%")
             .distinctBy { if (it.kind == ChannelEntity.KIND_LIVE) "${it.playlistId}|${it.variantKey}" else it.id.toString() }
+            // M3U episodes of one show appear once, as the show.
+            .let { showsIn(it) }
             .take(100)
     }
 
@@ -116,7 +151,4 @@ class ChannelsRepository(private val db: AppDatabase) {
         }
     }
 
-    private companion object {
-        const val HOUR = 3_600_000L
-    }
 }

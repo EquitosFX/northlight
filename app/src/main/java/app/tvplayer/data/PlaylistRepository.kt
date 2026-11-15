@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.vod.EpisodeNames
 import app.tvplayer.core.channels.ChannelVariants
 import app.tvplayer.core.guide.ChannelRef
 import app.tvplayer.core.guide.EpgMatcher
@@ -151,7 +152,17 @@ class PlaylistRepository(
     suspend fun seriesDetails(series: VodRow): SeriesDetails = withContext(Dispatchers.IO) {
         val playlist = db.playlists().getBlocking(series.playlistId) ?: throw IOException("That playlist no longer exists.")
         val seriesId = series.remoteId
-        if (playlist.type != PlaylistEntity.TYPE_XTREAM || seriesId == null) return@withContext SeriesDetails(null, emptyList())
+        if (playlist.type != PlaylistEntity.TYPE_XTREAM || seriesId == null) {
+            // M3U playlists list each episode as its own entry: gather the ones belonging to this show.
+            val key = EpisodeNames.showKey(series.name)
+            val episodes = db.channels().seriesEntries(series.playlistId).mapNotNull { row ->
+                val name = EpisodeNames.parse(row.name) ?: return@mapNotNull null
+                if (EpisodeNames.showKey(name.show) != key) return@mapNotNull null
+                Episode(name.season, name.episode, name.title ?: "Episode ${name.episode}", row.url, null, null)
+            }.distinctBy { it.season to it.number }.sortedWith(compareBy({ it.season }, { it.number }))
+            // A series entry that isn't an episode is played as it is.
+            return@withContext SeriesDetails(null, episodes.ifEmpty { listOf(Episode(1, 1, series.name, series.url, null, null)) })
+        }
         val account = XtreamAccount(playlist.address, playlist.username.orEmpty(), playlist.password.orEmpty())
         val info = XtreamParser.parseSeriesInfo(fetchText(XtreamUrls.api(account, "get_series_info") + "&series_id=$seriesId"))
         SeriesDetails(

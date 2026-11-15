@@ -409,12 +409,35 @@ class ScreenshotTest {
 
     @Test fun series() {
         open(Dest.SERIES)
+        // M3U episodes are gathered into one poster per show.
+        expectHidden("S01 E01", "Episodes aren't listed as separate posters")
         shot("16-series-menu")
         press("right", "right")
         expectFocus("Cobalt Street", "Into the series posters")
+
+        // An Xtream series: episodes fetched from the server.
         press("ok")
-        expectFocus("Play", "Opening a series")
-        shot("17-series-page")
+        expectShown("Season 1", "An Xtream series lists its seasons")
+        expectShown("Season 2", "An Xtream series lists its seasons")
+        expectFocus("E1", "Opening a series lands on its first episode")
+        expectShown("The Night Shift", "Episode titles from the server")
+        shot("17-series-episodes")
+        press("back")
+        expectFocus("Cobalt Street", "Back from a series returns to its poster")
+
+        // A series whose server sends seasons as numbered objects.
+        press("right", "ok")
+        expectShown("Season 2", "Seasons sent as numbered objects still list")
+        expectFocus("E1", "Its first episode")
+        press("back")
+
+        // An M3U series: its separate episode entries gathered by season.
+        press("right", "ok")
+        expectShown("Season 1", "An M3U series lists its seasons")
+        expectShown("Season 2", "An M3U series lists its seasons")
+        expectShown("Episode 4", "An M3U series lists its episodes")
+        expectFocus("E1", "Its first episode")
+        shot("17b-m3u-series-episodes")
     }
 
     @Test fun search() {

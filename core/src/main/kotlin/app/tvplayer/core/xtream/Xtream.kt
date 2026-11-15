@@ -201,7 +201,12 @@ object XtreamParser {
         }
         val found = ArrayList<XtreamEpisode>()
         for ((seasonKey, list) in groups) {
-            val items = list as? JsonArray ?: continue
+            // Usually a list per season; some panels send a numbered object instead ({"0": {...}, "1": {...}}).
+            val items: List<JsonElement> = when (list) {
+                is JsonArray -> list
+                is JsonObject -> list.values.toList()
+                else -> continue
+            }
             for (element in items) {
                 val item = element as? JsonObject ?: continue
                 val id = item.long("id") ?: continue

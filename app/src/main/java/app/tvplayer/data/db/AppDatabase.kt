@@ -122,6 +122,13 @@ interface ChannelDao {
     )
     suspend fun allVod(): List<VodRow>
 
+    /** Every series entry in a playlist; M3U playlists list one per episode. */
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
+            "WHERE kind = 'series' AND playlistId = :playlistId ORDER BY position",
+    )
+    suspend fun seriesEntries(playlistId: Long): List<VodRow>
+
     @Query("SELECT COUNT(*) FROM channels WHERE kind IN ('movie', 'series')")
     suspend fun vodCount(): Int
 

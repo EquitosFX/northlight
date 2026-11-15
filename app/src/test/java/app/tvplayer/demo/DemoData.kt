@@ -96,6 +96,22 @@ object DemoData {
             .build()
         val path = url.encodedPath
         when {
+            // Episodes of the two Xtream-style series: one sent as lists per season, one as numbered objects.
+            url.host == "demo.invalid" && path.endsWith("/player_api.php") && url.queryParameter("action") == "get_series_info" -> {
+                val id = url.queryParameter("series_id")?.toLongOrNull() ?: 0
+                val titles = listOf("The Night Shift", "Cold Case", "The Informant", "Gridlock", "Blue Light", "Overtime")
+                fun episode(season: Int, n: Int) =
+                    """{"id":"${id * 100 + season * 10 + n}","episode_num":"$n","title":"${titles[(n - 1 + season) % titles.size]}","container_extension":"mkv",""" +
+                        """"season":$season,"info":{"plot":"A demo episode.","duration_secs":"${2700 + n * 60}"}}"""
+                val seasons = (1..2).joinToString(",") { season ->
+                    if (id == 5000L) {
+                        "\"$season\":[" + (1..3).joinToString(",") { episode(season, it) } + "]"
+                    } else {
+                        "\"$season\":{" + (1..3).joinToString(",") { "\"${it - 1}\":" + episode(season, it) } + "}"
+                    }
+                }
+                reply(200, """{"info":{"name":"Series $id","plot":"A demo series."},"episodes":{$seasons}}""")
+            }
             // The demo channels and films never finish loading, so the player stays on "Tuning…"
             // and its controls can be opened the same way every time.
             url.host == "demo.invalid" -> Response.Builder()
@@ -194,12 +210,26 @@ object DemoData {
                 logo = image("film$i.jpg"), groupName = f.group, position = 100 + i,
             )
         }
+        // Two series as an Xtream server lists them (whole series, episodes fetched when opened),
+        // and the rest as an M3U playlist lists them (one entry per episode).
+        var position = 200
         series.forEachIndexed { i, f ->
-            rows += ChannelEntity(
-                playlistId = pid, kind = ChannelEntity.KIND_SERIES, name = f.title, baseName = f.title,
-                variantKey = f.title.lowercase(), url = "http://demo.invalid/series/$i", remoteId = null,
-                logo = image("series$i.jpg"), groupName = f.group, position = 200 + i,
-            )
+            if (i < 2) {
+                rows += ChannelEntity(
+                    playlistId = pid, kind = ChannelEntity.KIND_SERIES, name = f.title, baseName = f.title,
+                    variantKey = f.title.lowercase(), url = "", remoteId = 5000L + i,
+                    logo = image("series$i.jpg"), groupName = f.group, position = position++,
+                )
+            } else {
+                for (season in 1..2) for (episode in 1..4) {
+                    val name = "${f.title} S%02d E%02d".format(season, episode)
+                    rows += ChannelEntity(
+                        playlistId = pid, kind = ChannelEntity.KIND_SERIES, name = name, baseName = name,
+                        variantKey = name.lowercase(), url = "http://demo.invalid/series/$i/$season/$episode.mkv", remoteId = null,
+                        logo = image("series$i.jpg"), groupName = f.group, position = position++,
+                    )
+                }
+            }
         }
         db.channels().insertAllBlocking(rows)
 

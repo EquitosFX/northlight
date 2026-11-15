@@ -189,6 +189,15 @@ class XtreamTest {
     }
 
     @Test
+    fun readsSeasonsSentAsNumberedObjects() {
+        val info = XtreamParser.parseSeriesInfo(
+            """{"episodes":{"1":{"0":{"id":"11","episode_num":"2","title":"Two"},"1":{"id":"10","episode_num":"1","title":"One"}}}}""",
+        )
+        assertEquals(listOf("One", "Two"), info.episodes.map { it.title })
+        assertEquals(listOf(1, 1), info.episodes.map { it.season })
+    }
+
+    @Test
     fun aSeriesWithNoEpisodesIsEmptyAndGarbageIsRefused() {
         assertTrue(XtreamParser.parseSeriesInfo("""{"episodes":[]}""").episodes.isEmpty())
         val failed = try {
