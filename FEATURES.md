@@ -19,11 +19,11 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 
 | Feature | Status |
 | --- | --- |
-| Home: hero, rails, shortcuts (sample content) | Built |
+| Home: welcome when empty; hero for last channel; shortcuts; Continue watching, Recent channels, Favourites rails | Built |
 | Home: hero trailer on Up, reorder/hide rails per profile | Not started |
+| Recents: recent channels and films to carry on with | Built |
 | Settings › Appearance (theme picker) | Built |
 | Settings › Playlists (add Xtream Codes or M3U, refresh, remove) | Built |
-| Home: rail of the user's imported channels | Built |
 | Settings: other sections | Designed (list only) |
 | TV Guide: info header, time ruler, programme grid, mini player over it | Built |
 | TV Guide: group filter chips, jump by day | Not started |
@@ -31,8 +31,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Live TV: full-screen player, channel list with groups, info banner | Built |
 | Voice search overlay | Designed |
 | Search: channels, films and series by name | Built |
-| Voice search | Not started |
-| Recents | Not started |
+| Voice search: Speak button and the remote's search/voice key, via Android TV's speech screen | Built (what the Shield mic button sends needs checking on the device) |
 | Library and Recordings | Not started |
 | Sport hub and team pages | Not started |
 
