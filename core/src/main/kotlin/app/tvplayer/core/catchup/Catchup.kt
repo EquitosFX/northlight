@@ -63,7 +63,8 @@ object Catchup {
         return if (file.endsWith(".m3u8")) "$dir/timeshift_abs-$start.m3u8$query" else "$dir/timeshift_abs_mpegts-$start.ts$query"
     }
 
-    private val placeholder = Regex("""\$?\{([a-zA-Z_]+)(?::([^}]*))?}""")
+    // Braces are escaped everywhere: Android's regex engine rejects a bare "}", though desktop Java allows it.
+    private val placeholder = Regex("""\$?\{([a-zA-Z_]+)(?::([^\}]*))?\}""")
 
     /** Fills a catchup-source template: {utc}/{start}, {utcend}/{end}, {lutc}/{now}, {duration}, {offset}, {Y}{m}{d}{H}{M}{S}. */
     fun fill(template: String, window: CatchupWindow): String {
