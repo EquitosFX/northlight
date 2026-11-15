@@ -6,7 +6,7 @@ An IPTV player for Android TV, tuned for the NVIDIA Shield TV and its remote. Th
 
 Two parts, at different levels of confidence:
 
-- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, channel line-up and reconnect timing, with 55 passing tests.
+- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, channel line-up and reconnect timing, TMDB title cleaning and parsing, with 61 passing tests.
 - **`app/` (the Android TV app): compiles in the automatic build, not yet tried on a Shield.** Expect adjustments once it has been used on a real device.
 
 What is in place:
@@ -24,6 +24,7 @@ What is in place:
 - Search tab: channels, films and series by name
 - Favourite channels: Right in the channel list adds or removes one; Favourites group in the group list
 - Series: next episode starts after a 10-second countdown
+- TMDB film and series details using your own free key (Settings › Film info); films open a details page with Play, Resume and Start over
 - Live TV player: Up/Down changes channel, OK opens the channel list (Left for groups), Left/Right shows the info banner, Back shrinks the picture to the corner (hold Back to bring it back)
 
 Everything else is listed in `FEATURES.md`.
@@ -52,6 +53,8 @@ The newest build is always at:
 | `app/src/main/java/app/tvplayer/ui/guide/` | The TV Guide screen |
 | `app/src/main/java/app/tvplayer/ui/vod/` | Films and Series screens |
 | `app/src/main/java/app/tvplayer/ui/search/` | Search screen |
+| `core/src/main/kotlin/app/tvplayer/core/tmdb/` | Title cleaning and TMDB parsing |
+| `app/src/main/java/app/tvplayer/data/MetadataRepository.kt` | TMDB look-ups and cache |
 | `app/src/main/java/app/tvplayer/data/ChannelsRepository.kt` | Channel line-up and programme look-ups |
 | `core/src/main/kotlin/app/tvplayer/core/live/` | Channel line-up and reconnect timing |
 | `app/src/main/java/app/tvplayer/ui/components/` | Shared pieces: focus surface, text, top navigation |
@@ -64,6 +67,6 @@ The newest build is always at:
 - **Text and focus are built on Compose Foundation**, not the TV Material components, so the focus look matches the design exactly. The TV Material library is included for later screens.
 - **Room is the database. Hilt is not used:** the few shared objects are created by hand in `NorthlightApp.kt`, which is simpler at this size. Media3 arrives with the player.
 - **Signing:** builds are signed with the fixed key in `app/debug.keystore` so each new APK updates the installed one. The key is public in this repository, which is fine for personal sideloading but not for publishing to a store.
-- **Never commit playlist addresses, usernames or passwords.** This repository is public.
+- **Never commit playlist addresses, usernames, passwords or a TMDB key.** This repository is public. The TMDB key is entered on the device and stored there only.
 - **Fonts:** the design uses Inter and Space Grotesk. The font files are not bundled yet, so the system sans-serif is used.
 - **Package name** is `app.tvplayer`, deliberately neutral so it does not depend on the final app name.

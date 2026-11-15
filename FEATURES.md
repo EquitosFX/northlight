@@ -1,6 +1,6 @@
 # Feature checklist
 
-Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
+Status key: **Tested** = compiled and unit-tested (61 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
 
 ## Foundation and design system
 
@@ -53,7 +53,8 @@ Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built
 | Manual matching, time offset, extra guide addresses, catch-up backfill | Not started |
 | Channel variant grouping (SD/HD/FHD/4K/backup) | Tested |
 | Check playlist tool | Not started |
-| TMDB metadata | Not started |
+| TMDB metadata (viewer's own key): film pages, series details, cached look-ups | Built |
+| TMDB trailers, cast photos, "more like this" | Not started |
 | Plex / Jellyfin / Emby libraries | Not started |
 | Backup and restore | Not started |
 | Encrypted credentials | Not started. Xtream stream addresses contain the username and password, so encrypting the password field alone would not help; it needs stream addresses built at play time instead |
@@ -84,7 +85,8 @@ Status key: **Tested** = compiled and unit-tested (55 tests in `core/`). **Built
 | --- | --- |
 | Films and Series screens: groups, poster grid, series seasons and episodes | Built |
 | Playback with pause and 10-second skip, resume where left off | Built |
-| TMDB metadata, watched marks, sorting | Not started |
+| Film page with Play, Resume and Start over | Built |
+| Watched marks, sorting | Not started |
 | Continue Watching rail on Home | Built |
 | Autoplay next episode with countdown, next/previous episode media keys | Built |
 | Watchlist | Not started |
