@@ -196,6 +196,7 @@ fun AppRoot(
                         state = filmsState,
                         channels = container.channels,
                         playlists = container.playlists,
+                        metadata = container.metadata,
                         onPlay = { item, episodes -> playVod(item, episodes) },
                     )
                     Dest.SERIES -> VodScreen(
@@ -203,6 +204,7 @@ fun AppRoot(
                         state = seriesState,
                         channels = container.channels,
                         playlists = container.playlists,
+                        metadata = container.metadata,
                         onPlay = { item, episodes -> playVod(item, episodes) },
                     )
                     Dest.SEARCH -> SearchScreen(
@@ -213,6 +215,10 @@ fun AppRoot(
                                 row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null -> {
                                     seriesState.series = row
                                     dest = Dest.SERIES
+                                }
+                                row.kind == ChannelEntity.KIND_MOVIE -> {
+                                    filmsState.film = row
+                                    dest = Dest.FILMS
                                 }
                                 else -> playVod(VodItem(row.url, row.name, row.logo, row.userAgent, row.referrer))
                             }
@@ -226,6 +232,8 @@ fun AppRoot(
                         themeId = themeId,
                         onThemeChange = onThemeChange,
                         playlists = container.playlists,
+                        settings = container.settings,
+                        metadata = container.metadata,
                     )
                     else -> ComingLater(dest)
                 }

@@ -40,6 +40,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import app.tvplayer.data.ChannelsRepository
+import app.tvplayer.data.MetadataRepository
+import app.tvplayer.data.db.MetadataEntity
 import app.tvplayer.data.PlaylistRepository
 import app.tvplayer.data.SeriesDetails
 import app.tvplayer.data.db.ChannelEntity
@@ -57,6 +59,7 @@ class VodBrowseState {
     var group by mutableStateOf<String?>(null)
     var groupChosen by mutableStateOf(false)
     var series by mutableStateOf<VodRow?>(null)
+    var film by mutableStateOf<VodRow?>(null)
     var lastIndex by mutableIntStateOf(0)
     var returnToGrid by mutableStateOf(false)
 }
@@ -73,12 +76,24 @@ fun VodScreen(
     state: VodBrowseState,
     channels: ChannelsRepository,
     playlists: PlaylistRepository,
+    metadata: MetadataRepository,
     onPlay: (VodItem, List<VodItem>) -> Unit,
 ) {
     val colors = AppTheme.colors
     val series = state.series
     if (series != null) {
-        EpisodesPane(series = series, playlists = playlists, onPlay = onPlay, onBack = { state.series = null })
+        EpisodesPane(
+            series = series,
+            playlists = playlists,
+            metadata = metadata,
+            onPlay = onPlay,
+            onBack = { state.series = null },
+        )
+        return
+    }
+    val film = state.film
+    if (film != null) {
+        FilmPane(film = film, channels = channels, metadata = metadata, onPlay = onPlay, onBack = { state.film = null })
         return
     }
 
@@ -181,8 +196,7 @@ fun VodScreen(
                         if (row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null) {
                             state.series = row
                         } else {
-                            val item = VodItem(row.url, row.name, row.logo, row.userAgent, row.referrer)
-                            onPlay(item, listOf(item))
+                            state.film = row
                         }
                     },
                 )
@@ -228,6 +242,7 @@ private fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = Mo
 private fun EpisodesPane(
     series: VodRow,
     playlists: PlaylistRepository,
+    metadata: MetadataRepository,
     onPlay: (VodItem, List<VodItem>) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -236,6 +251,9 @@ private fun EpisodesPane(
     var problem by remember(series.id) { mutableStateOf<String?>(null) }
     var season by remember(series.id) { mutableIntStateOf(-1) }
     val firstEpisode = remember { FocusRequester() }
+    val info by produceState<MetadataEntity?>(initialValue = null, series.id) {
+        value = metadata.lookup(series.name, ChannelEntity.KIND_SERIES)
+    }
 
     BackHandler { onBack() }
     LaunchedEffect(series.id) {
@@ -253,9 +271,10 @@ private fun EpisodesPane(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Column(modifier = Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!series.logo.isNullOrBlank()) {
+            val poster = series.logo?.takeIf { it.isNotBlank() } ?: info?.poster
+            if (poster != null) {
                 AsyncImage(
-                    model = series.logo,
+                    model = poster,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -264,8 +283,15 @@ private fun EpisodesPane(
                         .clip(RoundedCornerShape(8.dp)),
                 )
             }
-            Label(text = series.name, style = AppType.headline, maxLines = 2)
-            details?.plot?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 7) }
+            Label(text = info?.title ?: series.name, style = AppType.headline, maxLines = 2)
+            val meta = listOfNotNull(
+                info?.year?.toString(),
+                info?.rating?.let { "★ %.1f".format(it) },
+                info?.seasons?.let { if (it == 1) "1 season" else "$it seasons" },
+            ).joinToString(" · ")
+            if (meta.isNotEmpty()) Label(text = meta, style = AppType.label, color = colors.accent)
+            info?.genres?.takeIf { it.isNotEmpty() }?.let { Label(text = it, style = AppType.caption, color = colors.textDim) }
+            (details?.plot ?: info?.overview)?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 6) }
         }
 
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {

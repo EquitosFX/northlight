@@ -137,3 +137,22 @@ data class FavouriteEntity(
     @PrimaryKey val key: String,
     val addedAt: Long,
 )
+
+/** TMDB details for a film or series, cached so each title is looked up once. A miss is cached too. */
+@Entity(tableName = "metadata")
+data class MetadataEntity(
+    @PrimaryKey val cacheKey: String,
+    val found: Boolean,
+    val fetchedAt: Long,
+    val tmdbId: Long? = null,
+    val title: String? = null,
+    val year: Int? = null,
+    val overview: String? = null,
+    val poster: String? = null,
+    val backdrop: String? = null,
+    val rating: Double? = null,
+    val runtimeMinutes: Int? = null,
+    val genres: String = "",
+    val cast: String = "",
+    val seasons: Int? = null,
+)

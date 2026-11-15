@@ -23,7 +23,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import app.tvplayer.data.MetadataRepository
 import app.tvplayer.data.PlaylistRepository
+import app.tvplayer.data.SettingsRepository
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.theme.AppTheme
@@ -32,6 +34,7 @@ import app.tvplayer.ui.theme.ThemeId
 
 enum class SettingsSection(val label: String) {
     PLAYLISTS("Playlists"),
+    FILM_INFO("Film info (TMDB)"),
     APPEARANCE("Appearance"),
 }
 
@@ -41,6 +44,8 @@ fun SettingsScreen(
     themeId: ThemeId,
     onThemeChange: (ThemeId) -> Unit,
     playlists: PlaylistRepository,
+    settings: SettingsRepository,
+    metadata: MetadataRepository,
 ) {
     val colors = AppTheme.colors
     var section by rememberSaveable { mutableStateOf(SettingsSection.PLAYLISTS) }
@@ -89,6 +94,7 @@ fun SettingsScreen(
         ) {
             when (section) {
                 SettingsSection.PLAYLISTS -> PlaylistsPane(repo = playlists)
+                SettingsSection.FILM_INFO -> TmdbPane(settings = settings, metadata = metadata)
                 SettingsSection.APPEARANCE -> AppearancePane(themeId = themeId, onThemeChange = onThemeChange)
             }
         }

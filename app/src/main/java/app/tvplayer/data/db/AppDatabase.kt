@@ -163,6 +163,15 @@ interface FavouriteDao {
     suspend fun remove(key: String)
 }
 
+@Dao
+interface MetadataDao {
+    @Query("SELECT * FROM metadata WHERE cacheKey = :key")
+    suspend fun get(key: String): MetadataEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun save(entry: MetadataEntity)
+}
+
 @Database(
     entities = [
         PlaylistEntity::class,
@@ -170,8 +179,9 @@ interface FavouriteDao {
         ProgrammeEntity::class,
         ProgressEntity::class,
         FavouriteEntity::class,
+        MetadataEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -180,4 +190,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun programmes(): ProgrammeDao
     abstract fun progress(): ProgressDao
     abstract fun favourites(): FavouriteDao
+    abstract fun metadata(): MetadataDao
 }

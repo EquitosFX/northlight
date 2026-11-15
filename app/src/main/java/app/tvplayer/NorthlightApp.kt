@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.room.Room
 import app.tvplayer.data.ChannelsRepository
+import app.tvplayer.data.MetadataRepository
 import app.tvplayer.data.PlaylistRepository
 import app.tvplayer.data.SettingsRepository
 import app.tvplayer.data.db.AppDatabase
@@ -51,4 +52,6 @@ class AppContainer(context: Context) {
     val playlists: PlaylistRepository by lazy { PlaylistRepository(database, http, scope) }
 
     val channels: ChannelsRepository by lazy { ChannelsRepository(database) }
+
+    val metadata: MetadataRepository by lazy { MetadataRepository(database, http, settings) }
 }

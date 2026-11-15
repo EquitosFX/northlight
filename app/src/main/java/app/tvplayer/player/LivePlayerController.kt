@@ -59,6 +59,8 @@ data class VodItem(
     val poster: String? = null,
     val userAgent: String? = null,
     val referrer: String? = null,
+    /** Start at the beginning even if the viewer got part-way before. */
+    val fromStart: Boolean = false,
 )
 
 /**
@@ -218,7 +220,7 @@ class LivePlayerController(
         controlsToken++
         tuneJob = scope.launch {
             val saved = channels.progressFor(item.url)
-            resumeAt = saved?.positionMs?.takeIf { position ->
+            resumeAt = if (item.fromStart) 0L else saved?.positionMs?.takeIf { position ->
                 position > MIN_RESUME_MILLIS && (saved.durationMs <= 0 || position < saved.durationMs - END_MARGIN_MILLIS)
             } ?: 0L
             startVod(item, resumeAt)

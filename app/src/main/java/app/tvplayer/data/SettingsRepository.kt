@@ -17,6 +17,7 @@ class SettingsRepository(private val context: Context) {
 
     private val themeKey = stringPreferencesKey("theme")
     private val lastChannelKey = stringPreferencesKey("last_channel")
+    private val tmdbKeyKey = stringPreferencesKey("tmdb_key")
 
     val theme: Flow<ThemeId> = context.settingsStore.data.map { prefs -> ThemeId.fromKey(prefs[themeKey]) }
 
@@ -26,6 +27,13 @@ class SettingsRepository(private val context: Context) {
 
     /** The channel watched last, so Live TV opens where the viewer left off. */
     val lastChannel: Flow<String?> = context.settingsStore.data.map { prefs -> prefs[lastChannelKey] }
+
+    /** The viewer's own TMDB key; empty when they haven't added one. */
+    val tmdbKey: Flow<String> = context.settingsStore.data.map { prefs -> prefs[tmdbKeyKey].orEmpty() }
+
+    suspend fun setTmdbKey(key: String) {
+        context.settingsStore.edit { prefs -> prefs[tmdbKeyKey] = key.trim() }
+    }
 
     suspend fun setLastChannel(key: String) {
         context.settingsStore.edit { prefs -> prefs[lastChannelKey] = key }
