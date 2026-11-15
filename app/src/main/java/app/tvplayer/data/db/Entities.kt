@@ -157,3 +157,15 @@ data class MetadataEntity(
     val people: String = "",
     val seasons: Int? = null,
 )
+
+/** A live channel the viewer has watched, for Recents and Home. Keyed like the line-up so it survives refreshes. */
+@Entity(tableName = "history")
+data class HistoryEntity(
+    @PrimaryKey val key: String,
+    val name: String,
+    val logo: String?,
+    val number: Int,
+    val playlistId: Long,
+    val guideId: String?,
+    val watchedAt: Long,
+)

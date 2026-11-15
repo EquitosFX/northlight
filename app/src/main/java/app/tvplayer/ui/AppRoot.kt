@@ -14,7 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,7 +52,11 @@ import app.tvplayer.ui.components.Dest
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.TopNavBar
 import app.tvplayer.ui.guide.GuideScreen
+import app.tvplayer.core.live.LineupChannel
+import app.tvplayer.ui.home.HomeHero
+import app.tvplayer.ui.home.HomeRail
 import app.tvplayer.ui.home.HomeScreen
+import app.tvplayer.ui.home.RecentsScreen
 import app.tvplayer.ui.home.Tile
 import app.tvplayer.ui.settings.SettingsScreen
 import app.tvplayer.ui.theme.AppTheme
@@ -59,6 +65,10 @@ import app.tvplayer.ui.theme.ThemeId
 
 // Stand-in tile colours behind channel logos.
 private val tileColors = listOf(0xFF2F7D50, 0xFF3E5C8A, 0xFF8A4B2E, 0xFF5A3B78, 0xFF2E6F78, 0xFF4B5D67)
+
+private fun tileColor(seed: String): Long = tileColors[(seed.hashCode() and 0x7fffffff) % tileColors.size]
+
+private val shortcuts = listOf("Live TV", "TV Guide", "Films", "Series", "Search")
 
 /** The app shell: themed background, top navigation, the open section, and the video when something is playing. */
 @Composable
@@ -95,8 +105,15 @@ fun AppRoot(
     var mode by remember { mutableStateOf(PlayerMode.NONE) }
     var backHeld by remember { mutableStateOf(false) }
 
+    var voiceToken by remember { mutableIntStateOf(0) }
+
     fun play(channelId: Long?) {
         controller.open(channelId)
+        mode = PlayerMode.FULL
+    }
+
+    fun playKey(key: String) {
+        controller.open(null, key)
         mode = PlayerMode.FULL
     }
 
@@ -137,7 +154,7 @@ fun AppRoot(
             Tile(
                 title = saved.title,
                 caption = if (saved.durationMs > 0) "$minutesLeft min left" else "Carry on watching",
-                color = tileColors[(saved.url.hashCode() and 0x7fffffff) % tileColors.size],
+                color = tileColor(saved.url),
                 progress = if (saved.durationMs > 0) (saved.positionMs.toFloat() / saved.durationMs).coerceIn(0f, 1f) else null,
                 logo = saved.poster,
                 vod = VodItem(saved.url, saved.title, saved.poster, saved.userAgent, saved.referrer),
@@ -155,27 +172,112 @@ fun AppRoot(
 
     BackHandler(enabled = person != null && mode != PlayerMode.FULL) { person = null }
 
-    val liveChannels by container.playlists.firstLiveChannels.collectAsStateWithLifecycle(initialValue = emptyList())
-    val yourChannels = remember(liveChannels) {
-        liveChannels
-            .distinctBy { it.playlistId to it.variantKey } // one tile per channel, however many quality copies it has
-            .take(20)
-            .map { channel ->
-                Tile(
-                    title = channel.baseName,
-                    caption = channel.groupName ?: "Live",
-                    color = tileColors[(channel.variantKey.hashCode() and 0x7fffffff) % tileColors.size],
-                    channelId = channel.id,
-                    logo = channel.logo,
-                )
-            }
+    // Home and Recents are built from the viewer's own playlists, history and favourites.
+    val playlistList by container.playlists.playlists.collectAsStateWithLifecycle(initialValue = null)
+    val history by container.channels.recentChannels.collectAsStateWithLifecycle(initialValue = emptyList())
+    val favouriteKeys by container.channels.favouriteKeys.collectAsStateWithLifecycle(initialValue = emptySet())
+
+    val recentTiles by produceState(initialValue = emptyList<Tile>(), history) {
+        value = history.map { entry ->
+            val now = container.channels.nowOn(entry.playlistId, entry.guideId)
+            Tile(
+                title = entry.name,
+                caption = now?.title ?: "Channel ${entry.number}",
+                color = tileColor(entry.key),
+                channelKey = entry.key,
+                logo = entry.logo,
+            )
+        }
     }
+
+    // Favourites, or the first channels when there are none yet, with what's on each.
+    val channelTiles by produceState(initialValue = (false to emptyList<Tile>()), favouriteKeys, playlistList) {
+        val lineup = container.channels.lineup()
+        val favourites = favouriteKeys.mapNotNull { lineup.findByKey(it) }
+        val shown = favourites.ifEmpty { lineup.channels.take(30) }
+        val now = System.currentTimeMillis()
+        suspend fun tileFor(channel: LineupChannel): Tile {
+            val programme = container.channels.nowAndNext(channel).firstOrNull { it.start <= now }
+            return Tile(
+                title = channel.name,
+                caption = programme?.title ?: channel.group ?: "Live",
+                color = tileColor(channel.key),
+                channelKey = channel.key,
+                logo = channel.logo,
+            )
+        }
+        value = favourites.isNotEmpty() to shown.map { tileFor(it) }
+    }
+
+    fun openTile(tile: Tile) {
+        val vod = tile.vod
+        val key = tile.channelKey
+        val id = tile.channelId
+        when {
+            vod != null -> playVod(vod)
+            key != null -> playKey(key)
+            id != null -> play(id)
+        }
+    }
+
+    val lists = playlistList
+    val lastWatched = history.firstOrNull()
+    val hero = when {
+        lists == null -> HomeHero("NORTHLIGHT", "Loading…", null, null, null, "Settings", { dest = Dest.SETTINGS })
+        lists.isEmpty() -> HomeHero(
+            overline = "WELCOME",
+            title = "Welcome to Northlight",
+            tagline = "Add your Xtream Codes account or M3U playlist to bring in your channels, films and series.",
+            meta = null,
+            logo = null,
+            primaryLabel = "Add a playlist",
+            onPrimary = { dest = Dest.SETTINGS },
+        )
+        lastWatched != null -> HomeHero(
+            overline = "CARRY ON WATCHING",
+            title = lastWatched.name,
+            tagline = recentTiles.firstOrNull()?.caption?.takeIf { !it.startsWith("Channel ") },
+            meta = "Channel ${lastWatched.number}",
+            logo = lastWatched.logo,
+            primaryLabel = "Watch",
+            onPrimary = { playKey(lastWatched.key) },
+            secondaryLabel = "TV Guide",
+            onSecondary = { dest = Dest.GUIDE },
+        )
+        else -> HomeHero(
+            overline = "LIVE TV",
+            title = "Your channels are ready",
+            tagline = "${lists.sumOf { it.liveCount }} live channels, ${lists.sumOf { it.movieCount }} films and " +
+                "${lists.sumOf { it.seriesCount }} series.",
+            meta = null,
+            logo = null,
+            primaryLabel = "Watch live TV",
+            onPrimary = { play(null) },
+            secondaryLabel = "TV Guide",
+            onSecondary = { dest = Dest.GUIDE },
+        )
+    }
+    val (hasFavourites, shownChannels) = channelTiles
+    val homeRails = listOf(
+        HomeRail("Continue watching", continueWatching),
+        HomeRail("Recent channels", recentTiles),
+        HomeRail(if (hasFavourites) "Favourites" else "Channels", shownChannels),
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.colors.ground)
             .onPreviewKeyEvent { event ->
+                // The remote's search or voice key opens Search and starts listening.
+                if ((event.key == Key.Search || event.key == Key.VoiceAssist) && mode != PlayerMode.FULL) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        person = null
+                        dest = Dest.SEARCH
+                        voiceToken++
+                    }
+                    return@onPreviewKeyEvent true
+                }
                 // Holding Back while the small picture shows returns it to full screen.
                 if (event.key != Key.Back) return@onPreviewKeyEvent false
                 when {
@@ -211,17 +313,23 @@ fun AppRoot(
                     PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) })
                 } else when (dest) {
                     Dest.HOME -> HomeScreen(
-                        yourChannels = yourChannels,
-                        continueWatching = continueWatching,
-                        onPlayChannel = { id -> play(id) },
-                        onPlayVod = { item -> playVod(item) },
-                        onLiveTv = { play(null) },
+                        hero = hero,
+                        rails = homeRails,
+                        shortcuts = shortcuts,
+                        onTile = { tile -> openTile(tile) },
                         onShortcut = { label ->
                             when (label) {
+                                "Live TV" -> play(null)
+                                "TV Guide" -> dest = Dest.GUIDE
                                 "Films" -> dest = Dest.FILMS
                                 "Series" -> dest = Dest.SERIES
+                                "Search" -> dest = Dest.SEARCH
                             }
                         },
+                    )
+                    Dest.RECENTS -> RecentsScreen(
+                        rails = listOf(HomeRail("Recent channels", recentTiles), HomeRail("Continue watching", continueWatching)),
+                        onTile = { tile -> openTile(tile) },
                     )
                     Dest.FILMS -> VodScreen(
                         kind = ChannelEntity.KIND_MOVIE,
@@ -244,6 +352,7 @@ fun AppRoot(
                     Dest.SEARCH -> SearchScreen(
                         channels = container.channels,
                         metadata = container.metadata,
+                        voiceToken = voiceToken,
                         onPerson = { chosen -> person = chosen },
                         onOpen = { row ->
                             when {

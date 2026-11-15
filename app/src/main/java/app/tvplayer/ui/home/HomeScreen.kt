@@ -35,21 +35,16 @@ import app.tvplayer.ui.theme.AppType
 
 private val SideMargin = 48.dp
 
+/** Home: a hero for the channel last watched (or a welcome), then rails of the viewer's own content and shortcuts. */
 @Composable
 fun HomeScreen(
+    hero: HomeHero,
+    rails: List<HomeRail>,
+    shortcuts: List<String>,
+    onTile: (Tile) -> Unit,
+    onShortcut: (String) -> Unit,
     modifier: Modifier = Modifier,
-    yourChannels: List<Tile> = emptyList(),
-    continueWatching: List<Tile> = emptyList(),
-    onPlayChannel: (Long) -> Unit = {},
-    onPlayVod: (app.tvplayer.player.VodItem) -> Unit = {},
-    onLiveTv: () -> Unit = {},
-    onShortcut: (String) -> Unit = {},
 ) {
-    val playTile: (Tile) -> Unit = { tile ->
-        val vod = tile.vod
-        if (vod != null) onPlayVod(vod) else tile.channelId?.let(onPlayChannel)
-    }
-
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
@@ -58,49 +53,71 @@ fun HomeScreen(
         contentPadding = PaddingValues(bottom = 27.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Hero(item = SampleData.hero, watchFocus = firstFocus) }
-        // Real content from the user's playlists; the "For you" and "On now" rails are still sample content.
-        if (continueWatching.isNotEmpty()) {
-            item { Rail(title = "Continue watching", tiles = continueWatching, onTileClick = playTile) }
+        item { Hero(hero = hero, primaryFocus = firstFocus) }
+        item { ShortcutRow(labels = shortcuts, onClick = onShortcut) }
+        for (rail in rails) {
+            if (rail.tiles.isNotEmpty()) item(key = rail.title) { Rail(title = rail.title, tiles = rail.tiles, onTileClick = onTile) }
         }
-        if (yourChannels.isNotEmpty()) {
-            item { Rail(title = "Your channels", tiles = yourChannels, onTileClick = playTile) }
+    }
+}
+
+/** Recents: channels watched lately, and films and episodes to carry on with. */
+@Composable
+fun RecentsScreen(rails: List<HomeRail>, onTile: (Tile) -> Unit) {
+    val colors = AppTheme.colors
+    if (rails.all { it.tiles.isEmpty() }) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Label(text = "Nothing watched yet. Channels and films you watch will appear here.", style = AppType.headline, color = colors.textDim)
         }
-        item { Rail(title = "For you", tiles = SampleData.forYou) }
-        item { ShortcutRow(labels = SampleData.shortcuts, onClick = { label -> if (label == "Live TV") onLiveTv() else onShortcut(label) }) }
-        item { Rail(title = "On now and next", tiles = SampleData.onNow) }
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 27.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        for (rail in rails) {
+            if (rail.tiles.isNotEmpty()) item(key = rail.title) { Rail(title = rail.title, tiles = rail.tiles, onTileClick = onTile) }
+        }
     }
 }
 
 @Composable
-private fun Hero(item: HeroItem, watchFocus: FocusRequester) {
+private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
     val colors = AppTheme.colors
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(236.dp),
+            .height(220.dp),
     ) {
-        // Stand-in for backdrop artwork; it fades into the themed background on the left.
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .fillMaxWidth(0.6f)
-                .background(Brush.horizontalGradient(listOf(Color.Transparent, Color(item.artColor)))),
+                .fillMaxWidth(0.55f)
+                .background(Brush.horizontalGradient(listOf(Color.Transparent, colors.glassStrong))),
         )
+        if (hero.logo != null) {
+            Logo(
+                url = hero.logo,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 96.dp)
+                    .size(width = 220.dp, height = 130.dp),
+            )
+        }
 
         Column(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = SideMargin)
-                .width(410.dp),
+                .width(460.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Label(text = item.overline, style = AppType.overline, color = colors.accent)
-            Label(text = item.title, style = AppType.display, maxLines = 2)
-            Label(text = item.tagline, style = AppType.body, color = colors.textDim, maxLines = 2)
-            Label(text = item.meta, style = AppType.label, color = colors.textFaint)
+            Label(text = hero.overline, style = AppType.overline, color = colors.accent)
+            Label(text = hero.title, style = AppType.display, maxLines = 2)
+            hero.tagline?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 2) }
+            hero.meta?.let { Label(text = it, style = AppType.label, color = colors.textFaint) }
 
             Row(
                 modifier = Modifier.padding(top = 8.dp),
@@ -108,23 +125,26 @@ private fun Hero(item: HeroItem, watchFocus: FocusRequester) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 FocusSurface(
-                    onClick = { },
+                    onClick = hero.onPrimary,
                     modifier = Modifier
-                        .focusRequester(watchFocus)
+                        .focusRequester(primaryFocus)
                         .height(36.dp),
                     container = colors.accent,
                     focusedContainer = colors.accent,
                     outlined = false,
                 ) {
                     Label(
-                        text = "Watch",
+                        text = hero.primaryLabel,
                         style = AppType.title,
                         color = colors.onAccent,
                         modifier = Modifier.padding(horizontal = 22.dp),
                     )
                 }
-                FocusSurface(onClick = { }, modifier = Modifier.height(36.dp)) {
-                    Label(text = "Trailer", style = AppType.title, modifier = Modifier.padding(horizontal = 18.dp))
+                val secondary = hero.secondaryLabel
+                if (secondary != null) {
+                    FocusSurface(onClick = hero.onSecondary, modifier = Modifier.height(36.dp)) {
+                        Label(text = secondary, style = AppType.title, modifier = Modifier.padding(horizontal = 18.dp))
+                    }
                 }
             }
         }
@@ -132,7 +152,7 @@ private fun Hero(item: HeroItem, watchFocus: FocusRequester) {
 }
 
 @Composable
-private fun Rail(title: String, tiles: List<Tile>, onTileClick: (Tile) -> Unit = {}) {
+internal fun Rail(title: String, tiles: List<Tile>, onTileClick: (Tile) -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Label(
             text = title,
@@ -168,8 +188,8 @@ private fun TileCard(tile: Tile, onClick: () -> Unit) {
                 url = tile.logo,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 12.dp)
-                    .size(width = 72.dp, height = 44.dp),
+                    .padding(top = 10.dp)
+                    .size(width = 72.dp, height = 40.dp),
             )
         }
         Box(

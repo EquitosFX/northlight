@@ -1,5 +1,10 @@
 package app.tvplayer.ui.search
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -46,11 +51,31 @@ fun SearchScreen(
     metadata: MetadataRepository,
     onOpen: (VodRow) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
+    voiceToken: Int = 0,
 ) {
     val colors = AppTheme.colors
     var query by rememberSaveable { mutableStateOf("") }
+    var voiceProblem by remember { mutableStateOf<String?>(null) }
     val fieldFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
+
+    // Android TV's own speech screen listens through the remote's mic and hands back the words.
+    val listener = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!spoken.isNullOrBlank()) query = spoken
+    }
+    fun listen() {
+        voiceProblem = null
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a channel, film, series or person")
+        try {
+            listener.launch(intent)
+        } catch (e: ActivityNotFoundException) {
+            voiceProblem = "Voice search isn't available on this device."
+        }
+    }
+    LaunchedEffect(voiceToken) { if (voiceToken > 0) listen() }
 
     val text = query.trim()
     val results by produceState<List<VodRow>?>(initialValue = emptyList(), text) {
@@ -80,15 +105,21 @@ fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Label(text = "Search", style = AppType.headline)
-        TvTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = "Channels, films, series and people",
-            placeholder = "Press OK to type",
-            modifier = Modifier
-                .width(430.dp)
-                .focusRequester(fieldFocus),
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+            TvTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = "Channels, films, series and people",
+                placeholder = "Press OK to type",
+                modifier = Modifier
+                    .width(430.dp)
+                    .focusRequester(fieldFocus),
+            )
+            FocusSurface(onClick = { listen() }, modifier = Modifier.height(36.dp)) {
+                Label(text = "Speak", style = AppType.title, modifier = Modifier.padding(horizontal = 18.dp))
+            }
+        }
+        voiceProblem?.let { Label(text = it, style = AppType.body, color = colors.accent) }
 
         val list = results
         val status = when {

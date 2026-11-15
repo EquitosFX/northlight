@@ -165,7 +165,7 @@ class LivePlayerController(
     }
 
     /** Loads the channel list and plays [channelId], or else the last channel watched, or else the first. */
-    fun open(channelId: Long?) {
+    fun open(channelId: Long?, key: String? = null) {
         leaveVod()
         loadJob?.cancel()
         cancelRecovery()
@@ -181,8 +181,9 @@ class LivePlayerController(
                 status = PlaybackStatus.NoChannels
                 return@launch
             }
-            val lastKey = if (channelId == null) settings.lastChannel.first() else null
+            val lastKey = if (channelId == null && key == null) settings.lastChannel.first() else null
             val start = channelId?.let { built.findById(it) }
+                ?: key?.let { built.findByKey(it) }
                 ?: lastKey?.let { built.findByKey(it) }
                 ?: built.channels.first()
             tune(start)
@@ -197,7 +198,10 @@ class LivePlayerController(
         attempt = 0
         streamInfo = null
         bannerToken++
-        scope.launch { settings.setLastChannel(channel.key) }
+        scope.launch {
+            settings.setLastChannel(channel.key)
+            channels.recordWatched(channel)
+        }
         followGuide(channel)
         playVariant(PlaybackStatus.Loading)
     }

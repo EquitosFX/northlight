@@ -48,6 +48,9 @@ data class LiveRow(
     val epgId: String?,
 )
 
+/** Changes whenever live channels are added, removed or re-imported. */
+data class LiveStamp(val count: Int, val maxId: Long?)
+
 /** A film or series for the browse screens. */
 data class VodRow(
     val id: Long,
@@ -83,6 +86,9 @@ interface ChannelDao {
 
     @Query("SELECT * FROM channels WHERE id = :id")
     fun getBlocking(id: Long): ChannelEntity?
+
+    @Query("SELECT COUNT(*) AS count, MAX(id) AS maxId FROM channels WHERE kind = 'live'")
+    fun liveStampBlocking(): LiveStamp
 
     @Query(
         "SELECT variantKey, MIN(baseName) AS name, MAX(guideId) AS guideId FROM channels " +
@@ -181,6 +187,15 @@ interface MetadataDao {
     suspend fun save(entry: MetadataEntity)
 }
 
+@Dao
+interface HistoryDao {
+    @Query("SELECT * FROM history ORDER BY watchedAt DESC LIMIT 20")
+    fun observeRecent(): Flow<List<HistoryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun save(entry: HistoryEntity)
+}
+
 @Database(
     entities = [
         PlaylistEntity::class,
@@ -189,8 +204,9 @@ interface MetadataDao {
         ProgressEntity::class,
         FavouriteEntity::class,
         MetadataEntity::class,
+        HistoryEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -200,4 +216,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun progress(): ProgressDao
     abstract fun favourites(): FavouriteDao
     abstract fun metadata(): MetadataDao
+    abstract fun history(): HistoryDao
 }
