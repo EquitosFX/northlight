@@ -10,6 +10,11 @@ import app.tvplayer.data.db.PlaylistEntity
 import app.tvplayer.data.db.ProgrammeEntity
 import app.tvplayer.data.db.ProgressEntity
 import kotlin.random.Random
+import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 /**
  * Made-up content for the screenshot test: invented channels, films, series and guide listings.
@@ -64,6 +69,63 @@ object DemoData {
     private val people = listOf(
         "Anna Reyes", "Tom Hallam", "Priya Desai", "Marcus Bell", "Elena Novak", "Owen Price", "Grace Okafor", "Lewis Carter",
     )
+
+    private fun idOf(name: String) = people.indexOf(name) + 1L
+
+    /** The director and cast of a title, by its seed (films 0–11, series 20–25). */
+    private fun crew(seed: Int): Pair<String, List<String>> {
+        val director = people[seed % people.size]
+        return director to (1..5).map { people[(seed + it * 3) % people.size] }.distinct()
+    }
+
+    /**
+     * Answers the app's web requests offline: TMDB people searches and filmographies come from the
+     * demo titles above, and every stream address fails at once, as an unreachable server would.
+     */
+    fun responder() = Interceptor { chain ->
+        val url = chain.request().url
+        fun reply(code: Int, body: String) = Response.Builder()
+            .request(chain.request())
+            .protocol(Protocol.HTTP_1_1)
+            .code(code)
+            .message(if (code == 200) "OK" else "Not found")
+            .body(body.toResponseBody("application/json".toMediaType()))
+            .build()
+        val path = url.encodedPath
+        when {
+            url.host != "api.themoviedb.org" -> reply(404, "")
+            path.endsWith("/search/person") -> {
+                val query = url.queryParameter("query").orEmpty().lowercase()
+                val found = people.filter { query.isNotBlank() && it.lowercase().contains(query) }
+                reply(200, found.joinToString(",", "{\"results\":[", "]}") { name ->
+                    "{\"id\":${idOf(name)},\"name\":\"$name\",\"known_for_department\":\"Acting\"}"
+                })
+            }
+            path.contains("/person/") && path.endsWith("/combined_credits") -> {
+                val id = path.substringAfter("/person/").substringBefore("/").toLong()
+                val name = people.getOrNull((id - 1).toInt())
+                val cast = ArrayList<String>()
+                val crewJobs = ArrayList<String>()
+                fun entry(f: Film, tv: Boolean, roleKey: String, role: String) = if (tv) {
+                    "{\"media_type\":\"tv\",\"name\":\"${f.title}\",\"first_air_date\":\"${f.year}-03-01\",\"$roleKey\":\"$role\"}"
+                } else {
+                    "{\"media_type\":\"movie\",\"title\":\"${f.title}\",\"release_date\":\"${f.year}-03-01\",\"$roleKey\":\"$role\"}"
+                }
+                films.forEachIndexed { i, f ->
+                    val (director, actors) = crew(i)
+                    if (director == name) crewJobs += entry(f, false, "job", "Director")
+                    if (name in actors) cast += entry(f, false, "character", "Character")
+                }
+                series.forEachIndexed { i, f ->
+                    val (director, actors) = crew(20 + i)
+                    if (director == name) crewJobs += entry(f, true, "job", "Director")
+                    if (name in actors) cast += entry(f, true, "character", "Character")
+                }
+                reply(200, "{\"cast\":[${cast.joinToString(",")}],\"crew\":[${crewJobs.joinToString(",")}]}")
+            }
+            else -> reply(404, "{}")
+        }
+    }
 
     private data class Film(val title: String, val year: Int, val group: String, val genre: String, val overview: String)
 
@@ -140,10 +202,9 @@ object DemoData {
             container.settings.setTmdbKey("demo-key")
 
             fun peopleFor(seed: Int): String {
-                val director = people[seed % people.size]
-                val cast = (1..5).map { people[(seed + it * 3) % people.size] }.distinct()
-                return (listOf("D\t${seed + 1}\t$director\tDirector\t") +
-                    cast.mapIndexed { k, name -> "C\t${100 + seed * 10 + k}\t$name\tCharacter ${k + 1}\t" })
+                val (director, cast) = crew(seed)
+                return (listOf("D\t${idOf(director)}\t$director\tDirector\t") +
+                    cast.mapIndexed { k, name -> "C\t${idOf(name)}\t$name\tCharacter ${k + 1}\t" })
                     .joinToString("\n")
             }
             fun save(type: String, f: Film, index: Int, poster: String, backdrop: String) {

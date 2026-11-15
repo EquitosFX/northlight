@@ -1,5 +1,6 @@
 package app.tvplayer.ui.home
 
+import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +90,7 @@ fun RecentsScreen(rails: List<HomeRail>, onTile: (Tile) -> Unit) {
 
 @Composable
 private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
+    EntryPoint(primaryFocus)
     val colors = AppTheme.colors
     Box(
         modifier = Modifier

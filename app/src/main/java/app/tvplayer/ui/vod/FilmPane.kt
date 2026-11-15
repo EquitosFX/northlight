@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -57,6 +58,7 @@ internal fun FilmPane(
     val info by produceState<MetadataEntity?>(initialValue = null, film.id) { value = metadata.lookup(film.name, film.kind) }
     val progress by produceState<ProgressEntity?>(initialValue = null, film.url) { value = channels.progressFor(film.url) }
     val firstButton = remember { FocusRequester() }
+    EntryPoint(firstButton)
     val autoFocus = LocalAutoFocus.current
 
     BackHandler { onBack() }
@@ -93,10 +95,10 @@ internal fun FilmPane(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = 48.dp)
-                .width(470.dp),
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Label(text = title, style = AppType.display, maxLines = 2)
+            Label(text = title, style = AppType.display, maxLines = 2, modifier = Modifier.width(470.dp))
             val meta = listOfNotNull(
                 details?.year?.toString(),
                 details?.runtimeMinutes?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
@@ -104,7 +106,9 @@ internal fun FilmPane(
                 details?.genres?.takeIf { it.isNotEmpty() },
             ).joinToString(" · ")
             if (meta.isNotEmpty()) Label(text = meta, style = AppType.label, color = colors.accent)
-            details?.overview?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 5) }
+            details?.overview?.let {
+                Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 5, modifier = Modifier.width(470.dp))
+            }
             if (details == null) {
                 Label(text = film.name, style = AppType.caption, color = colors.textFaint)
             }
@@ -120,7 +124,8 @@ internal fun FilmPane(
                 }
             }
             // Down from the buttons reaches the director and cast; selecting one shows their other titles.
-            details?.let { PeopleRow(people = it.peopleList(), onPerson = onPerson, modifier = Modifier.width(900.dp)) }
+            // The row runs to the screen edge and scrolls, so no name is cut short.
+            details?.let { PeopleRow(people = it.peopleList(), onPerson = onPerson, modifier = Modifier.fillMaxWidth()) }
         }
     }
 }

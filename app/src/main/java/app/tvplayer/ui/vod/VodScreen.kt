@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.LocalHoldFocus
 import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.activity.compose.BackHandler
@@ -182,7 +183,7 @@ fun VodScreen(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = SideMargin, end = SideMargin, top = 4.dp),
+            .padding(start = SideMargin, end = SideMargin, top = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         LazyColumn(
@@ -194,6 +195,7 @@ fun VodScreen(
         ) {
             items(list) { group ->
                 val selected = group.groupName == state.group
+                if (selected) EntryPoint(groupFocus)
                 FocusSurface(
                     onClick = { state.group = group.groupName },
                     modifier = Modifier
@@ -234,7 +236,9 @@ fun VodScreen(
             contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 PosterCard(
@@ -350,7 +354,7 @@ private fun EpisodesPane(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = SideMargin, end = SideMargin, top = 4.dp),
+            .padding(start = SideMargin, end = SideMargin, top = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Column(modifier = Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -427,6 +431,7 @@ private fun EpisodesPane(
                 modifier = Modifier.weight(1f),
             ) {
                 itemsIndexed(episodes, key = { _, episode -> episode.url }) { index, episode ->
+                    if (index == 0) EntryPoint(firstEpisode)
                     FocusSurface(
                         onClick = {
                             queue.firstOrNull { it.url == episode.url }?.let { item -> onPlay(item, queue) }

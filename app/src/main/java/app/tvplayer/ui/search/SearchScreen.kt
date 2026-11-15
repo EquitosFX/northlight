@@ -1,5 +1,6 @@
 package app.tvplayer.ui.search
 
+import app.tvplayer.ui.components.EntryPoint
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
@@ -58,6 +59,7 @@ fun SearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var voiceProblem by remember { mutableStateOf<String?>(null) }
     val fieldFocus = remember { FocusRequester() }
+    EntryPoint(fieldFocus)
     val autoFocus = LocalAutoFocus.current
     LaunchedEffect(Unit) { if (autoFocus()) runCatching { fieldFocus.requestFocus() } }
 

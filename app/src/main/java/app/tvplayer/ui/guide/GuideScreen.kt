@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import app.tvplayer.ui.components.EntryPoint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,6 +85,7 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
     var windowStart by remember { mutableLongStateOf(earliest) }
     var focused by remember { mutableStateOf<Focused?>(null) }
     val firstFocus = remember { FocusRequester() }
+    val entryFocus = remember { FocusRequester() }
     var placedFocus by remember { mutableStateOf(false) }
     // The category list on the left: Favourites, All channels, then the playlist's groups.
     var group by remember { mutableStateOf<String?>(null) }
@@ -143,6 +145,7 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
                     now = now,
                     canGoBack = windowStart > earliest,
                     focusRequester = if (index == 0 && !placedFocus) firstFocus else null,
+                    entry = if (index == 0) entryFocus else null,
                     onFocusPlaced = { placedFocus = true },
                     onFocus = { programme -> focused = Focused(channel, programme) },
                     onShift = ::shift,
@@ -289,6 +292,7 @@ private fun GuideRow(
     now: Long,
     canGoBack: Boolean,
     focusRequester: FocusRequester?,
+    entry: FocusRequester?,
     onFocusPlaced: () -> Unit,
     onFocus: (ProgrammeEntity?) -> Unit,
     onShift: (Long) -> Unit,
@@ -361,8 +365,10 @@ private fun GuideRow(
                     onFocus = { onFocus(null) },
                     onClick = onPlay,
                     modifier = edgeKeys(windowStart, windowEnd)
-                        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                        .then(if (entry != null) Modifier.focusRequester(entry) else Modifier),
                 )
+                if (entry != null) EntryPoint(entry)
                 if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
                 return@BoxWithConstraints
             }
@@ -388,8 +394,12 @@ private fun GuideRow(
                             } else {
                                 Modifier
                             },
+                        ).then(
+                            // The first channel's current programme is where Right from the menu lands.
+                            if (entry != null && programme.id == focusTarget.id) Modifier.focusRequester(entry) else Modifier,
                         ),
                     )
+                    if (entry != null && programme.id == focusTarget.id) EntryPoint(entry)
                 }
             }
             if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)

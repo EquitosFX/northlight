@@ -1,5 +1,6 @@
 package app.tvplayer.ui.person
 
+import app.tvplayer.ui.components.EntryPoint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -142,6 +143,7 @@ fun PersonScreen(person: TmdbPerson, metadata: MetadataRepository, onOpen: (VodR
                 modifier = Modifier.weight(1f),
             ) {
                 itemsIndexed(list, key = { _, row -> row.id }) { index, row ->
+                    if (index == 0) EntryPoint(firstItem)
                     PosterCard(
                         row = row,
                         onClick = { onOpen(row) },

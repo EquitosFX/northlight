@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
 class NorthlightApp : Application() {
@@ -42,8 +43,12 @@ class AppContainer(context: Context) {
             .build()
     }
 
+    /** Only for the screenshot test, which answers web requests itself. Always null in the app. */
+    @Volatile var testResponder: Interceptor? = null
+
     val http: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .addInterceptor { chain -> testResponder?.intercept(chain) ?: chain.proceed(chain.request()) }
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .build()

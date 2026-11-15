@@ -1,5 +1,10 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package app.tvplayer.ui
 
+import app.tvplayer.ui.components.LocalEntryFocus
+import app.tvplayer.ui.components.EntryFocus
+import androidx.compose.foundation.focusGroup
 import app.tvplayer.ui.components.LocalHoldFocus
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.focusable
@@ -201,6 +206,7 @@ fun AppRoot(
     val sidebarOpen = onMenuSide || startupPending
     val menuFocus = remember { SidebarSections.associateWith { FocusRequester() } }
     val contentFocus = remember { FocusRequester() }
+    val entryFocus = remember { EntryFocus() }
     val autoFocusAllowed = remember { { !(menuFocused || pictureFocused || startupPending) } }
 
     fun focusMenu() {
@@ -402,8 +408,11 @@ fun AppRoot(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = SidebarWidth + sidebarOffset, top = 14.dp)
-                    .focusRequester(contentFocus),
+                    .padding(start = SidebarWidth + sidebarOffset)
+                    // Moving in from the menu lands on the screen's starting point, if it has named one.
+                    .focusProperties { enter = { entryFocus.target ?: FocusRequester.Default } }
+                    .focusRequester(contentFocus)
+                    .focusGroup(),
             ) {
                 Box(
                     modifier = Modifier
@@ -413,10 +422,14 @@ fun AppRoot(
                         .onFocusChanged { if (!it.isFocused) holding = false }
                         .focusable(),
                 )
-                CompositionLocalProvider(LocalAutoFocus provides autoFocusAllowed, LocalHoldFocus provides { holdFocus() }) {
+                CompositionLocalProvider(
+                    LocalAutoFocus provides autoFocusAllowed,
+                    LocalHoldFocus provides { holdFocus() },
+                    LocalEntryFocus provides entryFocus,
+                ) {
                 val shownPerson = person
                 if (shownPerson != null) {
-                    PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) })
+                    TopInset { PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) }) }
                 } else when (dest) {
                     Dest.HOME -> HomeScreen(
                         hero = hero,
@@ -433,10 +446,12 @@ fun AppRoot(
                             }
                         },
                     )
-                    Dest.RECENTS -> RecentsScreen(
-                        rails = listOf(HomeRail("Recent channels", recentTiles), HomeRail("Continue watching", continueWatching)),
-                        onTile = { tile -> openTile(tile) },
-                    )
+                    Dest.RECENTS -> TopInset {
+                        RecentsScreen(
+                            rails = listOf(HomeRail("Recent channels", recentTiles), HomeRail("Continue watching", continueWatching)),
+                            onTile = { tile -> openTile(tile) },
+                        )
+                    }
                     Dest.FILMS -> VodScreen(
                         kind = ChannelEntity.KIND_MOVIE,
                         state = filmsState,
@@ -461,7 +476,7 @@ fun AppRoot(
                             person = chosen
                         },
                     )
-                    Dest.SEARCH -> SearchScreen(
+                    Dest.SEARCH -> TopInset { SearchScreen(
                         channels = container.channels,
                         metadata = container.metadata,
                         voiceToken = voiceToken,
@@ -470,6 +485,7 @@ fun AppRoot(
                             person = chosen
                         },
                         onOpen = { row ->
+                            holdFocus()
                             when {
                                 row.kind == ChannelEntity.KIND_LIVE -> play(row.id)
                                 row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null -> {
@@ -483,19 +499,23 @@ fun AppRoot(
                                 else -> playVod(VodItem(row.url, row.name, row.logo, row.userAgent, row.referrer))
                             }
                         },
-                    )
-                    Dest.GUIDE -> GuideScreen(
-                        channels = container.channels,
-                        onPlay = { channel -> play(channel.variantIds.first()) },
-                    )
-                    Dest.SETTINGS -> SettingsScreen(
-                        themeId = themeId,
-                        onThemeChange = onThemeChange,
-                        playlists = container.playlists,
-                        settings = container.settings,
-                        metadata = container.metadata,
-                    )
-                    else -> ComingLater(dest)
+                    ) }
+                    Dest.GUIDE -> TopInset {
+                        GuideScreen(
+                            channels = container.channels,
+                            onPlay = { channel -> play(channel.variantIds.first()) },
+                        )
+                    }
+                    Dest.SETTINGS -> TopInset {
+                        SettingsScreen(
+                            themeId = themeId,
+                            onThemeChange = onThemeChange,
+                            playlists = container.playlists,
+                            settings = container.settings,
+                            metadata = container.metadata,
+                        )
+                    }
+                    else -> TopInset { ComingLater(dest) }
                 }
                 }
             }
@@ -552,4 +572,10 @@ private fun ComingLater(dest: Dest) {
             color = AppTheme.colors.textDim,
         )
     }
+}
+
+/** Space above screens without full-bleed artwork. Home, Films and Series run their artwork to the top edge. */
+@Composable
+private fun TopInset(content: @Composable () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().padding(top = 14.dp)) { content() }
 }

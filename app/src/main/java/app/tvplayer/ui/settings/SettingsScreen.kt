@@ -1,5 +1,6 @@
 package app.tvplayer.ui.settings
 
+import app.tvplayer.ui.components.EntryPoint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ fun SettingsScreen(
     val colors = AppTheme.colors
     var section by rememberSaveable { mutableStateOf(SettingsSection.PLAYLISTS) }
     val firstFocus = remember { FocusRequester() }
+    EntryPoint(firstFocus)
     val autoFocus = LocalAutoFocus.current
     LaunchedEffect(Unit) { if (autoFocus()) runCatching { firstFocus.requestFocus() } }
 
