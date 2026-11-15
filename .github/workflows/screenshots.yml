@@ -6,6 +6,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   screenshots:
     runs-on: ubuntu-latest
@@ -28,6 +31,16 @@ jobs:
           name: screenshots
           path: app/build/screenshots/*.png
           if-no-files-found: warn
+
+      # Also kept on the demo-screens branch (replaced each run), so they can be viewed on GitHub.
+      - name: Save to the demo-screens branch
+        run: |
+          mkdir /tmp/screens && cp app/build/screenshots/*.png /tmp/screens/
+          cd /tmp/screens
+          git init -q -b demo-screens
+          git add -A
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -q -m "Screens from ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" demo-screens
 
       - uses: actions/upload-artifact@v4
         if: always()
