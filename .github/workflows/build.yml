@@ -45,5 +45,5 @@ jobs:
           gh release delete latest --cleanup-tag --yes || true
           gh release create latest northlight.apk \
             --target "$GITHUB_SHA" \
-            --title "Northlight build $GITHUB_RUN_NUMBER" \
+            --title "Skyfall build $GITHUB_RUN_NUMBER" \
             --notes "Automatic build $GITHUB_RUN_NUMBER. Install northlight.apk on the Shield; it updates the copy already installed."
