@@ -118,6 +118,7 @@ class ScreenshotTest {
                     .onFailure { problems += "Key $name wasn't delivered: $it" }
             }
             settle()
+            println("  after $name: focus on \"${focusedText()}\"")
         }
     }
 
@@ -252,23 +253,37 @@ class ScreenshotTest {
 
         press("right")
         expectPanel(open = false, step = "Into the guide")
-        val first = focusedText()
-        if (first.contains("Favourites") || first.contains("All channels")) {
-            problems += "Into the guide: landed on the category list (\"$first\") rather than the listings"
+        if (isCategory(focusedText())) {
+            problems += "Into the guide: landed on the category list (\"${focusedText()}\") rather than the listings"
         }
         press("down", "down")
         shot("07-guide-browsing")
 
-        press("left", "left", "left", "left", "left")
-        press("down", "down", "down")
+        // Left along the listings until the category list.
+        repeat(8) { if (!isCategory(focusedText())) press("left") }
+        expectFocus("All channels", "Left from the listings returns to the open category")
+        press("down", "down")
+        expectFocus("News", "Down the categories")
+        expectShown("Atlas News", "News category shows news channels")
+        expectHidden("Meridian Two", "News category hides other channels")
         shot("08-guide-categories")
 
-        press("right", "ok")
+        press("right")
+        expectFocus("", "Into the news listings")
+        press("ok")
+        expectShown("Atlas News", "Playing shows the channel banner")
         shot("09-playing-live")
         press("back")
         expectPanel(open = true, step = "Back from full-screen TV")
+        expectFocus("TV guide", "Back from full-screen TV lands on the menu")
         shot("10-picture-in-panel")
+        press("down")
+        expectFocus("Recents", "Down the menu with the picture showing")
     }
+
+    private fun isCategory(text: String) = listOf(
+        "Favourites", "All channels", "Entertainment", "News", "Sport", "Movies", "Kids", "Documentaries", "Music",
+    ).any { text.trim() == it }
 
     @Test fun films() {
         open(Dest.FILMS)
@@ -304,7 +319,10 @@ class ScreenshotTest {
         shot("15-back-to-films")
 
         press("left", "left")
+        expectFocus("New releases", "Left from the posters returns to the open category")
+        press("left")
         expectFocus("Films", "Left back to the menu")
+        expectPanel(open = true, step = "Back in the menu from Films")
     }
 
     @Test fun series() {

@@ -1,5 +1,7 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.entersAt
+import app.tvplayer.ui.components.EntryFocus
 import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.LocalHoldFocus
 import app.tvplayer.ui.components.fadeIntoBackground
@@ -145,6 +147,7 @@ fun VodScreen(
         value = channels.inGroup(kind, state.group)
     }
     val groupFocus = remember { FocusRequester() }
+    val groupEntry = remember { EntryFocus() }
     val gridFocus = remember { FocusRequester() }
     val autoFocus = LocalAutoFocus.current
     val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = state.lastIndex)
@@ -189,13 +192,18 @@ fun VodScreen(
         LazyColumn(
             modifier = Modifier
                 .width(180.dp)
-                .fillMaxHeight(),
+                .fillMaxHeight()
+                .entersAt(groupEntry),
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             items(list) { group ->
                 val selected = group.groupName == state.group
-                if (selected) EntryPoint(groupFocus)
+                if (selected) {
+                    EntryPoint(groupFocus)
+                    // Left from the posters returns to the chosen group.
+                    EntryPoint(groupFocus, groupEntry)
+                }
                 FocusSurface(
                     onClick = { state.group = group.groupName },
                     modifier = Modifier

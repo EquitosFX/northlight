@@ -1,6 +1,5 @@
 package app.tvplayer.ui.components
 
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,11 +13,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,28 +98,20 @@ fun Sidebar(
                 }
             }
             Spacer(Modifier.weight(1f))
-            // Which item had focus last; null while focus is outside the menu.
-            var focusedItem by remember { mutableStateOf<Dest?>(null) }
+            // Coming back to the menu from a screen lands on the open section, not the nearest item.
+            val menuEntry = remember { EntryFocus() }
             Column(
-                modifier = Modifier.onFocusChanged { if (!it.hasFocus) focusedItem = null },
+                modifier = Modifier.entersAt(menuEntry),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 for (dest in SidebarSections) {
+                    if (dest == selected) EntryPoint(itemFocus.getValue(dest), menuEntry)
                     MenuItem(
                         dest = dest,
                         current = dest == selected,
                         focusRequester = itemFocus.getValue(dest),
-                        onFocus = {
-                            val movingWithinMenu = focusedItem != null
-                            focusedItem = dest
-                            val openItem = itemFocus[selected]
-                            when {
-                                // Moving up and down the menu shows each section.
-                                movingWithinMenu || dest == selected || openItem == null -> onSelect(dest)
-                                // Arriving from elsewhere lands on the open section rather than switching.
-                                else -> runCatching { openItem.requestFocus() }
-                            }
-                        },
+                        // Moving up and down the menu shows each section.
+                        onFocus = { onSelect(dest) },
                         onClick = onEnter,
                     )
                 }

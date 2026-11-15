@@ -1,5 +1,9 @@
 package app.tvplayer.ui.components
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
@@ -39,3 +43,20 @@ fun EntryPoint(requester: FocusRequester) {
         onDispose { if (entry.target === requester) entry.target = null }
     }
 }
+
+/** Marks [requester] as where focus lands when it moves into the group that uses [into] (see [entersAt]). */
+@Composable
+fun EntryPoint(requester: FocusRequester, into: EntryFocus) {
+    DisposableEffect(into, requester) {
+        into.target = requester
+        onDispose { if (into.target === requester) into.target = null }
+    }
+}
+
+/**
+ * Makes this a group that focus enters at [entry]'s item (when it's on screen) rather than at whatever
+ * is physically nearest: the side menu lands on the open section, a category list on the chosen category.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+fun Modifier.entersAt(entry: EntryFocus): Modifier =
+    focusProperties { enter = { entry.target ?: FocusRequester.Default } }.focusGroup()

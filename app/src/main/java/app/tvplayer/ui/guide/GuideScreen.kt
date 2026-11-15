@@ -1,5 +1,7 @@
 package app.tvplayer.ui.guide
 
+import app.tvplayer.ui.components.entersAt
+import app.tvplayer.ui.components.EntryFocus
 import app.tvplayer.ui.components.EntryPoint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -162,19 +164,26 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
 private fun Categories(groups: List<String>, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
     val colors = AppTheme.colors
     val entries = remember(groups) { listOf<String?>(FAVOURITES, null) + groups }
+    // Left from the listings returns to the chosen category.
+    val currentFocus = remember { FocusRequester() }
+    val entry = remember { EntryFocus() }
     Column(modifier = modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Label(text = "TV guide", style = AppType.headline, modifier = Modifier.padding(start = 10.dp, bottom = 6.dp))
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(2.dp),
             contentPadding = PaddingValues(bottom = 24.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).entersAt(entry),
         ) {
             items(entries.size) { index ->
                 val name = entries[index]
                 val current = name == selected
+                if (current) EntryPoint(currentFocus, entry)
                 FocusSurface(
                     onClick = { onSelect(name) },
-                    modifier = Modifier.fillMaxWidth().height(34.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                        .then(if (current) Modifier.focusRequester(currentFocus) else Modifier),
                     shape = RoundedCornerShape(3.dp),
                     container = if (current) colors.glass else Color.Transparent,
                     focusedContainer = colors.glassStrong,
