@@ -364,6 +364,27 @@ class ScreenshotTest {
         expectFocus("Recents", "Down the menu with the picture showing")
     }
 
+    /** A big, untidy guide: opening it, moving around, sliding in time and changing category mustn't crash. */
+    @Test fun largeGuide() {
+        runBlocking(Dispatchers.IO) { DemoData.fillLarge(app.container) }
+        open(Dest.HOME)
+        // In from the menu with OK, and with Right; from Home's shortcut.
+        press("down", "ok")
+        expectShown("All channels", "OK on TV guide opens the guide")
+        press("ok")
+        press("down", "down", "down", "down", "down", "down", "down", "down", "down", "down", "down", "down")
+        press("left", "left", "left", "right", "right", "right", "right", "right")
+        shot("07d-large-guide")
+        press("back")
+        // A category far down the list, then back to it.
+        repeat(30) { press("down") }
+        press("ok", "down", "back")
+        press("back")
+        press("right")
+        press("back", "back")
+        press("down", "right", "ok", "back", "back")
+    }
+
     @Test fun catchup() {
         open(Dest.GUIDE)
         press("right", "ok")

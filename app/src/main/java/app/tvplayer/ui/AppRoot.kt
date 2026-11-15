@@ -2,6 +2,7 @@
 
 package app.tvplayer.ui
 
+import androidx.compose.foundation.layout.width
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -608,6 +609,15 @@ fun AppRoot(
             )
         }
 
+        // If Skyfall closed unexpectedly last time, say why, so it can be reported and fixed.
+        var crash by remember { mutableStateOf(app.tvplayer.CrashLog.read(context)) }
+        crash?.let { text ->
+            CrashReport(text = text, onDismiss = {
+                app.tvplayer.CrashLog.clear(context)
+                crash = null
+            })
+        }
+
         notice?.let { text ->
             Box(
                 modifier = Modifier
@@ -665,4 +675,37 @@ private fun ComingLater(dest: Dest) {
 @Composable
 private fun TopInset(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().padding(top = 14.dp)) { content() }
+}
+
+/** "Skyfall closed unexpectedly": the error from last time, large enough to photograph and send. */
+@Composable
+private fun CrashReport(text: String, onDismiss: () -> Unit) {
+    val colors = AppTheme.colors
+    val okFocus = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .width(720.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(colors.groundMid)
+                .padding(24.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+        ) {
+            Label(text = "Skyfall closed unexpectedly last time", style = AppType.headline)
+            Label(text = "A photo of this screen helps get it fixed.", style = AppType.body, color = colors.textDim)
+            Label(text = text, style = AppType.caption, color = colors.text, maxLines = 14)
+            app.tvplayer.ui.components.FocusSurface(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .height(38.dp)
+                    .focusRequester(okFocus),
+            ) {
+                Label(text = "OK", style = AppType.title, modifier = Modifier.padding(horizontal = 24.dp))
+            }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            runCatching { okFocus.requestFocus() }
+        }
+    }
 }

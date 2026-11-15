@@ -330,4 +330,41 @@ object DemoData {
             }
         }
     }
+
+    /**
+     * A large, untidy line-up like a real provider's: hundreds of channels in dozens of groups, some
+     * without listings, uneven programme times across the past week and the next day, mixed catch-up.
+     */
+    fun fillLarge(container: AppContainer) {
+        val db = container.database
+        val now = System.currentTimeMillis()
+        val random = Random(11)
+        val pid = db.playlists().getAllBlocking().first().id
+        val groups = (1..45).map { "Group $it" }
+        val rows = (0 until 400).map { i ->
+            val name = "Extra Channel $i"
+            ChannelEntity(
+                playlistId = pid, kind = ChannelEntity.KIND_LIVE, name = name, baseName = name,
+                variantKey = name.lowercase(), quality = 1, url = "http://demo.invalid/live/demo/demo/${1000 + i}.ts",
+                remoteId = 1000L + i, logo = null, groupName = groups[i % groups.size], number = 200 + i,
+                guideId = if (i % 3 == 0) null else "x$i", epgId = if (i % 3 == 0) null else "x$i",
+                position = 1000 + i, catchupDays = listOf(null, 0, 1, 3, 7, 14)[i % 6],
+            )
+        }
+        db.channels().insertAllBlocking(rows)
+        val guide = ArrayList<ProgrammeEntity>()
+        for (i in 0 until 400) {
+            if (i % 3 == 0) continue
+            var start = now - 7 * 86_400_000L - random.nextLong(0, 3_600_000L)
+            while (start < now + 86_400_000L) {
+                val length = (5 + random.nextInt(0, 175)) * MINUTE
+                guide += ProgrammeEntity(
+                    playlistId = pid, channelGuideId = "x$i", start = start, stop = start + length,
+                    title = "Programme ${guide.size}", description = if (random.nextBoolean()) "About programme ${guide.size}." else null,
+                )
+                start += length
+            }
+        }
+        db.programmes().insertAllBlocking(guide)
+    }
 }
