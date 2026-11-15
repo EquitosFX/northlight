@@ -41,6 +41,7 @@ import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.LocalAutoFocus
+import app.tvplayer.ui.components.LocalHoldFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import app.tvplayer.ui.vod.PosterCard
@@ -77,6 +78,8 @@ fun MovieNightScreen(
 ) {
     val scope = rememberCoroutineScope()
     val questions = MovieNight.questions
+    // Each step replaces the last one's buttons, so focus is parked while it changes.
+    val holdFocus = LocalHoldFocus.current
 
     fun search() {
         state.searching = true
@@ -101,6 +104,7 @@ fun MovieNightScreen(
 
     // Back steps through the questions; from the shortlist it goes back to the last question.
     BackHandler(enabled = state.step > 0 || state.picks != null || state.problem != null) {
+        holdFocus()
         when {
             state.picks != null || state.problem != null -> {
                 state.picks = null
@@ -116,9 +120,18 @@ fun MovieNightScreen(
         val problem = state.problem
         when {
             state.searching -> Centered("Finding something to watch…", "Checking TMDB's suggestions against your playlists.")
-            problem != null -> Message(problem, "Start again") { state.restart() }
-            picks != null -> Shortlist(state, picks, onOpen = onOpen, onRestart = { state.restart() })
-            state.step < 0 -> Intro { state.restart() }
+            problem != null -> Message(problem, "Start again") {
+                holdFocus()
+                state.restart()
+            }
+            picks != null -> Shortlist(state, picks, onOpen = onOpen, onRestart = {
+                holdFocus()
+                state.restart()
+            })
+            state.step < 0 -> Intro {
+                holdFocus()
+                state.restart()
+            }
             else -> {
                 val question = questions[state.step]
                 QuestionCard(
@@ -129,6 +142,7 @@ fun MovieNightScreen(
                     selected = state.answers[question.id],
                     key = question.id,
                 ) { choice ->
+                    holdFocus()
                     state.answers[question.id] = choice
                     if (state.step + 1 < questions.size) state.step++ else search()
                 }
