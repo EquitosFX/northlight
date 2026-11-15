@@ -25,7 +25,7 @@ What is in place:
 - Skyfall branding: launcher icon, Android TV banner, start-up screen and a Skyfall colour theme (default), from the artwork in `branding/`
 - Home screen: your own content only (welcome when there is no playlist yet)
 - Recents: recent channels and films to carry on with
-- Voice search: Speak button in Search, or the remote's search/voice key
+- Voice search: the microphone button in Search (or the remote's search/voice key) listens in the app; Android asks once for microphone permission
 - Settings › Appearance with the theme picker
 - Settings › Playlists: add an Xtream Codes account or an M3U link, refresh, remove
 - A database of playlists and channels, filled in batches as a playlist downloads

@@ -78,8 +78,8 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Channel up/down with wrap-around, last channel remembered | Built |
 | Now and next in the info banner and channel list | Built |
 | Number entry | Not started |
-| Catch-up: watch from start, go live, seek | Not started |
-| Timeshift (pause and rewind live) | Not started |
+| Catch-up: the guide goes back as far as the provider keeps programmes; OK on a past programme plays it from the start (Xtream Codes and M3U catch-up types) | Built |
+| Timeshift (pause and rewind live, back to live) | Built |
 | Recording: one-off, series, recurring, manual; USB/NAS; conflicts | Not started |
 | Reminders | Not started |
 | Multiview | Not started |
@@ -97,7 +97,9 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Continue Watching rail on Home | Built |
 | Autoplay next episode with countdown, next/previous episode media keys | Built |
 | Watchlist | Not started |
-| Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | Not started |
+| Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | OpenSubtitles and styling built; remembering tracks not started |
+| Skip intro / Skip recap and an early Up next over the credits (TheIntroDB timings, needs a TMDB key) | Built |
+| "Because you watched…" suggestions on Home (TMDB recommendations matched to your playlists) | Built |
 
 ## Player
 
@@ -116,7 +118,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | --- | --- |
 | Profiles, kids profile, PINs, app lock | Not started |
 | Sport: followed teams, fixtures, scores, channel finder, match centre | Not started |
-| Voice: mic button, in-app recognition, natural requests, help screen | Not started |
+| Voice: mic button and in-app recognition in Search | Built; natural requests and help screen not started |
 | Android TV global search and home-screen rows | Not started |
 | Remappable Shield menu button | Not started |
 
