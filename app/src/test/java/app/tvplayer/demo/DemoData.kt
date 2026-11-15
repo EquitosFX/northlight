@@ -258,10 +258,11 @@ object DemoData {
         val first = now - now % HALF_HOUR - 48 * HALF_HOUR
         channels.forEachIndexed { i, (_, group) ->
             val titles = programmes.getValue(group)
-            var start = first - random.nextInt(0, 2) * HALF_HOUR
+            // Real guides don't keep to the half hour, so some programmes end just after the guide's left edge.
+            var start = first - random.nextInt(0, 2) * HALF_HOUR - random.nextInt(0, 6) * 5 * MINUTE
             var n = i
             while (start < now + 6 * 60 * MINUTE) {
-                val length = listOf(30L, 60L, 60L, 90L, 120L)[random.nextInt(5)] * MINUTE
+                val length = listOf(25L, 35L, 45L, 60L, 75L, 90L, 120L)[random.nextInt(7)] * MINUTE
                 val title = titles[n++ % titles.size]
                 guide += ProgrammeEntity(
                     playlistId = pid, channelGuideId = "ch$i", start = start, stop = start + length, title = title,
