@@ -1,0 +1,194 @@
+package app.tvplayer.demo
+
+import app.tvplayer.AppContainer
+import app.tvplayer.core.tmdb.TitleCleaner
+import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.data.db.FavouriteEntity
+import app.tvplayer.data.db.HistoryEntity
+import app.tvplayer.data.db.MetadataEntity
+import app.tvplayer.data.db.PlaylistEntity
+import app.tvplayer.data.db.ProgrammeEntity
+import app.tvplayer.data.db.ProgressEntity
+import kotlin.random.Random
+
+/**
+ * Made-up content for the screenshot test: invented channels, films, series and guide listings.
+ * Nothing here is a real channel or title.
+ */
+object DemoData {
+
+    private const val MINUTE = 60_000L
+    private const val HALF_HOUR = 30 * MINUTE
+
+    private val channels = listOf(
+        "Meridian One" to "Entertainment", "Meridian Two" to "Entertainment", "Atlas News" to "News",
+        "Atlas Sport 1" to "Sport", "Atlas Sport 2" to "Sport", "Harbour Movies" to "Movies",
+        "Kestrel Kids" to "Kids", "Vista Docs" to "Documentaries", "Pulse Music" to "Music",
+        "Orbit Comedy" to "Entertainment", "Tide Travel" to "Documentaries", "Summit Drama" to "Entertainment",
+    )
+
+    private val programmes = mapOf(
+        "Entertainment" to listOf("The Saturday Kitchen Table", "Village Green", "Quiz at Nine", "Home Truths", "The Late Lounge", "Garden Rescue Live"),
+        "News" to listOf("News at One", "World Desk", "Business Today", "The Briefing", "Evening Headlines"),
+        "Sport" to listOf("Premier Football Live", "Rugby Union Highlights", "Cricket: Second Test", "Boxing Night", "Golf: Final Round"),
+        "Movies" to listOf("Northbound", "Copper Sky", "Saltmarsh", "Paper Moons"),
+        "Kids" to listOf("Puddle Patrol", "Robo Rangers", "The Treehouse Club", "Fox and Friends"),
+        "Documentaries" to listOf("Wild Coastlines", "Engineering Giants", "Rail Journeys North", "The Deep Blue"),
+        "Music" to listOf("Top 40 Countdown", "Unplugged Sessions", "Classic Anthems", "Festival Live"),
+    )
+
+    private val films = listOf(
+        Film("The Lantern Coast", 2025, "New releases", "Thriller", "A lighthouse keeper on a remote island finds a signal that shouldn't exist, and a stranger who arrives with the storm."),
+        Film("Harbour of Glass", 2024, "New releases", "Drama", "Two estranged sisters return to their father's failing glassworks and have one summer to save it."),
+        Film("Northbound", 2025, "New releases", "Adventure", "A night train across the border, a stolen manuscript, and a conductor who knows more than he lets on."),
+        Film("The Quiet Orchard", 2023, "New releases", "Drama", "A widowed farmer and a runaway teenager form an unlikely partnership during the apple harvest."),
+        Film("Ember Valley", 2024, "New releases", "Thriller", "When wildfire cuts off a mountain town, a rookie ranger must lead its people out through the valley."),
+        Film("Signal Lost", 2025, "New releases", "Science fiction", "A deep-space salvage crew answers a distress call from a ship that vanished forty years ago."),
+        Film("Paper Moons", 2022, "Drama", "Romance", "A struggling illustrator and a night-shift baker trade notes in a shared flat they never see each other in."),
+        Film("Kingfisher", 2023, "Drama", "Drama", "A champion rower's comeback is threatened by the secret she has kept since her last race."),
+        Film("The Long Thaw", 2021, "Drama", "Drama", "Snowed in for winter, three generations of one family finally say what they mean."),
+        Film("Saltmarsh", 2024, "Thriller", "Mystery", "A detective returns to the estuary town she left as a child to find a missing fisherman."),
+        Film("Midnight Ferry", 2023, "Thriller", "Thriller", "Eight passengers, one crossing, and a body discovered before the ferry reaches port."),
+        Film("Copper Sky", 2022, "Thriller", "Western", "A retired marshal is pulled back for one last job when a mining town falls to outlaws."),
+    )
+
+    private val series = listOf(
+        Film("Cobalt Street", 2024, "Box sets", "Crime", "A city precinct's night shift works the cases nobody else wants. Three series."),
+        Film("The Archivist", 2025, "Box sets", "Mystery", "A museum archivist uncovers a forgery ring hidden in the collection's oldest records."),
+        Film("Hollow Fen", 2023, "Box sets", "Drama", "Life, love and feuds in a fenland village where everyone knows everyone's business."),
+        Film("Brass and Ivy", 2022, "Box sets", "Period drama", "A Victorian music hall fights to survive as the age of variety comes to an end."),
+        Film("Lowland", 2024, "Box sets", "Thriller", "A border town, a disappeared journalist, and a police chief with too many friends."),
+        Film("Tidewater", 2025, "Box sets", "Drama", "A shipbuilding family's empire is tested when the yard's biggest order goes wrong."),
+    )
+
+    private val people = listOf(
+        "Anna Reyes", "Tom Hallam", "Priya Desai", "Marcus Bell", "Elena Novak", "Owen Price", "Grace Okafor", "Lewis Carter",
+    )
+
+    private data class Film(val title: String, val year: Int, val group: String, val genre: String, val overview: String)
+
+    fun fill(container: AppContainer, image: (String) -> String) {
+        val db = container.database
+        val now = System.currentTimeMillis()
+        val random = Random(7)
+
+        val pid = db.playlists().insertBlocking(
+            PlaylistEntity(
+                name = "Demo playlist",
+                type = PlaylistEntity.TYPE_XTREAM,
+                address = "http://demo.invalid",
+                username = "demo",
+                password = "demo",
+                addedAt = now - 3 * 86_400_000L,
+                refreshedAt = now - 3_600_000L,
+                liveCount = channels.size,
+                movieCount = films.size,
+                seriesCount = series.size,
+                accountStatus = "Active",
+                expiresAt = now + 200 * 86_400_000L,
+                guideRefreshedAt = now - 3_600_000L,
+                programmeCount = 0,
+            ),
+        )
+
+        val rows = ArrayList<ChannelEntity>()
+        channels.forEachIndexed { i, (name, group) ->
+            rows += ChannelEntity(
+                playlistId = pid, kind = ChannelEntity.KIND_LIVE, name = "$name HD", baseName = name,
+                variantKey = name.lowercase(), quality = 2, url = "http://demo.invalid/live/$i.ts", remoteId = i.toLong(),
+                logo = image("ch$i.png"), groupName = group, number = 101 + i, guideId = "ch$i", epgId = "ch$i",
+                position = i,
+            )
+        }
+        films.forEachIndexed { i, f ->
+            rows += ChannelEntity(
+                playlistId = pid, kind = ChannelEntity.KIND_MOVIE, name = f.title, baseName = f.title,
+                variantKey = f.title.lowercase(), url = "http://demo.invalid/movie/$i.mkv", remoteId = 1000L + i,
+                logo = image("film$i.jpg"), groupName = f.group, position = 100 + i,
+            )
+        }
+        series.forEachIndexed { i, f ->
+            rows += ChannelEntity(
+                playlistId = pid, kind = ChannelEntity.KIND_SERIES, name = f.title, baseName = f.title,
+                variantKey = f.title.lowercase(), url = "http://demo.invalid/series/$i", remoteId = null,
+                logo = image("series$i.jpg"), groupName = f.group, position = 200 + i,
+            )
+        }
+        db.channels().insertAllBlocking(rows)
+
+        // A guide running from an hour and a half ago to six hours ahead.
+        val guide = ArrayList<ProgrammeEntity>()
+        val first = now - now % HALF_HOUR - 3 * HALF_HOUR
+        channels.forEachIndexed { i, (_, group) ->
+            val titles = programmes.getValue(group)
+            var start = first - random.nextInt(0, 2) * HALF_HOUR
+            var n = i
+            while (start < now + 6 * 60 * MINUTE) {
+                val length = listOf(30L, 60L, 60L, 90L, 120L)[random.nextInt(5)] * MINUTE
+                val title = titles[n++ % titles.size]
+                guide += ProgrammeEntity(
+                    playlistId = pid, channelGuideId = "ch$i", start = start, stop = start + length, title = title,
+                    description = "$title. A demo listing for Northlight's TV guide.", category = group,
+                )
+                start += length
+            }
+        }
+        db.programmes().insertAllBlocking(guide)
+        db.playlists().updateBlocking(db.playlists().getBlocking(pid)!!.copy(programmeCount = guide.size))
+
+        kotlinx.coroutines.runBlocking {
+            container.settings.setTmdbKey("demo-key")
+
+            fun peopleFor(seed: Int): String {
+                val director = people[seed % people.size]
+                val cast = (1..5).map { people[(seed + it * 3) % people.size] }.distinct()
+                return (listOf("D\t${seed + 1}\t$director\tDirector\t") +
+                    cast.mapIndexed { k, name -> "C\t${100 + seed * 10 + k}\t$name\tCharacter ${k + 1}\t" })
+                    .joinToString("\n")
+            }
+            fun save(type: String, f: Film, index: Int, poster: String, backdrop: String) {
+                val (title, year) = TitleCleaner.clean(f.title)
+                kotlinx.coroutines.runBlocking {
+                    db.metadata().save(
+                        MetadataEntity(
+                            cacheKey = "$type|${title.lowercase()}|${year ?: ""}", found = true, fetchedAt = now,
+                            tmdbId = 5000L + index, title = f.title, year = f.year, overview = f.overview,
+                            poster = poster, backdrop = backdrop, rating = 6.4 + (index % 7) * 0.3,
+                            runtimeMinutes = if (type == "movie") 92 + index * 4 else null, genres = f.genre,
+                            people = peopleFor(index), seasons = if (type == "tv") 1 + index % 3 else null,
+                        ),
+                    )
+                }
+            }
+            films.forEachIndexed { i, f -> save("movie", f, i, image("film$i.jpg"), image("film${i}_bg.jpg")) }
+            series.forEachIndexed { i, f -> save("tv", f, 20 + i, image("series$i.jpg"), image("series${i}_bg.jpg")) }
+
+            // Part-watched: a film (leads Home) and an episode.
+            db.progress().save(
+                ProgressEntity(
+                    url = "http://demo.invalid/series/0/e3", title = "Cobalt Street · S1 E3", poster = image("series0.jpg"),
+                    positionMs = 21 * MINUTE, durationMs = 48 * MINUTE, updatedAt = now - 2 * 86_400_000L,
+                ),
+            )
+            db.progress().save(
+                ProgressEntity(
+                    url = "http://demo.invalid/movie/4.mkv", title = "Ember Valley", poster = image("film4.jpg"),
+                    positionMs = 47 * MINUTE, durationMs = 108 * MINUTE, updatedAt = now - 3_600_000L,
+                ),
+            )
+            // Recently watched channels and a few favourites.
+            listOf(0, 3, 2, 7, 5).forEachIndexed { order, i ->
+                val (name, _) = channels[i]
+                db.history().save(
+                    HistoryEntity(
+                        key = "$pid|${name.lowercase()}", name = name, logo = image("ch$i.png"), number = 101 + i,
+                        playlistId = pid, guideId = "ch$i", watchedAt = now - order * 3_600_000L,
+                    ),
+                )
+            }
+            listOf(0, 1, 3, 4, 2, 9).forEachIndexed { order, i ->
+                db.favourites().add(FavouriteEntity("$pid|${channels[i].first.lowercase()}", now - order * MINUTE))
+            }
+        }
+    }
+}

@@ -93,6 +93,8 @@ fun AppRoot(
     themeId: ThemeId,
     onThemeChange: (ThemeId) -> Unit,
     container: AppContainer,
+    /** The section the app opens on. Always Home in the app; the screenshot test opens others. */
+    startAt: Dest = Dest.HOME,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -118,7 +120,7 @@ fun AppRoot(
     // Bring TV guides up to date in the background when the app opens.
     LaunchedEffect(Unit) { container.playlists.refreshStaleGuides() }
 
-    var dest by rememberSaveable { mutableStateOf(Dest.HOME) }
+    var dest by rememberSaveable { mutableStateOf(startAt) }
     var mode by remember { mutableStateOf(PlayerMode.NONE) }
     var backHeld by remember { mutableStateOf(false) }
 
@@ -199,7 +201,7 @@ fun AppRoot(
     // The app opens with the menu focused on Home.
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        runCatching { menuFocus.getValue(Dest.HOME).requestFocus() }
+        runCatching { menuFocus.getValue(if (startAt in SidebarSections) startAt else Dest.HOME).requestFocus() }
     }
     LaunchedEffect(menuFocused) { if (menuFocused) startupPending = false }
     // Leaving full-screen live TV puts the picture in the side panel and focus on the menu.

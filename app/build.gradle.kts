@@ -49,6 +49,19 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // The screenshot test runs the real screens on the build machine (Robolectric) and saves pictures.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.maxHeapSize = "3g"
+                // A fresh JVM per test, so each starts with an empty database and settings store.
+                it.forkEvery = 1
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+            }
+        }
+    }
 }
 
 dependencies {
@@ -81,4 +94,11 @@ dependencies {
     implementation(libs.tv.material)
 
     debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
 }
