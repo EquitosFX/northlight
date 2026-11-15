@@ -70,6 +70,8 @@ data class VodItem(
     val referrer: String? = null,
     /** Start at the beginning even if the viewer got part-way before. */
     val fromStart: Boolean = false,
+    /** A past programme from a channel's catch-up: not kept in Continue watching. */
+    val catchup: Boolean = false,
 )
 
 /**
@@ -260,6 +262,17 @@ class LivePlayerController(
         get() = queue.indexOfFirst { it.url == vod?.url }.let { it >= 0 && it + 1 < queue.size }
 
     /** Moves to the next (+1) or previous (-1) episode, when playing from a series. */
+    /** The next episode's title, when there is one after the one playing. */
+    val nextEpisodeTitle: String?
+        get() = queue.indexOfFirst { it.url == vod?.url }.takeIf { it >= 0 }?.let { queue.getOrNull(it + 1)?.title }
+
+    /** Jumps to [millis] in the film or episode (used by Skip intro). */
+    fun seekTo(millis: Long) {
+        if (vod == null) return
+        val duration = player.duration
+        player.seekTo(if (duration > 0) millis.coerceIn(0, duration - 1_000) else millis.coerceAtLeast(0))
+    }
+
     fun skipEpisode(delta: Int) {
         val index = queue.indexOfFirst { it.url == vod?.url }
         val target = queue.getOrNull(index + delta) ?: return
@@ -386,6 +399,7 @@ class LivePlayerController(
 
     private fun saveVodProgress() {
         val item = vod ?: return
+        if (item.catchup) return
         val position = player.currentPosition
         val duration = player.duration.coerceAtLeast(0)
         if (position < MIN_RESUME_MILLIS) return
@@ -623,6 +637,9 @@ class LivePlayerController(
                 MediaItem.LiveConfiguration.Builder()
                     .setTargetOffsetMs(LIVE_OFFSET_MILLIS)
                     .setMinOffsetMs(2_000)
+                    // Always normal speed: no speeding up or slowing down to drift towards live.
+                    .setMinPlaybackSpeed(1f)
+                    .setMaxPlaybackSpeed(1f)
                     .build(),
             )
             .build()
@@ -789,6 +806,6 @@ class LivePlayerController(
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
         const val TIMESHIFT_START_MILLIS = 12_000L
         /** How far behind the newest recorded slice "live" plays, so it never runs dry. */
-        const val LIVE_OFFSET_MILLIS = 5_000L
+        const val LIVE_OFFSET_MILLIS = 3_000L
     }
 }

@@ -1,5 +1,9 @@
 package app.tvplayer.player
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusable
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -70,8 +74,8 @@ private enum class Panel { NONE, SUBTITLES, AUDIO, FIND }
 fun PlayerControls(
     controller: LivePlayerController,
     subtitles: SubtitlesRepository,
-    title: String,
-    subtitle: String?,
+    /** What's playing, shown large above the buttons: the channel and programme, or the film. */
+    info: @Composable () -> Unit,
     onChannels: (() -> Unit)?,
     onHide: () -> Unit,
     modifier: Modifier = Modifier,
@@ -88,9 +92,13 @@ fun PlayerControls(
     var touched by remember { mutableIntStateOf(0) }
     val playFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
+    // Nothing is highlighted when the controls open: focus waits on an invisible spot, and the first
+    // arrow press highlights Pause. That way pressing OK twice never pauses by accident.
+    val restFocus = remember { FocusRequester() }
+    var resting by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        runCatching { playFocus.requestFocus() }
+        runCatching { restFocus.requestFocus() }
         while (true) {
             position = controller.player.currentPosition
             duration = controller.player.duration.coerceAtLeast(0)
@@ -107,7 +115,11 @@ fun PlayerControls(
         onHide()
     }
     LaunchedEffect(panel) {
-        if (panel == Panel.NONE) runCatching { playFocus.requestFocus() } else runCatching { panelFocus.requestFocus() }
+        if (panel != Panel.NONE) {
+            runCatching { panelFocus.requestFocus() }
+        } else if (!resting) {
+            runCatching { playFocus.requestFocus() }
+        }
     }
     BackHandler {
         if (panel == Panel.FIND) panel = Panel.SUBTITLES else if (panel != Panel.NONE) panel = Panel.NONE else onHide()
@@ -129,10 +141,30 @@ fun PlayerControls(
                 .padding(start = 48.dp, end = 48.dp, top = 64.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Label(text = title, style = AppType.headline, maxLines = 1)
-            if (subtitle != null) Label(text = subtitle, style = AppType.body, color = colors.textDim, maxLines = 1)
+            info()
+            Spacer(Modifier.height(4.dp))
             Timeline(live = live, seekable = seekable, position = position, duration = duration, behind = behind)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(1.dp)
+                        .focusRequester(restFocus)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            when (event.key) {
+                                Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown -> {
+                                    resting = false
+                                    runCatching { playFocus.requestFocus() }
+                                    true
+                                }
+                                // OK with nothing highlighted does nothing (the controls are already open).
+                                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> true
+                                else -> false
+                            }
+                        }
+                        .focusProperties { canFocus = resting }
+                        .focusable(),
+                )
                 ControlButton(ControlIcon.REWIND, "${step / 1000} s", enabled = seekable) { controller.seekBy(-step) }
                 ControlButton(
                     if (playing) ControlIcon.PAUSE else ControlIcon.PLAY,
@@ -485,3 +517,65 @@ private fun clock(millis: Long): String {
 private const val LIVE_STEP_MILLIS = 30_000L
 private const val VOD_STEP_MILLIS = 10_000L
 private const val HIDE_MILLIS = 8_000L
+
+/** Live TV details for the controls: logo, number and name, the programme on, its times, what's next. */
+@Composable
+fun LiveInfo(controller: LivePlayerController) {
+    val colors = AppTheme.colors
+    val channel = controller.current ?: return
+    val now = controller.nowNext.firstOrNull()
+    val next = controller.nowNext.getOrNull(1)
+    val clockNow = System.currentTimeMillis()
+    Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Top) {
+        app.tvplayer.ui.components.Logo(url = channel.logo, modifier = Modifier.size(width = 84.dp, height = 60.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+            Label(text = "${channel.number}  ${channel.name}", style = InfoName, maxLines = 1)
+            if (now != null) {
+                Label(text = now.title, style = InfoTitle, maxLines = 1)
+                val left = ((now.stop - clockNow) / 60_000).coerceAtLeast(0)
+                Label(
+                    text = listOfNotNull(
+                        "${app.tvplayer.ui.components.clockTime(now.start)}–${app.tvplayer.ui.components.clockTime(now.stop)}",
+                        if (clockNow in now.start until now.stop) "$left min left" else null,
+                        now.category,
+                    ).joinToString("  ·  "),
+                    style = InfoMeta,
+                    color = colors.accent,
+                )
+                now.description?.let { Label(text = it, style = InfoBody, color = colors.textDim, maxLines = 2) }
+            } else {
+                Label(text = "No programme information", style = InfoBody, color = colors.textDim)
+            }
+            if (next != null) {
+                Label(
+                    text = "Next  ${app.tvplayer.ui.components.clockTime(next.start)}  ${next.title}",
+                    style = InfoMeta,
+                    color = colors.textDim,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+/** Film or episode details for the controls: title, year, rating, length and plot. */
+@Composable
+fun VodInfo(title: String, details: app.tvplayer.data.db.MetadataEntity?) {
+    val colors = AppTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Label(text = title, style = InfoName, maxLines = 1)
+        val meta = listOfNotNull(
+            details?.year?.toString(),
+            details?.rating?.let { "★ %.1f".format(it) },
+            details?.runtimeMinutes?.let { "${it / 60}h ${it % 60}m" },
+            details?.genres,
+        ).joinToString("  ·  ")
+        if (meta.isNotEmpty()) Label(text = meta, style = InfoMeta, color = colors.accent, maxLines = 1)
+        details?.overview?.let { Label(text = it, style = InfoBody, color = colors.textDim, maxLines = 3) }
+    }
+}
+
+private val InfoName = AppType.headline.copy(fontSize = 28.sp, lineHeight = 32.sp)
+private val InfoTitle = AppType.title.copy(fontSize = 20.sp, lineHeight = 24.sp)
+private val InfoMeta = AppType.label.copy(fontSize = 15.sp, lineHeight = 19.sp)
+private val InfoBody = AppType.body.copy(fontSize = 16.sp, lineHeight = 22.sp)

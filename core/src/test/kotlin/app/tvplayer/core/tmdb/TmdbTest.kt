@@ -148,4 +148,17 @@ class TmdbTest {
         assertTrue(index.find(listOf(TmdbCredit("Low Tide", 2019, "movie", null))).isEmpty())
         assertEquals(listOf("Low Tide (1975)"), index.find(listOf(TmdbCredit("Low Tide", 1976, "movie", null))))
     }
+
+    @Test
+    fun readsRecommendationsAsCredits() {
+        val text = """{"page":1,"results":[
+            {"id":1,"title":"Low Tide","release_date":"2019-05-01","media_type":"movie"},
+            {"id":2,"name":"Harbour Lights","first_air_date":"2021-01-04"},
+            {"id":3}
+        ]}"""
+        val found = TmdbParser.parseRecommendations(text, "tv")
+        assertEquals(2, found.size)
+        assertEquals(TmdbCredit("Low Tide", 2019, "movie", null), found[0])
+        assertEquals(TmdbCredit("Harbour Lights", 2021, "tv", null), found[1])
+    }
 }

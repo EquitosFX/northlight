@@ -128,6 +128,12 @@ object DemoData {
                     }.source().buffer().asResponseBody("video/mp2t".toMediaType(), -1),
                 )
                 .build()
+            // TheIntroDB: episodes open with a 90-second intro; films have no timings.
+            url.host == "api.theintrodb.org" -> if (url.queryParameter("season") != null) {
+                reply(200, """{"intro":[{"start_ms":null,"end_ms":90000}],"recap":[],"credits":[],"preview":[]}""")
+            } else {
+                reply(404, "")
+            }
             // Settings › Updates: pretend GitHub has a newer build.
             url.host == "api.github.com" && path.endsWith("/releases/latest") -> reply(
                 200,
@@ -135,6 +141,13 @@ object DemoData {
                     """"browser_download_url":"https://github.com/EquitosFX/northlight/releases/download/latest/northlight.apk"}]}""",
             )
             url.host != "api.themoviedb.org" -> reply(404, "")
+            // "Because you watched…": TMDB suggests three of the demo films.
+            path.endsWith("/recommendations") -> reply(
+                200,
+                listOf(films[5], films[9], films[7]).joinToString(",", "{\"results\":[", "]}") { f ->
+                    "{\"media_type\":\"movie\",\"title\":\"${f.title}\",\"release_date\":\"${f.year}-03-01\"}"
+                },
+            )
             path.endsWith("/search/person") -> {
                 val query = url.queryParameter("query").orEmpty().lowercase()
                 val found = people.filter { query.isNotBlank() && it.lowercase().contains(query) }
@@ -201,6 +214,8 @@ object DemoData {
                 variantKey = name.lowercase(), quality = 2, url = "http://demo.invalid/live/$i.ts", remoteId = i.toLong(),
                 logo = image("ch$i.png"), groupName = group, number = 101 + i, guideId = "ch$i", epgId = "ch$i",
                 position = i,
+                // The first four channels keep a week of catch-up, as many Xtream servers do.
+                catchupDays = if (i < 4) 7 else null,
             )
         }
         films.forEachIndexed { i, f ->
@@ -233,9 +248,9 @@ object DemoData {
         }
         db.channels().insertAllBlocking(rows)
 
-        // A guide running from an hour and a half ago to six hours ahead.
+        // A guide running from a day ago (for catch-up) to six hours ahead.
         val guide = ArrayList<ProgrammeEntity>()
-        val first = now - now % HALF_HOUR - 3 * HALF_HOUR
+        val first = now - now % HALF_HOUR - 48 * HALF_HOUR
         channels.forEachIndexed { i, (_, group) ->
             val titles = programmes.getValue(group)
             var start = first - random.nextInt(0, 2) * HALF_HOUR
@@ -292,6 +307,8 @@ object DemoData {
                     positionMs = 47 * MINUTE, durationMs = 108 * MINUTE, updatedAt = now - 3_600_000L,
                 ),
             )
+            // A film played recently, for "Because you watched…".
+            container.watched.record("Ember Valley")
             // Recently watched channels and a few favourites.
             listOf(0, 3, 2, 7, 5).forEachIndexed { order, i ->
                 val (name, _) = channels[i]

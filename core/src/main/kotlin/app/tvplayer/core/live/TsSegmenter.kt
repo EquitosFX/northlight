@@ -25,8 +25,8 @@ class TsSegmenter(
     private val store: SegmentStore,
     private val windowSeconds: Double,
     private val maxBytes: Long,
-    private val minSeconds: Double = 1.0,
-    private val maxSeconds: Double = 2.0,
+    private val minSeconds: Double = 0.5,
+    private val maxSeconds: Double = 1.0,
     /** The first slice is cut early so a channel starts quickly. */
     private val firstSeconds: Double = 0.6,
     /** Milliseconds now; used to time slices when a stream carries no clock. */
@@ -62,10 +62,10 @@ class TsSegmenter(
     private var partialLength = 0
 
     /**
-     * The longest a slice can be, rounded up, with a second to spare. The player re-reads the playlist
-     * this often, so slices are kept short to play close to live without running dry.
+     * The playlist's target duration: the longest slice, rounded. The player re-reads the playlist this
+     * often, so slices are kept short (a second by default) to play close to live without running dry.
      */
-    val targetDuration: Int = kotlin.math.ceil(maxSeconds).toInt() + 1
+    val targetDuration: Int = kotlin.math.round(maxSeconds).toInt().coerceAtLeast(1)
 
     /** How many slices have been written and kept so far. */
     val sliceCount: Int get() = slices.size

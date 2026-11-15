@@ -91,7 +91,7 @@ class TsSegmenterTest {
             assertEquals(0, b.size % 188)
             assertEquals(0, ((b[1].toInt() and 0x1F) shl 8) or (b[2].toInt() and 0xFF)) // PAT first
         }
-        assertTrue(store.playlist.startsWith("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n"))
+        assertTrue(store.playlist.startsWith("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:5\n#EXT-X-MEDIA-SEQUENCE:0\n"))
         assertFalse(store.playlist.contains("ENDLIST"))
     }
 
@@ -125,9 +125,9 @@ class TsSegmenterTest {
         val seg = TsSegmenter(store, windowSeconds = 600.0, maxBytes = Long.MAX_VALUE, clock = { 0L })
         seg.feed(stream(12, gop = 12))
         seg.finish()
-        assertEquals(3, seg.targetDuration)
-        assertTrue(store.playlist.contains("#EXT-X-TARGETDURATION:3\n"))
-        assertTrue(durations(store.playlist).all { it <= 2.5 })
+        assertEquals(1, seg.targetDuration)
+        assertTrue(store.playlist.contains("#EXT-X-TARGETDURATION:1\n"))
+        assertTrue(durations(store.playlist).all { it < 1.5 })
     }
 
     @Test

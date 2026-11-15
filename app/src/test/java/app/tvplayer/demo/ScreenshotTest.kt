@@ -224,10 +224,15 @@ class ScreenshotTest {
         press("right")
         expectFocus("Resume", "Right from the menu")
         expectPanel(open = false, step = "Browsing Home")
+        expectShown("Live: Meridian One", "The hero's live button names the channel it opens")
         shot("02-home-browsing")
 
         press("down", "down")
         expectFocus("Ember Valley", "Down to Continue watching")
+        press("down")
+        expectShown("Because you watched Ember Valley", "Suggestions from what's been watched")
+        expectFocus("Signal Lost", "Down to the suggestions")
+        shot("03a-home-suggestions")
         press("down")
         expectFocus("Meridian One", "Down to Recent channels")
         shot("03-home-rails")
@@ -274,9 +279,11 @@ class ScreenshotTest {
         press("right", "down", "right")
         expectFocus("TV Guide", "The TV Guide shortcut")
         press("ok")
-        // It opens straight into the listings, so the categories are tucked away.
+        // It opens on the categories; OK on one shows its listings.
         expectShown("Meridian One", "The TV Guide shortcut opens the guide")
-        expectHidden("Favourites", "The TV Guide shortcut opens the listings")
+        expectFocus("All channels", "The TV Guide shortcut opens on the categories")
+        press("ok")
+        expectHidden("Favourites", "OK on a category shows just the listings")
     }
 
     @Test fun recents() {
@@ -292,11 +299,15 @@ class ScreenshotTest {
         expectShown("Meridian One", "Guide channels")
         shot("06-guide-menu")
 
-        // Right from the menu: just the listings, no menu or categories.
+        // Right from the menu: the categories, on the one in use.
         press("right")
         expectPanel(open = false, step = "Into the guide")
+        expectFocus("All channels", "Into the guide lands on the categories")
+        expectShown("Favourites", "The guide opens on its categories")
+        // OK on a category: just the listings, no menu or categories.
+        press("ok")
         expectHidden("Favourites", "The categories step aside in the listings")
-        if (isCategory(focusedText())) problems += "Into the guide: landed on the categories rather than the listings"
+        if (isCategory(focusedText())) problems += "OK on a category: focus stayed on the categories"
         press("down", "down")
         shot("07-guide-listings")
 
@@ -324,14 +335,20 @@ class ScreenshotTest {
         expectPanel(open = true, step = "Back in the side menu")
 
         // Play the news channel and open the player controls.
-        press("right", "ok")
+        press("right")
+        expectFocus("News", "Right from the menu returns to the chosen category")
+        press("ok", "ok")
         expectShown("Atlas News", "Playing shows the channel")
         shot("09-playing-live")
         press("ok")
         expectShown("Subtitles", "OK shows the player controls")
         expectShown("Channels", "The controls offer the channel list")
+        expectShown("min left", "The controls show the programme's times")
+        if (focusedText().contains("Pause")) problems += "The controls opened with Pause already highlighted"
         shot("09b-player-controls")
-        press("right", "right", "right")
+        press("ok")
+        expectShown("Subtitles", "OK with nothing highlighted keeps the controls open")
+        press("right", "right", "right", "right")
         expectFocus("Subtitles", "Along the controls to Subtitles")
         press("ok")
         expectShown("Off", "The subtitles menu")
@@ -345,6 +362,25 @@ class ScreenshotTest {
         shot("10-picture-in-panel")
         press("down")
         expectFocus("Recents", "Down the menu with the picture showing")
+    }
+
+    @Test fun catchup() {
+        open(Dest.GUIDE)
+        press("right", "ok")
+        expectFocus("", "Into the listings")
+        // Left goes back in time; past programmes on catch-up channels can be played again.
+        var found = false
+        repeat(6) {
+            if (!found) {
+                press("left")
+                found = rule.onAllNodesWithText("OK to watch from the start", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        if (!found) problems += "Left in the guide didn't reach a catch-up programme"
+        shot("07b-guide-catch-up")
+        press("ok")
+        expectShown("Meridian One ·", "OK on a past programme plays it from the start")
+        shot("07c-catch-up-playing")
     }
 
     private fun isCategory(text: String) = listOf(
@@ -386,8 +422,9 @@ class ScreenshotTest {
         press("ok")
         expectShown("Subtitles", "OK shows the film's controls")
         expectShown("10 s", "The film's controls skip 10 seconds")
+        expectShown("Harbour of Glass", "The film's controls show its title")
         shot("13b-film-controls")
-        press("right", "right")
+        press("right", "right", "right")
         expectFocus("Subtitles", "Along the film controls to Subtitles")
         press("ok")
         expectShown("Find on OpenSubtitles", "Films can search OpenSubtitles")
@@ -438,6 +475,13 @@ class ScreenshotTest {
         expectShown("Episode 4", "An M3U series lists its episodes")
         expectFocus("E1", "Its first episode")
         shot("17b-m3u-series-episodes")
+
+        // Playing an episode offers Skip intro while the intro runs.
+        press("ok")
+        expectShown("Skip intro", "An episode with a known intro offers Skip intro")
+        shot("17c-skip-intro")
+        press("ok")
+        expectHidden("Skip intro", "OK skips the intro")
     }
 
     @Test fun search() {

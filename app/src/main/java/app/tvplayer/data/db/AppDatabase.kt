@@ -46,6 +46,7 @@ data class LiveRow(
     val groupName: String?,
     val number: Int?,
     val epgId: String?,
+    val catchupDays: Int?,
 )
 
 /** Changes whenever live channels are added, removed or re-imported. */
@@ -79,7 +80,7 @@ interface ChannelDao {
     fun deleteForPlaylistBlocking(playlistId: Long)
 
     @Query(
-        "SELECT id, playlistId, baseName, variantKey, quality, isBackup, logo, groupName, number, epgId " +
+        "SELECT id, playlistId, baseName, variantKey, quality, isBackup, logo, groupName, number, epgId, catchupDays " +
             "FROM channels WHERE kind = 'live' ORDER BY playlistId, position",
     )
     fun liveRowsBlocking(): List<LiveRow>

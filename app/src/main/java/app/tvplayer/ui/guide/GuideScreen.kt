@@ -1,5 +1,8 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import app.tvplayer.core.catchup.Catchup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.onFocusChanged
@@ -68,8 +71,16 @@ private const val HOUR = 60 * MINUTE
 /** How much time the grid shows at once. */
 private const val WINDOW = 2 * HOUR
 
-private val ChannelColumn = 196.dp
-private val RowHeight = 40.dp
+private val ChannelColumn = 214.dp
+private val RowHeight = 46.dp
+private const val DAY = 24 * HOUR
+
+/** A little larger than the app's standard sizes, so the guide reads easily from the sofa. */
+private val GuideChannelText = AppType.title.copy(fontSize = 15.sp)
+private val GuideCellText = AppType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium)
+private val GuideTitleText = AppType.headline.copy(fontSize = 26.sp, lineHeight = 30.sp)
+private val GuideMetaText = AppType.label.copy(fontSize = 14.sp, lineHeight = 18.sp)
+private val GuideBodyText = AppType.body.copy(fontSize = 15.sp, lineHeight = 21.sp)
 private val SideMargin = 14.dp
 private const val FAVOURITES = "\u0000favourites"
 
@@ -82,12 +93,23 @@ private data class Focused(val channel: LineupChannel, val programme: ProgrammeE
  * Selecting a programme that is on now, or a channel with no guide data, plays that channel.
  */
 @Composable
-fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
+fun GuideScreen(
+    channels: ChannelsRepository,
+    onPlay: (LineupChannel) -> Unit,
+    /** Plays a past programme again, on a channel whose provider keeps catch-up. */
+    onCatchup: (LineupChannel, ProgrammeEntity) -> Unit,
+) {
     val colors = AppTheme.colors
     val lineup by produceState<Lineup?>(initialValue = null) { value = channels.lineup() }
     val now = remember { System.currentTimeMillis() }
-    val earliest = remember { now - now % HALF_HOUR }
-    var windowStart by remember { mutableLongStateOf(earliest) }
+    val liveStart = remember { now - now % HALF_HOUR }
+    // The guide goes back as far as the longest catch-up any channel has.
+    val earliest = remember(lineup) {
+        val days = lineup?.channels?.maxOfOrNull { it.catchupDays ?: 0 } ?: 0
+        val from = now - days * DAY
+        from - from % HALF_HOUR
+    }
+    var windowStart by remember { mutableLongStateOf(liveStart) }
     var focused by remember { mutableStateOf<Focused?>(null) }
     val firstFocus = remember { FocusRequester() }
     val entryFocus = remember { FocusRequester() }
@@ -109,7 +131,7 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
     }
 
     fun shift(by: Long) {
-        windowStart = (windowStart + by).coerceIn(earliest, earliest + 7 * 24 * HOUR - WINDOW)
+        windowStart = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
     }
 
     // Once a category is chosen the categories step aside and the listings fill the screen.
@@ -185,12 +207,14 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
                     windowStart = windowStart,
                     now = now,
                     canGoBack = windowStart > earliest,
-                    focusRequester = if (index == 0 && !placedFocus) firstFocus else null,
+                    // The guide opens on the categories; the listings never take focus by themselves.
+                    focusRequester = null,
                     entry = if (index == 0) entryFocus else null,
                     onFocusPlaced = { placedFocus = true },
                     onFocus = { programme -> focused = Focused(channel, programme) },
                     onShift = ::shift,
                     onPlay = { onPlay(channel) },
+                    onCatchup = { programme -> onCatchup(channel, programme) },
                 )
             }
         }
@@ -212,6 +236,13 @@ private fun Categories(
     val entries = remember(groups) { listOf<String?>(FAVOURITES, null) + groups }
     // Coming back to the categories lands on the chosen one.
     val entry = remember { EntryFocus() }
+    // The guide opens here: moving in from the menu, or arriving from a button, lands on the chosen category.
+    EntryPoint(currentFocus)
+    val autoFocus = LocalAutoFocus.current
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        if (autoFocus()) runCatching { currentFocus.requestFocus() }
+    }
     Column(modifier = modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Label(text = "TV guide", style = AppType.headline, modifier = Modifier.padding(start = 10.dp, bottom = 6.dp))
         LazyColumn(
@@ -230,7 +261,7 @@ private fun Categories(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(34.dp)
+                        .height(38.dp)
                         .then(if (current) Modifier.focusRequester(currentFocus) else Modifier),
                     shape = RoundedCornerShape(3.dp),
                     container = if (current) colors.glass else Color.Transparent,
@@ -245,7 +276,7 @@ private fun Categories(
                             FAVOURITES -> "Favourites"
                             else -> name
                         },
-                        style = if (focused || current) AppType.title else AppType.body,
+                        style = if (focused || current) GuideChannelText.copy(fontSize = 16.sp) else AppType.body.copy(fontSize = 16.sp),
                         color = if (focused || current) colors.text else colors.textDim,
                         modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 10.dp),
                     )
@@ -261,7 +292,7 @@ private fun Header(focused: Focused?, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(112.dp)
+            .height(124.dp)
             .padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -269,15 +300,15 @@ private fun Header(focused: Focused?, modifier: Modifier = Modifier) {
         val channel = focused.channel
         val programme = focused.programme
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Logo(url = channel.logo, modifier = Modifier.size(width = 34.dp, height = 22.dp))
-            Label(text = "${channel.number} · ${channel.name}", style = AppType.label, color = colors.textDim)
+            Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 26.dp))
+            Label(text = "${channel.number} · ${channel.name}", style = AppType.title, color = colors.textDim)
         }
         if (programme == null) {
-            Label(text = "No programme information", style = AppType.headline)
-            Label(text = "Press OK to watch this channel.", style = AppType.body, color = colors.textDim)
+            Label(text = "No programme information", style = GuideTitleText)
+            Label(text = "Press OK to watch this channel.", style = GuideBodyText, color = colors.textDim)
             return@Column
         }
-        Label(text = programme.title, style = AppType.headline)
+        Label(text = programme.title, style = GuideTitleText, maxLines = 1)
         val episode = if (programme.season != null && programme.episode != null) {
             "S${programme.season} E${programme.episode}"
         } else {
@@ -290,10 +321,18 @@ private fun Header(focused: Focused?, modifier: Modifier = Modifier) {
             programme.subTitle,
             programme.category,
         ).joinToString(" · ")
-        Label(text = meta, style = AppType.label, color = colors.accent)
+        val now = System.currentTimeMillis()
+        val hint = when {
+            now in programme.start until programme.stop -> "On now · OK to watch"
+            programme.stop <= now && Catchup.available(channel.catchupDays, programme.start, programme.stop, now) ->
+                "Catch-up · OK to watch from the start"
+            programme.stop <= now -> "Catch-up isn't available on this channel"
+            else -> null
+        }
+        Label(text = listOfNotNull(meta, hint).joinToString("  ·  "), style = GuideMetaText, color = colors.accent, maxLines = 1)
         val description = programme.description
         if (description != null) {
-            Label(text = description, style = AppType.body, color = colors.textDim, maxLines = 2)
+            Label(text = description, style = GuideBodyText, color = colors.textDim, maxLines = 2)
         }
     }
 }
@@ -309,7 +348,7 @@ private fun TimeRuler(windowStart: Long, now: Long) {
     ) {
         Box(modifier = Modifier.width(ChannelColumn + 4.dp)) {
             Label(
-                text = if (windowStart - now > 18 * HOUR) dayLabel(windowStart) else "Today",
+                text = if (sameDay(windowStart, now)) "Today" else dayLabel(windowStart),
                 style = AppType.label,
                 color = colors.textDim,
                 modifier = Modifier.align(Alignment.CenterStart),
@@ -354,6 +393,7 @@ private fun GuideRow(
     onFocus: (ProgrammeEntity?) -> Unit,
     onShift: (Long) -> Unit,
     onPlay: () -> Unit,
+    onCatchup: (ProgrammeEntity) -> Unit,
 ) {
     val colors = AppTheme.colors
     val windowEnd = windowStart + WINDOW
@@ -380,12 +420,12 @@ private fun GuideRow(
         ) {
             Label(
                 text = channel.number.toString(),
-                style = AppType.caption,
+                style = AppType.label,
                 color = colors.textDim,
-                modifier = Modifier.width(30.dp),
+                modifier = Modifier.width(32.dp),
             )
-            Logo(url = channel.logo, modifier = Modifier.size(width = 36.dp, height = 26.dp))
-            Label(text = channel.name, style = AppType.label)
+            Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 28.dp))
+            Label(text = channel.name, style = GuideChannelText)
         }
 
         BoxWithConstraints(
@@ -419,13 +459,13 @@ private fun GuideRow(
                     width = width,
                     past = false,
                     live = false,
+                    catchup = false,
                     onFocus = { onFocus(null) },
                     onClick = onPlay,
                     modifier = edgeKeys(windowStart, windowEnd)
                         .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                         .then(if (entry != null) Modifier.focusRequester(entry) else Modifier),
                 )
-                if (entry != null) EntryPoint(entry)
                 if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
                 return@BoxWithConstraints
             }
@@ -436,6 +476,7 @@ private fun GuideRow(
                 val to = minOf(programme.stop, windowEnd)
                 if (to - from < MINUTE) continue
                 val live = now in programme.start until programme.stop
+                val catchup = !live && Catchup.available(channel.catchupDays, programme.start, programme.stop, now)
                 key(programme.id) {
                     GuideCell(
                         title = programme.title,
@@ -443,8 +484,14 @@ private fun GuideRow(
                         width = position(to - from, width) - 3.dp,
                         past = programme.stop <= now,
                         live = live,
+                        catchup = catchup,
                         onFocus = { onFocus(programme) },
-                        onClick = { if (live) onPlay() },
+                        onClick = {
+                            when {
+                                live -> onPlay()
+                                catchup -> onCatchup(programme)
+                            }
+                        },
                         modifier = edgeKeys(programme.start, programme.stop).then(
                             if (focusRequester != null && programme.id == focusTarget.id) {
                                 Modifier.focusRequester(focusRequester)
@@ -456,7 +503,6 @@ private fun GuideRow(
                             if (entry != null && programme.id == focusTarget.id) Modifier.focusRequester(entry) else Modifier,
                         ),
                     )
-                    if (entry != null && programme.id == focusTarget.id) EntryPoint(entry)
                 }
             }
             if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
@@ -471,6 +517,7 @@ private fun GuideCell(
     width: Dp,
     past: Boolean,
     live: Boolean,
+    catchup: Boolean,
     onFocus: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -489,18 +536,22 @@ private fun GuideCell(
         focusScale = 1f,
     ) { focused ->
         LaunchedEffect(focused) { if (focused) onFocus() }
-        Label(
-            text = title,
-            style = AppType.label,
-            color = when {
-                focused -> colors.onAccent
-                past -> colors.textFaint
-                else -> colors.text
-            },
+        val tint = when {
+            focused -> colors.onAccent
+            past && !catchup -> colors.textFaint
+            else -> colors.text
+        }
+        Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(horizontal = 8.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            // Past programmes that can be watched again carry a replay mark.
+            if (catchup) ReplayMark(tint = if (focused) colors.onAccent else colors.accent, modifier = Modifier.size(13.dp))
+            Label(text = title, style = GuideCellText, color = tint)
+        }
     }
 }
 
@@ -515,6 +566,35 @@ private fun FocusOnce(requester: FocusRequester, onPlaced: () -> Unit) {
 }
 
 private fun position(offsetMillis: Long, width: Dp): Dp = width * (offsetMillis.toFloat() / WINDOW)
+
+private fun sameDay(a: Long, b: Long): Boolean {
+    val zone = java.time.ZoneId.systemDefault()
+    return java.time.Instant.ofEpochMilli(a).atZone(zone).toLocalDate() == java.time.Instant.ofEpochMilli(b).atZone(zone).toLocalDate()
+}
+
+/** A small circular arrow: "watch again". */
+@Composable
+private fun ReplayMark(tint: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val stroke = size.width * 0.16f
+        drawArc(
+            color = tint,
+            startAngle = -60f,
+            sweepAngle = 290f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(stroke, stroke),
+            size = androidx.compose.ui.geometry.Size(size.width - 2 * stroke, size.height - 2 * stroke),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke),
+        )
+        val head = androidx.compose.ui.graphics.Path().apply {
+            moveTo(size.width * 0.62f, 0f)
+            lineTo(size.width * 0.98f, size.height * 0.12f)
+            lineTo(size.width * 0.72f, size.height * 0.4f)
+            close()
+        }
+        drawPath(head, tint)
+    }
+}
 
 private fun dayLabel(millis: Long): String =
     java.time.Instant.ofEpochMilli(millis)

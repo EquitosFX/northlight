@@ -13,6 +13,8 @@ data class LineupRow(
     val number: Int? = null,
     /** The TV guide's id for this channel, when it has been matched to one. */
     val guideId: String? = null,
+    /** Days of past programmes the provider keeps for this channel (catch-up); null or 0 for none. */
+    val catchupDays: Int? = null,
 )
 
 /** A channel as the viewer sees it: one entry however many quality copies the provider lists. */
@@ -27,6 +29,7 @@ data class LineupChannel(
     val variantIds: List<Long>,
     val playlistId: Long = 0,
     val guideId: String? = null,
+    val catchupDays: Int? = null,
 )
 
 /** The live channels across all playlists, in the order the providers list them. */
@@ -72,6 +75,7 @@ class Lineup private constructor(val channels: List<LineupChannel>) {
                     variantIds = ordered.map { it.id },
                     playlistId = first.playlistId,
                     guideId = members.firstNotNullOfOrNull { it.guideId },
+                    catchupDays = members.mapNotNull { it.catchupDays }.maxOrNull(),
                 )
             }
             return Lineup(channels)

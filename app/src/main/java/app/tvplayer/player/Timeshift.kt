@@ -59,13 +59,13 @@ class TimeshiftSession(
     val dir: File = File(root, "s${System.nanoTime()}").apply { mkdirs() }
     val playlist: File = File(dir, FileSegmentStore.PLAYLIST)
 
-    /** Completes once the first slice is ready to play. */
+    /** Completes once a few seconds are recorded, so playback starts with room to spare and never runs dry. */
     val ready = CompletableDeferred<Unit>()
 
     // Use at most half the free space, and never more than 8 GB.
     private val maxBytes = (dir.usableSpace / 2).coerceIn(256L * 1024 * 1024, 8L * 1024 * 1024 * 1024)
-    private val segmenter = TsSegmenter(
-        FileSegmentStore(dir) { if (!ready.isCompleted) ready.complete(Unit) },
+    private val segmenter: TsSegmenter = TsSegmenter(
+        FileSegmentStore(dir) { if (!ready.isCompleted && segmenter.recordedSeconds >= READY_SECONDS) ready.complete(Unit) },
         windowSeconds = windowSeconds,
         maxBytes = maxBytes,
     )
@@ -121,6 +121,9 @@ class TimeshiftSession(
     }
 
     companion object {
+        /** Seconds recorded before playback starts. */
+        const val READY_SECONDS = 3.0
+
         /** Clears recordings left behind by a previous run. */
         fun clearAll(root: File) {
             root.listFiles()?.forEach { it.deleteRecursively() }

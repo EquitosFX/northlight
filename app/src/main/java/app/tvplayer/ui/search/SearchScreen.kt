@@ -1,9 +1,6 @@
 package app.tvplayer.ui.search
 
 import app.tvplayer.ui.components.EntryPoint
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -57,26 +54,23 @@ fun SearchScreen(
 ) {
     val colors = AppTheme.colors
     var query by rememberSaveable { mutableStateOf("") }
-    var voiceProblem by remember { mutableStateOf<String?>(null) }
     val fieldFocus = remember { FocusRequester() }
     EntryPoint(fieldFocus)
     val autoFocus = LocalAutoFocus.current
     LaunchedEffect(Unit) { if (autoFocus()) runCatching { fieldFocus.requestFocus() } }
 
-    // Android TV's own speech screen listens through the remote's mic and hands back the words.
-    val listener = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (!spoken.isNullOrBlank()) query = spoken
+    // Listens in the app through the remote's mic; the words fill the search box as they're heard.
+    val voice = rememberVoiceInput { words -> query = words }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) voice.start() else voice.problem = "Allow the microphone to search by voice."
     }
     fun listen() {
-        voiceProblem = null
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a channel, film, series or person")
-        try {
-            listener.launch(intent)
-        } catch (e: ActivityNotFoundException) {
-            voiceProblem = "Voice search isn't available on this device."
+        if (voice.listening) {
+            voice.stop()
+        } else if (voice.hasPermission()) {
+            voice.start()
+        } else {
+            askMic.launch(android.Manifest.permission.RECORD_AUDIO)
         }
     }
     LaunchedEffect(voiceToken) { if (voiceToken > 0) listen() }
@@ -119,11 +113,25 @@ fun SearchScreen(
                     .width(430.dp)
                     .focusRequester(fieldFocus),
             )
-            FocusSurface(onClick = { listen() }, modifier = Modifier.height(36.dp)) {
-                Label(text = "Speak", style = AppType.title, modifier = Modifier.padding(horizontal = 18.dp))
+            FocusSurface(
+                onClick = { listen() },
+                modifier = Modifier.size(42.dp),
+                shape = androidx.compose.foundation.shape.CircleShape,
+                container = if (voice.listening) colors.accent else colors.glass,
+                focusedContainer = colors.accent,
+            ) { focused ->
+                MicIcon(
+                    tint = if (focused || voice.listening) colors.onAccent else colors.text,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(22.dp),
+                )
             }
         }
-        voiceProblem?.let { Label(text = it, style = AppType.body, color = colors.accent) }
+        when {
+            voice.listening -> Label(text = "Listening… say a channel, film, series or person", style = AppType.body, color = colors.accent)
+            voice.problem != null -> Label(text = voice.problem.orEmpty(), style = AppType.body, color = colors.accent)
+        }
 
         val list = results
         val status = when {

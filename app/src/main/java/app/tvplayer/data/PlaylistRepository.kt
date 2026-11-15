@@ -1,5 +1,12 @@
 package app.tvplayer.data
 
+import java.time.ZoneOffset
+import java.time.ZoneId
+import app.tvplayer.player.VodItem
+import app.tvplayer.core.live.LineupChannel
+import app.tvplayer.core.catchup.CatchupWindow
+import app.tvplayer.core.catchup.CatchupException
+import app.tvplayer.core.catchup.Catchup
 import app.tvplayer.core.vod.EpisodeNames
 import app.tvplayer.core.channels.ChannelVariants
 import app.tvplayer.core.guide.ChannelRef
@@ -173,6 +180,42 @@ class PlaylistRepository(
         )
     }
 
+    private val serverZones = HashMap<Long, ZoneId>()
+
+    /**
+     * The film-like item for watching [programme] again on [channel] (catch-up). Xtream Codes servers
+     * want the start in their own local time, so the server's time zone is asked for once per playlist.
+     */
+    suspend fun catchupItem(channel: LineupChannel, programme: ProgrammeEntity): VodItem = withContext(Dispatchers.IO) {
+        val row = channel.variantIds.firstNotNullOfOrNull { id -> db.channels().getBlocking(id)?.takeIf { (it.catchupDays ?: 0) > 0 } }
+            ?: throw IOException("This channel doesn't offer catch-up.")
+        val playlist = db.playlists().getBlocking(row.playlistId) ?: throw IOException("That playlist no longer exists.")
+        val type = row.catchupType ?: if (playlist.type == PlaylistEntity.TYPE_XTREAM) "xc" else null
+        val zone = if (type == "xc" && playlist.type == PlaylistEntity.TYPE_XTREAM) {
+            serverZones.getOrPut(playlist.id) {
+                val account = XtreamAccount(playlist.address, playlist.username.orEmpty(), playlist.password.orEmpty())
+                runCatching { XtreamParser.parseAuth(fetchText(XtreamUrls.api(account))).serverTimezone }
+                    .getOrNull()?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneOffset.UTC
+            }
+        } else {
+            ZoneOffset.UTC
+        }
+        val url = try {
+            Catchup.url(row.url, type, row.catchupSource, CatchupWindow(programme.start, programme.stop, System.currentTimeMillis()), zone)
+        } catch (e: CatchupException) {
+            throw IOException(e.message)
+        }
+        VodItem(
+            url = url,
+            title = "${channel.name} · ${programme.title}",
+            poster = channel.logo,
+            userAgent = row.userAgent,
+            referrer = row.referrer,
+            fromStart = true,
+            catchup = true,
+        )
+    }
+
     /** A plain-English reason for a failed download, for showing on screen. */
     fun explainError(e: Exception): String = explain(e)
 
@@ -249,7 +292,8 @@ class PlaylistRepository(
         if (urls.isEmpty()) return 0
         val channels = db.channels().matchRowsBlocking(playlist.id)
         val now = System.currentTimeMillis()
-        val keepFrom = now - DAY
+        // A week of past programmes is kept, for catch-up.
+        val keepFrom = now - 7 * DAY
         val keepTo = now + 7 * DAY
         state.value = ImportState.Working(playlist.name, "TV guide", 0)
 

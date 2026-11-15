@@ -1,5 +1,13 @@
 package app.tvplayer.player
 
+import androidx.compose.foundation.border
+import androidx.compose.runtime.mutableIntStateOf
+import app.tvplayer.core.intro.IntroSegments
+import app.tvplayer.core.intro.IntroDb
+import app.tvplayer.data.IntroRepository
+import app.tvplayer.data.db.ChannelEntity
+import app.tvplayer.data.db.MetadataEntity
+import app.tvplayer.data.MetadataRepository
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.CaptionStyleCompat
 import app.tvplayer.data.SubtitlesRepository
@@ -78,6 +86,8 @@ enum class PlayerMode { NONE, FULL, MINI }
 fun PlayerHost(
     controller: LivePlayerController,
     subtitles: SubtitlesRepository,
+    metadata: MetadataRepository,
+    intros: IntroRepository,
     mode: PlayerMode,
     onMinimise: () -> Unit,
     onExpand: () -> Unit,
@@ -119,7 +129,7 @@ fun PlayerHost(
         )
 
         if (mode == PlayerMode.FULL && controller.vod != null) {
-            VodLayer(controller = controller, subtitles = subtitles, onClose = onClose)
+            VodLayer(controller = controller, subtitles = subtitles, metadata = metadata, intros = intros, onClose = onClose)
         } else if (mode == PlayerMode.FULL) {
             FullScreenLayer(controller = controller, subtitles = subtitles, onMinimise = onMinimise, onClose = onClose)
         } else {
@@ -199,12 +209,10 @@ private fun FullScreenLayer(
 
         val channel = controller.current
         if (controlsOpen && channel != null) {
-            val now = controller.nowNext.firstOrNull()
             PlayerControls(
                 controller = controller,
                 subtitles = subtitles,
-                title = "${channel.number}  ${channel.name}",
-                subtitle = now?.title,
+                info = { LiveInfo(controller) },
                 onChannels = if (controller.lineup.isEmpty) null else ({ controlsOpen = false; listOpen = true }),
                 onHide = { controlsOpen = false },
             )
@@ -226,7 +234,13 @@ private fun FullScreenLayer(
 
 /** Controls for a film or episode: OK pauses, Left and Right skip 10 seconds, Back stops and saves the place. */
 @Composable
-private fun VodLayer(controller: LivePlayerController, subtitles: SubtitlesRepository, onClose: () -> Unit) {
+private fun VodLayer(
+    controller: LivePlayerController,
+    subtitles: SubtitlesRepository,
+    metadata: MetadataRepository,
+    intros: IntroRepository,
+    onClose: () -> Unit,
+) {
     val colors = AppTheme.colors
     val item = controller.vod ?: return
     val focus = remember { FocusRequester() }
@@ -238,6 +252,26 @@ private fun VodLayer(controller: LivePlayerController, subtitles: SubtitlesRepos
 
     BackHandler { onClose() }
     LaunchedEffect(controlsOpen) { if (!controlsOpen) runCatching { focus.requestFocus() } }
+
+    // Skip intro / recap and an early Up next, from TheIntroDB's timings.
+    val segments by produceState(IntroSegments(), item.url) { value = intros.segments(item) }
+    val skip = if (controlsOpen) null else IntroDb.offer(segments, position, duration)
+    val nextTitle = controller.nextEpisodeTitle
+    var upNextDismissed by remember(item.url) { mutableStateOf(false) }
+    val creditsAt = IntroDb.creditsStart(segments, duration)
+    val upNext = !controlsOpen && !upNextDismissed && nextTitle != null && creditsAt != null &&
+        position >= creditsAt && controller.status == PlaybackStatus.Playing
+    var upNextSeconds by remember { mutableIntStateOf(UP_NEXT_SECONDS) }
+    LaunchedEffect(upNext) {
+        if (!upNext) return@LaunchedEffect
+        for (seconds in UP_NEXT_SECONDS downTo 1) {
+            upNextSeconds = seconds
+            delay(1_000)
+        }
+        controller.skipEpisode(+1)
+    }
+    // Back while Up next shows keeps watching the credits.
+    BackHandler(enabled = upNext) { upNextDismissed = true }
     LaunchedEffect(controller.controlsToken) {
         visible = true
         delay(BANNER_MILLIS)
@@ -261,9 +295,10 @@ private fun VodLayer(controller: LivePlayerController, subtitles: SubtitlesRepos
                 when (event.key) {
                     // OK opens the controls (pause, skip, subtitles, audio, next episode).
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        when (controller.status) {
-                            PlaybackStatus.Failed -> controller.retry()
-                            is PlaybackStatus.UpNext -> controller.skipEpisode(+1)
+                        when {
+                            controller.status == PlaybackStatus.Failed -> controller.retry()
+                            controller.status is PlaybackStatus.UpNext || upNext -> controller.skipEpisode(+1)
+                            skip != null -> controller.seekTo(skip.toMs)
                             else -> controlsOpen = true
                         }
                         true
@@ -299,12 +334,37 @@ private fun VodLayer(controller: LivePlayerController, subtitles: SubtitlesRepos
             .focusable(),
     ) {
         StatusMessage(status = controller.status, modifier = Modifier.align(Alignment.Center))
+        if (skip != null && !upNext) {
+            SkipPill(
+                label = skip.label,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 48.dp, bottom = 110.dp),
+            )
+        }
+        if (upNext && nextTitle != null) {
+            UpNextCard(
+                title = nextTitle,
+                seconds = upNextSeconds,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 48.dp, bottom = 110.dp),
+            )
+        }
         if (controlsOpen) {
+            val details by produceState<MetadataEntity?>(null, item.url) {
+                if (item.catchup) return@produceState
+                val episode = app.tvplayer.core.subtitles.OpenSubtitles.seasonEpisode(item.title)
+                value = if (episode != null) {
+                    metadata.lookup(item.title.substringBefore(" · "), ChannelEntity.KIND_SERIES)
+                } else {
+                    metadata.lookup(item.title, ChannelEntity.KIND_MOVIE)
+                }
+            }
             PlayerControls(
                 controller = controller,
                 subtitles = subtitles,
-                title = item.title,
-                subtitle = null,
+                info = { VodInfo(item.title, details) },
                 onChannels = null,
                 onHide = { controlsOpen = false },
             )
@@ -711,3 +771,42 @@ private fun groupLabel(name: String?): String = when (name) {
 private const val BANNER_MILLIS = 5_000L
 private const val LOADING_DELAY_MILLIS = 600L
 private const val SKIP_MILLIS = 10_000L
+
+private const val UP_NEXT_SECONDS = 10
+
+/** "Skip intro · OK": shown while an intro or recap plays; OK jumps past it. */
+@Composable
+private fun SkipPill(label: String, modifier: Modifier = Modifier) {
+    val colors = AppTheme.colors
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.scrim)
+            .border(2.dp, colors.accent, RoundedCornerShape(10.dp))
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Label(text = label, style = AppType.title)
+        Label(text = "OK", style = AppType.label, color = colors.accent)
+    }
+}
+
+/** The next episode, counting down over the credits. OK plays it now; Back keeps watching. */
+@Composable
+private fun UpNextCard(title: String, seconds: Int, modifier: Modifier = Modifier) {
+    val colors = AppTheme.colors
+    Column(
+        modifier = modifier
+            .width(380.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.scrim)
+            .border(2.dp, colors.accent, RoundedCornerShape(12.dp))
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Label(text = "UP NEXT", style = AppType.caption, color = colors.accent)
+        Label(text = title, style = AppType.title, maxLines = 2)
+        Label(text = "Plays in $seconds s  ·  OK to play now  ·  Back to keep watching", style = AppType.label, color = colors.textDim)
+    }
+}

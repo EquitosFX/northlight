@@ -106,11 +106,51 @@ class MetadataRepository(
         }
     }
 
+    /** Suggestions already worked out this session, by watched title. */
+    private val suggested = HashMap<WatchedTitle, List<VodRow>>()
+
+    /**
+     * Films and series in the viewer's playlists that TMDB recommends for the ones they've watched,
+     * one list per watched title (most recent first). Titles already watched are left out. Empty without a key.
+     */
+    suspend fun recommendations(watched: List<WatchedTitle>, titles: Int = 3): List<Pair<WatchedTitle, List<VodRow>>> =
+        withContext(Dispatchers.IO) {
+            val key = settings.tmdbKey.first().trim()
+            if (key.isEmpty() || watched.isEmpty()) return@withContext emptyList()
+            val seen = watched.map { (if (it.isSeries) "S" else "F") + TitleCleaner.clean(it.name).first.lowercase().filter(Char::isLetterOrDigit) }.toSet()
+            fun watchedAlready(row: VodRow): Boolean {
+                val k = (if (row.kind == ChannelEntity.KIND_SERIES) "S" else "F") + TitleCleaner.clean(row.name).first.lowercase().filter(Char::isLetterOrDigit)
+                return k in seen
+            }
+            val index = libraryIndex()
+            val shown = HashSet<Long>()
+            watched.take(titles * 2).mapNotNull { title ->
+                val rows = suggested[title] ?: run {
+                    val info = lookup(title.name, if (title.isSeries) ChannelEntity.KIND_SERIES else ChannelEntity.KIND_MOVIE)
+                    val id = info?.tmdbId ?: return@mapNotNull null
+                    val type = if (title.isSeries) "tv" else "movie"
+                    val found = try {
+                        index.find(TmdbParser.parseRecommendations(get(TmdbUrls.recommendations(type, id), key), type))
+                    } catch (e: Exception) {
+                        return@mapNotNull null
+                    }
+                    found.also { suggested[title] = it }
+                }
+                // Each suggestion appears once across the lists; M3U episodes collapse to their show.
+                val fresh = rows.map { ChannelsRepository.asShow(it) }
+                    .filterNot { watchedAlready(it) }
+                    .distinctBy { it.kind + it.name }
+                    .filter { shown.add(it.id) }
+                if (fresh.isEmpty()) null else title to fresh.take(20)
+            }.take(titles)
+        }
+
     private suspend fun libraryIndex(): LibraryIndex<VodRow> {
         val count = db.channels().vodCount()
         index?.let { if (it.size == count) return it }
         val rows = db.channels().allVod()
-        return LibraryIndex(rows, { it.name }, { it.kind == ChannelEntity.KIND_SERIES }).also { index = it }
+        // M3U episodes ("Harbour Lights S01E03") are indexed under their show's name.
+        return LibraryIndex(rows, { ChannelsRepository.asShow(it).name }, { it.kind == ChannelEntity.KIND_SERIES }).also { index = it }
     }
 
     /** Returns null when [key] works, otherwise a reason it doesn't. */

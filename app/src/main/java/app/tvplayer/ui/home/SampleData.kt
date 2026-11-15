@@ -1,5 +1,6 @@
 package app.tvplayer.ui.home
 
+import app.tvplayer.data.db.VodRow
 import app.tvplayer.player.VodItem
 
 /** The large panel at the top of Home. */
@@ -28,6 +29,8 @@ data class Tile(
     val channelKey: String? = null,
     val logo: String? = null,
     val vod: VodItem? = null,
+    /** A film or series to open (rather than play), such as a suggestion. */
+    val open: VodRow? = null,
 )
 
 /** A titled row of tiles. */

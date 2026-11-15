@@ -95,6 +95,9 @@ object TmdbUrls {
 
     fun personCredits(id: Long): String = "$BASE/person/$id/combined_credits?language=en-GB"
 
+    /** Titles TMDB suggests for people who liked this one; [type] is "movie" or "tv". */
+    fun recommendations(type: String, id: Long): String = "$BASE/$type/$id/recommendations?language=en-GB&page=1"
+
     /** Cheap call used to check a key works. */
     fun check(): String = "$BASE/configuration?language=en-GB"
 
@@ -164,6 +167,18 @@ object TmdbParser {
             seasons = item.num("number_of_seasons")?.toInt(),
         )
     }
+
+    /** Reads a recommendations answer as credits, so they can be matched to the library like a person's work. */
+    fun parseRecommendations(text: String, type: String): List<TmdbCredit> =
+        (root(text)["results"] as? JsonArray)?.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            TmdbCredit(
+                title = item.str("title") ?: item.str("name") ?: return@mapNotNull null,
+                year = yearOf(item.str("release_date") ?: item.str("first_air_date")),
+                mediaType = item.str("media_type")?.takeIf { it == "movie" || it == "tv" } ?: type,
+                role = null,
+            )
+        }.orEmpty()
 
     /** Reads the answer to a person search; [TmdbPerson.role] is what they're known for, e.g. "Acting". */
     fun parsePeopleSearch(text: String): List<TmdbPerson> =

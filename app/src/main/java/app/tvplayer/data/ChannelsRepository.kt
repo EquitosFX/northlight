@@ -41,6 +41,7 @@ class ChannelsRepository(private val db: AppDatabase) {
                     group = it.groupName,
                     number = it.number,
                     guideId = it.epgId,
+                    catchupDays = it.catchupDays,
                 )
             },
         )

@@ -2,6 +2,9 @@
 
 package app.tvplayer.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import kotlinx.coroutines.delay
 import app.tvplayer.data.ChannelsRepository
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -148,7 +151,17 @@ fun AppRoot(
         mode = PlayerMode.FULL
     }
 
+    // A short message shown at the bottom of the screen, such as why catch-up didn't start.
+    var notice by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            delay(5_000)
+            notice = null
+        }
+    }
+
     fun playVod(item: VodItem, episodes: List<VodItem> = listOf(item)) {
+        if (!item.catchup) container.watched.record(item.title)
         controller.playVod(item, episodes)
         mode = PlayerMode.FULL
     }
@@ -302,7 +315,9 @@ fun AppRoot(
         val vod = tile.vod
         val key = tile.channelKey
         val id = tile.channelId
+        val row = tile.open
         when {
+            row != null -> openTitle(row)
             vod != null -> playVod(vod)
             key != null -> playKey(key)
             id != null -> play(id)
@@ -348,8 +363,9 @@ fun AppRoot(
             onPrimary = {
                 playVod(VodItem(firstProgress.url, firstProgress.title, firstProgress.poster, firstProgress.userAgent, firstProgress.referrer))
             },
-            secondaryLabel = "Live TV",
-            onSecondary = { play(null) },
+            // Names the channel it will open: the last one watched.
+            secondaryLabel = lastWatched?.let { "Live: ${it.name}" } ?: "Live TV",
+            onSecondary = { lastWatched?.let { playKey(it.key) } ?: play(null) },
         )
         lastWatched != null -> HomeHero(
             overline = "LIVE TV",
@@ -376,8 +392,27 @@ fun AppRoot(
         )
     }
     val (hasFavourites, shownChannels) = channelTiles
+    // "Because you watched…": TMDB's suggestions for recent films and series, from the viewer's own playlists.
+    val watchedTitles by container.watched.recent.collectAsStateWithLifecycle()
+    val suggestions by produceState(initialValue = emptyList<HomeRail>(), watchedTitles.take(6), playlistList) {
+        value = container.metadata.recommendations(watchedTitles).map { (watchedTitle, rows) ->
+            HomeRail(
+                "Because you watched ${watchedTitle.name}",
+                rows.map { row ->
+                    Tile(
+                        title = row.name,
+                        caption = if (row.kind == ChannelEntity.KIND_SERIES) "Series" else "Film",
+                        color = tileColor(row.url),
+                        logo = row.logo,
+                        open = row,
+                    )
+                },
+            )
+        }
+    }
     val homeRails = listOf(
         HomeRail("Continue watching", continueWatching),
+    ) + suggestions + listOf(
         HomeRail("Recent channels", recentTiles),
         HomeRail(if (hasFavourites) "Favourites" else "Channels", shownChannels),
     )
@@ -524,6 +559,15 @@ fun AppRoot(
                         GuideScreen(
                             channels = container.channels,
                             onPlay = { channel -> play(channel.variantIds.first()) },
+                            onCatchup = { channel, programme ->
+                                scope.launch {
+                                    try {
+                                        playVod(container.playlists.catchupItem(channel, programme))
+                                    } catch (e: Exception) {
+                                        notice = container.playlists.explainError(e)
+                                    }
+                                }
+                            },
                         )
                     }
                     Dest.SETTINGS -> TopInset {
@@ -560,11 +604,26 @@ fun AppRoot(
             )
         }
 
+        notice?.let { text ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 28.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(AppTheme.colors.scrim)
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+            ) {
+                Label(text = text, style = AppType.body)
+            }
+        }
+
         if (mode != PlayerMode.NONE) {
             val colors = AppTheme.colors
             PlayerHost(
                 controller = controller,
                 subtitles = container.subtitles,
+                metadata = container.metadata,
+                intros = container.intros,
                 mode = mode,
                 onMinimise = { mode = PlayerMode.MINI },
                 onExpand = { mode = PlayerMode.FULL },
