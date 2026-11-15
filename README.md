@@ -77,9 +77,12 @@ The newest build is always at:
 
 ## Screenshots
 
-Every push also runs the **Screenshots** workflow. It draws the real screens at the Shield's
-resolution (1920×1080) with made-up demo content (invented channels, films and artwork from
-`app/src/test/`), and saves them to the
+Every push also runs the **Screenshots** workflow: a walkthrough that drives the real app with
+remote presses through every area (Home, Recents, TV guide and its categories, live playback and
+the picture in the side panel, Films, a film page, cast and person pages, Series, Search with
+typing, every Settings pane, all three themes) at the Shield's resolution (1920×1080), with
+made-up demo content (invented channels, films and artwork from `app/src/test/`). Each step checks
+where focus landed and what's on screen; the run fails listing anything wrong. The pictures go to the
 [`demo-screens` branch](https://github.com/EquitosFX/northlight/tree/demo-screens).
 To draw them locally: `./gradlew :app:testDebugUnitTest --tests 'app.tvplayer.demo.ScreenshotTest'`
 (pictures land in `app/build/screenshots/`).
