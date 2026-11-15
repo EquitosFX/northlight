@@ -112,6 +112,11 @@ object DemoData {
                 }
                 reply(200, """{"info":{"name":"Series $id","plot":"A demo series."},"episodes":{$seasons}}""")
             }
+            // The account check, which catch-up uses for the server's time zone.
+            url.host == "demo.invalid" && path.endsWith("/player_api.php") && url.queryParameter("action") == null -> reply(
+                200,
+                """{"user_info":{"auth":1,"status":"Active"},"server_info":{"timezone":"Europe/London"}}""",
+            )
             // The demo channels and films never finish loading, so the player stays on "Tuning…"
             // and its controls can be opened the same way every time.
             url.host == "demo.invalid" -> Response.Builder()
@@ -211,7 +216,7 @@ object DemoData {
         channels.forEachIndexed { i, (name, group) ->
             rows += ChannelEntity(
                 playlistId = pid, kind = ChannelEntity.KIND_LIVE, name = "$name HD", baseName = name,
-                variantKey = name.lowercase(), quality = 2, url = "http://demo.invalid/live/$i.ts", remoteId = i.toLong(),
+                variantKey = name.lowercase(), quality = 2, url = "http://demo.invalid/live/demo/demo/$i.ts", remoteId = i.toLong(),
                 logo = image("ch$i.png"), groupName = group, number = 101 + i, guideId = "ch$i", epgId = "ch$i",
                 position = i,
                 // The first four channels keep a week of catch-up, as many Xtream servers do.
