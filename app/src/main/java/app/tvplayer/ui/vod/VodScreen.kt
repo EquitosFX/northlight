@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -164,11 +165,10 @@ fun VodScreen(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .fillMaxWidth(0.72f)
-                .height(250.dp),
+                .height(250.dp)
+                .fadeIntoBackground(solidFrom = 0.45f, solidUntil = 0.4f),
         ) {
             AsyncImage(model = backdrop, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to colors.groundTop, 0.45f to Color.Transparent)))
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to colors.groundTop)))
         }
     }
     Row(

@@ -1,5 +1,6 @@
 package app.tvplayer.demo
 
+import androidx.test.platform.app.InstrumentationRegistry
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
@@ -59,6 +60,9 @@ class ScreenshotTest {
     }
 
     private fun open(dest: Dest, theme: ThemeId = ThemeId.LAGOON) {
+        // A TV is never in touch mode; in touch mode the remote-style focus doesn't switch on.
+        runCatching { InstrumentationRegistry.getInstrumentation().setInTouchMode(false) }
+            .onFailure { println("Couldn't leave touch mode: $it") }
         rule.setContent {
             AppTheme(themeId = theme) {
                 AppRoot(themeId = theme, onThemeChange = {}, container = app.container, startAt = dest)

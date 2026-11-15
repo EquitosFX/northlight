@@ -1,5 +1,6 @@
 package app.tvplayer.ui.home
 
+import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,17 +105,8 @@ private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .fillMaxHeight()
-                    .fillMaxWidth(0.78f),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Brush.horizontalGradient(0.15f to colors.groundTop, 0.55f to Color.Transparent)),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to colors.groundTop)),
+                    .fillMaxWidth(0.78f)
+                    .fadeIntoBackground(solidFrom = 0.5f, solidUntil = 0.55f),
             )
         } else {
             Box(
@@ -213,7 +205,13 @@ private fun TileCard(tile: Tile, onClick: () -> Unit) {
     ) {
         if (tile.vod != null && tile.logo != null) {
             // Films and episodes fill the card with their artwork.
-            AsyncImage(model = tile.logo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+                model = tile.logo,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+                modifier = Modifier.fillMaxSize(),
+            )
         } else if (tile.logo != null) {
             Logo(
                 url = tile.logo,
