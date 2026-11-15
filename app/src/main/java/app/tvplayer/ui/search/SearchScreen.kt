@@ -129,8 +129,11 @@ fun SearchScreen(
         val status = when {
             text.length < 2 -> "Type at least two letters."
             list == null -> "Searching…"
-            list.isEmpty() -> "Nothing found for \"$text\"."
-            else -> "${list.size} results"
+            list.isEmpty() && people.isEmpty() -> "Nothing found for \"$text\"."
+            else -> listOfNotNull(
+                list.size.takeIf { it > 0 }?.let { if (it == 1) "1 title" else "$it titles" },
+                people.size.takeIf { it > 0 }?.let { if (it == 1) "1 person" else "$it people" },
+            ).joinToString(" · ")
         }
         Label(text = status, style = AppType.caption, color = colors.textDim)
 

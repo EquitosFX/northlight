@@ -346,6 +346,7 @@ class ScreenshotTest {
         shot("18-search-titles")
         type("priya")
         expectShown("Priya Desai", "Searching a name finds the person")
+        expectHidden("Nothing found", "A person found isn't reported as nothing found")
         shot("19-search-people")
     }
 
