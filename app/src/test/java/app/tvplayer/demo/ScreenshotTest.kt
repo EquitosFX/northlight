@@ -3,6 +3,9 @@ package app.tvplayer.demo
 import androidx.test.platform.app.InstrumentationRegistry
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Handler
+import android.os.Looper
+import android.view.PixelCopy
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -33,6 +36,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -81,6 +85,23 @@ class ScreenshotTest {
         }
     }
 
+    /** Copies the window as the screen shows it (Robolectric draws it with its hardware renderer). */
+    private fun pixelCopy(): Bitmap {
+        val view = rule.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        var result: Int? = null
+        rule.runOnUiThread {
+            PixelCopy.request(rule.activity.window, bitmap, { result = it }, Handler(Looper.getMainLooper()))
+        }
+        repeat(50) {
+            if (result != null) return@repeat
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+        }
+        check(result == PixelCopy.SUCCESS) { "PixelCopy result $result" }
+        return bitmap
+    }
+
     /** What a remote press does on a real box: takes the window out of touch mode, so focus can show. */
     private fun leaveTouchMode() {
         val view = rule.activity.window.decorView
@@ -118,7 +139,8 @@ class ScreenshotTest {
     }
 
     private fun shot(name: String) {
-        val bitmap = runCatching { rule.onRoot().captureToImage().asAndroidBitmap() }.getOrElse {
+        val bitmap = runCatching { pixelCopy() }.onFailure { println("PixelCopy failed: $it") }.getOrNull()
+            ?: runCatching { rule.onRoot().captureToImage().asAndroidBitmap() }.getOrElse {
             println("captureToImage failed ($it); drawing the window instead")
             val view = rule.activity.window.decorView
             Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
