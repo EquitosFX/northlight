@@ -74,7 +74,7 @@ class TsSegmenterTest {
     @Test
     fun cutsOnVideoKeyframesAndTimesFromTheStreamClock() {
         val store = MemoryStore()
-        val seg = TsSegmenter(store, windowSeconds = 600.0, maxBytes = Long.MAX_VALUE, minSeconds = 2.0, maxSeconds = 5.0, clock = { 0L })
+        val seg = TsSegmenter(store, windowSeconds = 600.0, maxBytes = Long.MAX_VALUE, minSeconds = 2.0, maxSeconds = 5.0, targetSeconds = 5, clock = { 0L })
         val data = stream(20)
         // Arrives in awkward chunk sizes, as it would over the network.
         var i = 0; var n = 1
@@ -125,9 +125,21 @@ class TsSegmenterTest {
         val seg = TsSegmenter(store, windowSeconds = 600.0, maxBytes = Long.MAX_VALUE, clock = { 0L })
         seg.feed(stream(12, gop = 12))
         seg.finish()
-        assertEquals(1, seg.targetDuration)
-        assertTrue(store.playlist.contains("#EXT-X-TARGETDURATION:1\n"))
-        assertTrue(durations(store.playlist).all { it < 1.5 })
+        assertEquals(2, seg.targetDuration)
+        assertTrue(store.playlist.contains("#EXT-X-TARGETDURATION:2\n"))
+        assertTrue(durations(store.playlist).all { it < 1.6 })
+    }
+
+    @Test
+    fun farApartKeyframesStillStartEverySlice() {
+        // Keyframes every 3 seconds, as many channels send: slices follow the keyframes rather than
+        // being cut mid-picture, so playback can start on any of them.
+        val store = MemoryStore()
+        val seg = TsSegmenter(store, windowSeconds = 600.0, maxBytes = Long.MAX_VALUE, clock = { 0L })
+        seg.feed(stream(20, gop = 75))
+        seg.finish()
+        val d = durations(store.playlist)
+        d.dropLast(1).forEach { assertEquals(3.0, it, 0.05) }
     }
 
     @Test

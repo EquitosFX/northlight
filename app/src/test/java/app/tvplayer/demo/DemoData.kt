@@ -153,6 +153,19 @@ object DemoData {
                     "{\"media_type\":\"movie\",\"title\":\"${f.title}\",\"release_date\":\"${f.year}-03-01\"}"
                 },
             )
+            // Movie night: TMDB's discover search suggests some of the demo films or series.
+            path.contains("/discover/") -> {
+                val page = url.queryParameter("page")?.toIntOrNull() ?: 1
+                val tv = path.endsWith("/tv")
+                val picks = if (page > 1) emptyList() else if (tv) series else films
+                reply(200, picks.withIndex().joinToString(",", "{\"results\":[", "]}") { (i, f) ->
+                    val dateKey = if (tv) "first_air_date" else "release_date"
+                    val titleKey = if (tv) "name" else "title"
+                    "{\"id\":${7000 + i},\"$titleKey\":\"${f.title}\",\"$dateKey\":\"${f.year}-03-01\"," +
+                        "\"vote_average\":${6.1 + (i * 37 % 19) / 10.0},\"vote_count\":${400 + i * 90},\"popularity\":${20 + i * 7 % 50}," +
+                        "\"genre_ids\":[${if (i % 3 == 0) "35,18" else if (i % 3 == 1) "53" else "18,10749"}],\"overview\":\"${f.overview}\"}"
+                })
+            }
             path.endsWith("/search/person") -> {
                 val query = url.queryParameter("query").orEmpty().lowercase()
                 val found = people.filter { query.isNotBlank() && it.lowercase().contains(query) }

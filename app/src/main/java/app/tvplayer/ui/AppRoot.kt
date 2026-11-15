@@ -2,6 +2,8 @@
 
 package app.tvplayer.ui
 
+import app.tvplayer.ui.movienight.MovieNightState
+import app.tvplayer.ui.movienight.MovieNightScreen
 import androidx.compose.foundation.layout.width
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -174,6 +176,7 @@ fun AppRoot(
     // Kept here so Films and Series reopen where the viewer left them after watching something.
     val filmsState = remember { VodBrowseState() }
     val seriesState = remember { VodBrowseState() }
+    val movieNightState = remember { MovieNightState() }
 
     // A person's page sits over whatever section opened it; Back returns there.
     var person by remember { mutableStateOf<TmdbPerson?>(null) }
@@ -196,6 +199,8 @@ fun AppRoot(
     fun openTitle(row: VodRow) {
         holdFocus()
         person = null
+        filmsState.returnTo = null
+        seriesState.returnTo = null
         when {
             row.kind == ChannelEntity.KIND_SERIES -> {
                 // An M3U episode opens its show's episode list.
@@ -523,6 +528,7 @@ fun AppRoot(
                             holdFocus()
                             person = chosen
                         },
+                        onReturn = { back -> goTo(back) },
                     )
                     Dest.SERIES -> VodScreen(
                         kind = ChannelEntity.KIND_SERIES,
@@ -535,7 +541,27 @@ fun AppRoot(
                             holdFocus()
                             person = chosen
                         },
+                        onReturn = { back -> goTo(back) },
                     )
+                    Dest.MOVIE_NIGHT -> TopInset {
+                        MovieNightScreen(
+                            state = movieNightState,
+                            metadata = container.metadata,
+                            watched = container.watched,
+                            onOpen = { row ->
+                                holdFocus()
+                                if (row.kind == ChannelEntity.KIND_SERIES) {
+                                    seriesState.series = ChannelsRepository.asShow(row)
+                                    seriesState.returnTo = Dest.MOVIE_NIGHT
+                                    dest = Dest.SERIES
+                                } else {
+                                    filmsState.film = row
+                                    filmsState.returnTo = Dest.MOVIE_NIGHT
+                                    dest = Dest.FILMS
+                                }
+                            },
+                        )
+                    }
                     Dest.SEARCH -> TopInset { SearchScreen(
                         channels = container.channels,
                         metadata = container.metadata,

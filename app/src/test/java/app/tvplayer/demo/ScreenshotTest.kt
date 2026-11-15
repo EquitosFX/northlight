@@ -125,6 +125,15 @@ class ScreenshotTest {
         }
     }
 
+    /** Presses [key] until focus is on [text], up to [max] times. */
+    private fun moveTo(text: String, key: String, max: Int = 8, step: String) {
+        repeat(max) {
+            if (focusedText().contains(text, ignoreCase = true)) return
+            press(key)
+        }
+        expectFocus(text, step)
+    }
+
     private fun type(text: String) {
         val fields = rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes()
         if (fields.isEmpty()) {
@@ -348,8 +357,9 @@ class ScreenshotTest {
         shot("09b-player-controls")
         press("ok")
         expectShown("Subtitles", "OK with nothing highlighted keeps the controls open")
-        press("right", "right", "right", "right")
-        expectFocus("Subtitles", "Along the controls to Subtitles")
+        press("right")
+        expectFocus("Pause", "The first arrow press highlights Pause")
+        moveTo("Subtitles", "right", step = "Along the controls to Subtitles")
         press("ok")
         expectShown("Off", "The subtitles menu")
         expectShown("isn't sending any subtitles", "The subtitles menu explains there are none")
@@ -406,6 +416,38 @@ class ScreenshotTest {
         press("ok")
         expectShown("Meridian One ·", "OK on a past programme plays it from the start")
         shot("07c-catch-up-playing")
+
+        // The controls: Up goes to the progress bar; Left/Right move a marker along it.
+        press("ok")
+        press("up")
+        expectShown("Left/Right to move along", "Up from the controls highlights the progress bar")
+        press("right", "right")
+        expectShown("Jump to 0:20", "Right moves the marker along the programme")
+        shot("07e-catch-up-scrub")
+    }
+
+    @Test fun movieNight() {
+        open(Dest.MOVIE_NIGHT)
+        press("right")
+        expectFocus("Start", "Into Movie night")
+        press("ok")
+        expectShown("QUESTION 1 OF 10", "The first question")
+        expectFocus("A film", "The first answer is highlighted")
+        shot("26-movie-night-question")
+        // Answer all ten with the first choice each time.
+        repeat(10) { press("ok") }
+        expectShown("YOUR SHORTLIST", "A shortlist after the last question")
+        expectHidden("Ember Valley", "Titles already watched are left out")
+        expectShown("Best reviewed of these", "The shortlist says how the picks differ")
+        shot("27-movie-night-shortlist")
+        press("right")
+        expectShown("YOUR SHORTLIST", "Moving along the shortlist")
+        press("ok")
+        expectFocus("Play", "OK on a pick opens its page")
+        press("back")
+        expectShown("YOUR SHORTLIST", "Back from the page returns to the shortlist")
+        press("back")
+        expectShown("QUESTION 10 OF 10", "Back from the shortlist goes to the last question")
     }
 
     private fun isCategory(text: String) = listOf(
@@ -446,11 +488,12 @@ class ScreenshotTest {
         press("ok")
         press("ok")
         expectShown("Subtitles", "OK shows the film's controls")
-        expectShown("10 s", "The film's controls skip 10 seconds")
+        expectShown("30 s", "The film's controls skip 30 seconds")
+        expectShown("5 min", "The film's controls skip 5 minutes")
         expectShown("Harbour of Glass", "The film's controls show its title")
         shot("13b-film-controls")
-        press("right", "right", "right")
-        expectFocus("Subtitles", "Along the film controls to Subtitles")
+        press("right")
+        moveTo("Subtitles", "right", step = "Along the film controls to Subtitles")
         press("ok")
         expectShown("Find on OpenSubtitles", "Films can search OpenSubtitles")
         press("down", "ok")

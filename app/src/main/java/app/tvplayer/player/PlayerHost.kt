@@ -279,8 +279,8 @@ private fun VodLayer(
     }
     LaunchedEffect(Unit) {
         while (true) {
-            position = controller.player.currentPosition
-            duration = controller.player.duration.coerceAtLeast(0)
+            position = controller.mediaPosition()
+            duration = controller.mediaDuration()
             playing = controller.player.isPlaying
             delay(500)
         }
@@ -315,12 +315,13 @@ private fun VodLayer(
                         controller.skipEpisode(-1)
                         true
                     }
+                    // Catch-up can only be asked for from a whole minute, so its quick skips are a minute.
                     Key.DirectionLeft, Key.MediaRewind -> {
-                        controller.seekBy(-SKIP_MILLIS)
+                        controller.seekBy(if (item.catchup) -60_000L else -SKIP_MILLIS)
                         true
                     }
                     Key.DirectionRight, Key.MediaFastForward -> {
-                        controller.seekBy(SKIP_MILLIS)
+                        controller.seekBy(if (item.catchup) 60_000L else SKIP_MILLIS)
                         true
                     }
                     Key.DirectionUp, Key.DirectionDown, Key.Info -> {
@@ -408,7 +409,7 @@ private fun VodLayer(
                     )
                     Box(modifier = Modifier.weight(1f))
                     Label(
-                        text = if (playing) "OK for controls · Left/Right skip 10 s · Back to stop" else "Paused · OK for controls",
+                        text = if (playing) "OK for controls · Left/Right skip ${if (item.catchup) "1 min" else "10 s"} · Back to stop" else "Paused · OK for controls",
                         style = AppType.label,
                         color = colors.textDim,
                     )

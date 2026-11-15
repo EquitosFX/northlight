@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.Dest
 import app.tvplayer.ui.components.entersAt
 import app.tvplayer.ui.components.EntryFocus
 import app.tvplayer.ui.components.EntryPoint
@@ -74,6 +75,8 @@ class VodBrowseState {
     var film by mutableStateOf<VodRow?>(null)
     var lastIndex by mutableIntStateOf(0)
     var returnToGrid by mutableStateOf(false)
+    /** Set when a title was opened from another section (Movie night): Back goes back there. */
+    var returnTo by mutableStateOf<Dest?>(null)
 }
 
 private val SideMargin = 48.dp
@@ -91,9 +94,15 @@ fun VodScreen(
     metadata: MetadataRepository,
     onPlay: (VodItem, List<VodItem>) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
+    onReturn: (Dest) -> Unit = {},
 ) {
     val colors = AppTheme.colors
     val holdFocus = LocalHoldFocus.current
+    fun leave() {
+        val back = state.returnTo ?: return
+        state.returnTo = null
+        onReturn(back)
+    }
     val series = state.series
     if (series != null) {
         EpisodesPane(
@@ -105,6 +114,7 @@ fun VodScreen(
             onBack = {
                 holdFocus()
                 state.series = null
+                leave()
             },
         )
         return
@@ -120,6 +130,7 @@ fun VodScreen(
             onBack = {
                 holdFocus()
                 state.film = null
+                leave()
             },
         )
         return

@@ -1,5 +1,11 @@
 package app.tvplayer.ui.search
 
+import app.tvplayer.ui.vod.PosterCard
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import app.tvplayer.ui.components.EntryPoint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,8 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -145,72 +149,97 @@ fun SearchScreen(
         }
         Label(text = status, style = AppType.caption, color = colors.textDim)
 
-        LazyColumn(
-            contentPadding = PaddingValues(bottom = 24.dp, start = 2.dp, end = 2.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.weight(1f),
+        // Results as tiles: films and series as posters (OK opens their page), people, then live channels.
+        val titles = list.orEmpty().filter { it.kind != ChannelEntity.KIND_LIVE }
+        val liveChannels = list.orEmpty().filter { it.kind == ChannelEntity.KIND_LIVE }
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 118.dp),
+            contentPadding = PaddingValues(bottom = 24.dp, start = 2.dp, end = 2.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
-            items(people, key = { "person${it.id}" }) { person ->
-                FocusSurface(
-                    onClick = { onPerson(person) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    focusScale = 1.01f,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        PersonPhoto(person = person, modifier = Modifier.size(34.dp))
-                        Label(text = person.name, style = AppType.title, modifier = Modifier.weight(1f))
+            if (titles.isNotEmpty()) {
+                item(key = "h-titles", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("Films and series") }
+                items(titles, key = { "t${it.id}" }) { row ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        PosterCard(row = row, onClick = { onOpen(row) }, modifier = Modifier.fillMaxWidth())
                         Label(
-                            text = when (person.role) {
-                                "Acting" -> "Actor"
-                                "Directing" -> "Director"
-                                "Writing" -> "Writer"
-                                "Production" -> "Producer"
-                                null -> "Person"
-                                else -> person.role ?: "Person"
-                            },
+                            text = if (row.kind == ChannelEntity.KIND_MOVIE) "Film" else "Series",
                             style = AppType.caption,
-                            color = colors.textDim,
+                            color = colors.textFaint,
                         )
                     }
                 }
             }
-            items(list.orEmpty(), key = { it.id }) { row ->
-                FocusSurface(
-                    onClick = { onOpen(row) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    focusScale = 1.01f,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Logo(url = row.logo, modifier = Modifier.size(width = 44.dp, height = 32.dp))
-                        Label(text = row.name, style = AppType.title, modifier = Modifier.weight(1f))
-                        Label(
-                            text = when (row.kind) {
-                                ChannelEntity.KIND_LIVE -> "Live channel"
-                                ChannelEntity.KIND_MOVIE -> "Film"
-                                else -> "Series"
-                            },
-                            style = AppType.caption,
-                            color = colors.textDim,
-                        )
-                    }
+            if (people.isNotEmpty()) {
+                item(key = "h-people", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("People") }
+                items(people, key = { "p${it.id}" }) { person ->
+                    PersonTile(person = person, onClick = { onPerson(person) })
+                }
+            }
+            if (liveChannels.isNotEmpty()) {
+                item(key = "h-live", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("Live channels") }
+                items(liveChannels, key = { "c${it.id}" }) { row ->
+                    ChannelTile(row = row, onClick = { onOpen(row) })
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SectionHeading(text: String) {
+    Label(text = text, style = AppType.title, modifier = Modifier.padding(top = 6.dp))
+}
+
+@Composable
+private fun PersonTile(person: TmdbPerson, onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FocusSurface(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            shape = androidx.compose.foundation.shape.CircleShape,
+            outlined = false,
+        ) {
+            PersonPhoto(person = person, modifier = Modifier.fillMaxSize())
+        }
+        Label(text = person.name, style = AppType.label, maxLines = 2)
+        Label(
+            text = when (person.role) {
+                "Acting" -> "Actor"
+                "Directing" -> "Director"
+                "Writing" -> "Writer"
+                "Production" -> "Producer"
+                null -> "Person"
+                else -> person.role ?: "Person"
+            },
+            style = AppType.caption,
+            color = colors.textFaint,
+        )
+    }
+}
+
+@Composable
+private fun ChannelTile(row: VodRow, onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        FocusSurface(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 10f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+            outlined = false,
+        ) {
+            Logo(url = row.logo, modifier = Modifier.align(Alignment.Center).fillMaxSize(0.7f))
+        }
+        Label(text = row.name, style = AppType.label, maxLines = 2)
+        Label(text = "Live channel", style = AppType.caption, color = colors.textFaint)
     }
 }

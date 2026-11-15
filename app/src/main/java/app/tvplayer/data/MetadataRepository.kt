@@ -1,5 +1,9 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.tmdb.TmdbCredit
+import app.tvplayer.core.movienight.PickFacts
+import app.tvplayer.core.movienight.Found
+import app.tvplayer.core.movienight.MovieNight
 import app.tvplayer.core.tmdb.LibraryIndex
 import app.tvplayer.core.tmdb.TitleCleaner
 import app.tvplayer.core.tmdb.TmdbPerson
@@ -145,6 +149,82 @@ class MetadataRepository(
             }.take(titles)
         }
 
+    /**
+     * Movie Night: searches TMDB for titles that fit [answers], keeps the ones in the viewer's
+     * playlists, and returns up to [count] with their details and what sets each apart. Looser
+     * searches are tried when too few are found. Null without a TMDB key.
+     */
+    suspend fun movieNight(answers: Map<String, String>, watched: List<WatchedTitle>, count: Int = 6): List<MoviePick>? =
+        withContext(Dispatchers.IO) {
+            val key = settings.tmdbKey.first().trim()
+            if (key.isEmpty()) return@withContext null
+            val index = libraryIndex()
+            val seen = watched.map { (if (it.isSeries) "tv" else "movie") + "|" + TitleCleaner.clean(it.name).first.lowercase().filter(Char::isLetterOrDigit) }.toSet()
+            val base = MovieNight.criteria(answers)
+            val chosen = LinkedHashMap<Long, Pair<VodRow, Found>>()
+            for (criteria in MovieNight.relaxations(base)) {
+                val types = listOfNotNull("movie".takeIf { criteria.films }, "tv".takeIf { criteria.series })
+                val found = ArrayList<Pair<VodRow, Found>>()
+                for (type in types) {
+                    for (page in 1..MOVIE_NIGHT_PAGES) {
+                        val results = try {
+                            MovieNight.parseDiscover(get(MovieNight.discoverUrl(type, criteria, page), key), type)
+                        } catch (e: KeyRejected) {
+                            throw e
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        if (results.isEmpty()) break
+                        results.forEachIndexed { order, item ->
+                            val row = index.find(listOf(TmdbCredit(item.title, item.year, type, null))).firstOrNull() ?: return@forEachIndexed
+                            val show = ChannelsRepository.asShow(row)
+                            val watchedKey = type + "|" + TitleCleaner.clean(show.name).first.lowercase().filter(Char::isLetterOrDigit)
+                            if (watchedKey in seen) return@forEachIndexed
+                            found += show to item
+                        }
+                        if (found.size >= count * 3) break
+                    }
+                }
+                // Liked genres first; otherwise TMDB's own order. With "Either", films and series take turns.
+                val ranked = found.distinctBy { it.first.kind + it.first.name.lowercase() }
+                    .sortedByDescending { MovieNight.bonus(it.second, criteria) }
+                val films = ranked.filter { it.second.type == "movie" }
+                val series = ranked.filter { it.second.type == "tv" }
+                val mixed = if (films.isNotEmpty() && series.isNotEmpty()) {
+                    (0 until maxOf(films.size, series.size)).flatMap { listOfNotNull(films.getOrNull(it), series.getOrNull(it)) }
+                } else {
+                    ranked
+                }
+                for (pair in mixed) {
+                    if (chosen.size >= count) break
+                    chosen.putIfAbsent(pair.first.id, pair)
+                }
+                if (chosen.size >= count) break
+            }
+            // Full details (running time, seasons) for the shortlist.
+            val picks = chosen.values.map { (row, item) ->
+                val details = runCatching { TmdbParser.parseDetails(get(TmdbUrls.details(item.type, item.id), key)) }.getOrNull()
+                MoviePick(
+                    row = row,
+                    title = details?.title ?: item.title,
+                    isSeries = item.type == "tv",
+                    year = details?.year ?: item.year,
+                    rating = details?.rating ?: item.rating,
+                    runtimeMinutes = details?.runtimeMinutes,
+                    seasons = details?.seasons,
+                    genres = details?.genres?.takeIf { it.isNotEmpty() } ?: MovieNight.genreNames(item.type, item.genreIds),
+                    overview = details?.overview ?: item.overview,
+                    poster = details?.poster ?: item.poster ?: row.logo,
+                    backdrop = details?.backdrop,
+                    popularity = item.popularity,
+                )
+            }
+            val notes = MovieNight.differences(
+                picks.map { PickFacts(it.title, it.isSeries, it.year, it.rating, it.runtimeMinutes, it.seasons, it.popularity, it.genres) },
+            )
+            picks.mapIndexed { i, pick -> pick.copy(differences = notes[i]) }
+        }
+
     private suspend fun libraryIndex(): LibraryIndex<VodRow> {
         val count = db.channels().vodCount()
         index?.let { if (it.size == count) return it }
@@ -184,8 +264,28 @@ class MetadataRepository(
     private companion object {
         /** A title TMDB didn't know is tried again after a week. */
         const val RETRY_MISS_MILLIS = 7 * 86_400_000L
+
+        /** Pages of TMDB results (20 a page) checked against the playlists per search. */
+        const val MOVIE_NIGHT_PAGES = 6
     }
 }
+
+/** One title on the Movie Night shortlist. */
+data class MoviePick(
+    val row: VodRow,
+    val title: String,
+    val isSeries: Boolean,
+    val year: Int?,
+    val rating: Double?,
+    val runtimeMinutes: Int?,
+    val seasons: Int?,
+    val genres: List<String>,
+    val overview: String?,
+    val poster: String?,
+    val backdrop: String?,
+    val popularity: Double,
+    val differences: List<String> = emptyList(),
+)
 
 /** Directors (and creators) first, then cast, as stored with a TMDB look-up. */
 fun MetadataEntity.peopleList(): List<Pair<Boolean, TmdbPerson>> =

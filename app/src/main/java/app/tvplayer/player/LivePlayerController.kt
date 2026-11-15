@@ -70,9 +70,36 @@ data class VodItem(
     val referrer: String? = null,
     /** Start at the beginning even if the viewer got part-way before. */
     val fromStart: Boolean = false,
+    /** For a past programme from a channel's catch-up: how to ask the server for it from any point. */
+    val catchupPlan: CatchupPlan? = null,
+) {
     /** A past programme from a channel's catch-up: not kept in Continue watching. */
-    val catchup: Boolean = false,
-)
+    val catchup: Boolean get() = catchupPlan != null
+}
+
+/**
+ * Everything needed to ask the provider for a past programme from any minute into it. Catch-up
+ * streams usually can't be skipped through like a film, so moving within one starts a fresh request
+ * from the new time.
+ */
+data class CatchupPlan(
+    val liveUrl: String,
+    val type: String?,
+    val source: String?,
+    val zone: java.time.ZoneId,
+    val startMs: Long,
+    val endMs: Long,
+) {
+    val lengthMs: Long get() = endMs - startMs
+
+    fun urlFrom(offsetMs: Long): String = app.tvplayer.core.catchup.Catchup.url(
+        liveUrl,
+        type,
+        source,
+        app.tvplayer.core.catchup.CatchupWindow(startMs + offsetMs, endMs, System.currentTimeMillis()),
+        zone,
+    )
+}
 
 /**
  * Plays live channels and keeps them playing.
@@ -233,6 +260,8 @@ class LivePlayerController(
     /** Plays a film or episode, carrying on from where the viewer left it if they got part-way. */
     fun playVod(item: VodItem, episodes: List<VodItem> = listOf(item)) {
         leaveVod()
+        catchupOffset = 0
+        catchupExact = null
         stopTimeshift()
         addedSubtitles = emptyList()
         queue = episodes
@@ -288,7 +317,76 @@ class LivePlayerController(
     val liveSeekable: Boolean
         get() = vod == null && (timeshiftActive || (player.isCurrentMediaItemSeekable && player.duration > 60_000))
 
+    /** For catch-up: where the stream being played starts, measured from the programme's start. */
+    private var catchupOffset = 0L
+    /** For catch-up: the exact point to move to once a fresh request has loaded, if the stream allows. */
+    private var catchupExact: Long? = null
+
+    /** How far into the film, episode or past programme playback is. */
+    fun mediaPosition(): Long =
+        (if (vod?.catchupPlan != null) catchupOffset else 0L) + player.currentPosition.coerceAtLeast(0)
+
+    /** The film's, episode's or past programme's length (0 while unknown). */
+    fun mediaDuration(): Long = vod?.catchupPlan?.lengthMs ?: player.duration.coerceAtLeast(0)
+
+    /** Whether the timeline can be moved along. */
+    val mediaSeekable: Boolean
+        get() = when {
+            vod?.catchupPlan != null -> true
+            vod != null -> player.isCurrentMediaItemSeekable
+            else -> liveSeekable
+        }
+
+    /** Moves to [target] milliseconds into what's playing (live TV: into the recorded part). */
+    fun seekToMedia(target: Long) {
+        controlsToken++
+        val plan = vod?.catchupPlan
+        if (plan == null) {
+            val duration = player.duration
+            var t = target.coerceAtLeast(0)
+            if (duration > 0) t = t.coerceAtMost(if (vod == null) duration else duration - 1_000)
+            player.seekTo(t)
+            return
+        }
+        val t = target.coerceIn(0, (plan.lengthMs - 5_000).coerceAtLeast(0))
+        val loaded = player.duration
+        // Within the part already being streamed, and the stream allows it: a normal seek.
+        if (player.isCurrentMediaItemSeekable && loaded > 0 && t >= catchupOffset && t < catchupOffset + loaded) {
+            player.seekTo(t - catchupOffset)
+            return
+        }
+        // Otherwise ask the server again from the new time. It works in whole minutes, so moving
+        // forward rounds up and moving back rounds down: a skip never goes the wrong way.
+        val forward = t > mediaPosition()
+        val from = if (forward) ceilMinute(t) else t - t % MINUTE
+        restartCatchup(from.coerceIn(0, (plan.lengthMs - MINUTE).coerceAtLeast(0)), exact = t)
+    }
+
+    private fun ceilMinute(t: Long) = ((t + MINUTE - 1) / MINUTE) * MINUTE
+
+    private fun restartCatchup(from: Long, exact: Long?) {
+        val item = vod ?: return
+        val plan = item.catchupPlan ?: return
+        val url = try {
+            plan.urlFrom(from)
+        } catch (e: Exception) {
+            status = PlaybackStatus.Failed
+            return
+        }
+        catchupOffset = from
+        catchupExact = exact?.takeIf { it > from }
+        status = PlaybackStatus.Loading
+        player.setMediaSource(sourceFor(url, item.userAgent, item.referrer, addedSubtitles))
+        player.prepare()
+        player.play()
+        watchForStall()
+    }
+
     fun seekBy(millis: Long) {
+        if (vod != null) {
+            seekToMedia(mediaPosition() + millis)
+            return
+        }
         val duration = player.duration
         var target = (player.currentPosition + millis).coerceAtLeast(0)
         if (duration > 0) {
@@ -383,6 +481,18 @@ class LivePlayerController(
 
     private fun startVod(item: VodItem, from: Long) {
         if (stopped) return
+        if (item.catchupPlan != null) {
+            // Catch-up restarts are requests from a new time, not seeks.
+            if (from > 0) restartCatchup(from - from % MINUTE, exact = from) else {
+                catchupOffset = 0
+                catchupExact = null
+                player.setMediaSource(sourceFor(item.url, item.userAgent, item.referrer, addedSubtitles))
+                player.prepare()
+                player.play()
+                watchForStall()
+            }
+            return
+        }
         player.setMediaSource(sourceFor(item.url, item.userAgent, item.referrer, addedSubtitles))
         player.prepare()
         if (from > 0) player.seekTo(from)
@@ -437,7 +547,7 @@ class LivePlayerController(
         if (attempt < Reconnect.MAX_ATTEMPTS) {
             attempt++
             status = PlaybackStatus.Reconnecting(attempt)
-            val position = player.currentPosition
+            val position = mediaPosition()
             retryJob = scope.launch {
                 delay(Reconnect.delayMillis(attempt))
                 player.stop()
@@ -487,7 +597,7 @@ class LivePlayerController(
             cancelRecovery()
             attempt = 0
             status = PlaybackStatus.Loading
-            startVod(item, player.currentPosition)
+            startVod(item, mediaPosition())
             return
         }
         if (current == null) return
@@ -501,7 +611,7 @@ class LivePlayerController(
     fun onStop() {
         if (vod != null) {
             saveVodProgress()
-            resumeAt = player.currentPosition
+            resumeAt = mediaPosition()
             progressJob?.cancel()
         }
         stopped = true
@@ -636,10 +746,10 @@ class LivePlayerController(
             .setLiveConfiguration(
                 MediaItem.LiveConfiguration.Builder()
                     .setTargetOffsetMs(LIVE_OFFSET_MILLIS)
-                    .setMinOffsetMs(2_000)
-                    // Always normal speed: no speeding up or slowing down to drift towards live.
-                    .setMinPlaybackSpeed(1f)
-                    .setMaxPlaybackSpeed(1f)
+                    .setMinOffsetMs(4_000)
+                    // Only the gentlest speed changes (too small to hear) to settle a few seconds behind live.
+                    .setMinPlaybackSpeed(0.97f)
+                    .setMaxPlaybackSpeed(1.03f)
                     .build(),
             )
             .build()
@@ -746,6 +856,11 @@ class LivePlayerController(
                     attempt = 0
                     status = PlaybackStatus.Playing
                     updateStreamInfo()
+                    // A catch-up request from a whole minute: move to the exact point if the stream lets us.
+                    catchupExact?.let { exact ->
+                        catchupExact = null
+                        if (player.isCurrentMediaItemSeekable) player.seekTo(exact - catchupOffset)
+                    }
                 }
                 Player.STATE_BUFFERING -> if (status == PlaybackStatus.Playing) watchForStall()
                 Player.STATE_ENDED -> {
@@ -806,6 +921,8 @@ class LivePlayerController(
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
         const val TIMESHIFT_START_MILLIS = 12_000L
         /** How far behind the newest recorded slice "live" plays, so it never runs dry. */
-        const val LIVE_OFFSET_MILLIS = 3_000L
+        const val LIVE_OFFSET_MILLIS = 6_000L
     }
 }
+
+private const val MINUTE = 60_000L

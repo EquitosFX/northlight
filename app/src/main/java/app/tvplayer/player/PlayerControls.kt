@@ -1,5 +1,9 @@
 package app.tvplayer.player
 
+import androidx.compose.foundation.border
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.focus.focusProperties
@@ -83,7 +87,6 @@ fun PlayerControls(
 ) {
     val colors = AppTheme.colors
     val live = controller.vod == null
-    val step = if (live) LIVE_STEP_MILLIS else VOD_STEP_MILLIS
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
@@ -96,15 +99,16 @@ fun PlayerControls(
     // Nothing is highlighted when the controls open: focus waits on an invisible spot, and the first
     // arrow press highlights Pause. That way pressing OK twice never pauses by accident.
     val restFocus = remember { FocusRequester() }
+    val timelineFocus = remember { FocusRequester() }
     var resting by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         runCatching { restFocus.requestFocus() }
         while (true) {
-            position = controller.player.currentPosition
-            duration = controller.player.duration.coerceAtLeast(0)
+            position = controller.mediaPosition()
+            duration = controller.mediaDuration()
             playing = controller.player.isPlaying
-            seekable = if (live) controller.liveSeekable else controller.player.isCurrentMediaItemSeekable
+            seekable = controller.mediaSeekable
             behind = controller.behindLiveMillis()
             delay(250)
         }
@@ -144,7 +148,16 @@ fun PlayerControls(
         ) {
             info()
             Spacer(Modifier.height(4.dp))
-            Timeline(live = live, seekable = seekable, position = position, duration = duration, behind = behind)
+            Timeline(
+                live = live,
+                seekable = seekable,
+                position = position,
+                duration = duration,
+                behind = behind,
+                startClock = controller.vod?.catchupPlan?.startMs,
+                focusRequester = timelineFocus,
+                onSeek = { controller.seekToMedia(it) },
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
@@ -153,7 +166,15 @@ fun PlayerControls(
                         .onPreviewKeyEvent { event ->
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
-                                Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown -> {
+                                // Up goes straight to the progress bar, to move along it; the others to Pause.
+                                Key.DirectionUp -> {
+                                    resting = false
+                                    if (!seekable || runCatching { timelineFocus.requestFocus() }.isFailure) {
+                                        runCatching { playFocus.requestFocus() }
+                                    }
+                                    true
+                                }
+                                Key.DirectionLeft, Key.DirectionRight, Key.DirectionDown -> {
                                     resting = false
                                     runCatching { playFocus.requestFocus() }
                                     true
@@ -166,14 +187,18 @@ fun PlayerControls(
                         .focusProperties { canFocus = resting }
                         .focusable(),
                 )
-                ControlButton(ControlIcon.REWIND, "${step / 1000} s", enabled = seekable) { controller.seekBy(-step) }
+                ControlButton(ControlIcon.REWIND, "5 min", enabled = seekable) { controller.seekBy(-BIG_STEP_MILLIS) }
+                ControlButton(ControlIcon.REWIND, "30 s", enabled = seekable) { controller.seekBy(-STEP_MILLIS) }
                 ControlButton(
                     if (playing) ControlIcon.PAUSE else ControlIcon.PLAY,
                     if (playing) "Pause" else "Play",
                     modifier = Modifier.focusRequester(playFocus),
                 ) { controller.togglePause() }
-                ControlButton(ControlIcon.FORWARD, "${step / 1000} s", enabled = seekable && (!live || behind > 2_000)) {
-                    controller.seekBy(step)
+                ControlButton(ControlIcon.FORWARD, "30 s", enabled = seekable && (!live || behind > 2_000)) {
+                    controller.seekBy(STEP_MILLIS)
+                }
+                ControlButton(ControlIcon.FORWARD, "5 min", enabled = seekable && (!live || behind > 2_000)) {
+                    controller.seekBy(BIG_STEP_MILLIS)
                 }
                 if (live) {
                     ControlButton(ControlIcon.LIVE, if (behind > 2_000) "Go live" else "Live", enabled = behind > 2_000 || !playing) {
@@ -233,8 +258,23 @@ fun PlayerControls(
     }
 }
 
+/**
+ * The progress bar. Up from the buttons highlights it; then Left and Right move a marker along it
+ * (hold to go faster: 10 s steps, then 30 s, 2 min and 5 min) and playback jumps there a moment after
+ * you stop, or straight away with OK.
+ */
 @Composable
-private fun Timeline(live: Boolean, seekable: Boolean, position: Long, duration: Long, behind: Long) {
+private fun Timeline(
+    live: Boolean,
+    seekable: Boolean,
+    position: Long,
+    duration: Long,
+    behind: Long,
+    /** For catch-up: the programme's start, so the marker can show the time of day. */
+    startClock: Long?,
+    focusRequester: FocusRequester,
+    onSeek: (Long) -> Unit,
+) {
     val colors = AppTheme.colors
     if (live && !seekable) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -242,17 +282,86 @@ private fun Timeline(live: Boolean, seekable: Boolean, position: Long, duration:
         }
         return
     }
-    val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-    Box(
+    var focused by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<Long?>(null) }
+    // Jump once the marker has stayed put for a moment, so holding Left/Right doesn't restart the stream at every step.
+    LaunchedEffect(pending) {
+        val target = pending ?: return@LaunchedEffect
+        delay(SCRUB_SETTLE_MILLIS)
+        onSeek(target)
+        delay(1_500)
+        pending = null
+    }
+    val shown = pending ?: position
+    val fraction = if (duration > 0) (shown.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    val playedFraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(5.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(Color.White.copy(alpha = 0.22f)),
+            .height(22.dp)
+            .focusRequester(focusRequester)
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || duration <= 0) return@onPreviewKeyEvent false
+                val repeat = event.nativeKeyEvent.repeatCount
+                val step = when {
+                    repeat < 3 -> 10_000L
+                    repeat < 12 -> 30_000L
+                    repeat < 30 -> 120_000L
+                    else -> 300_000L
+                }
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        pending = ((pending ?: position) - step).coerceIn(0, duration)
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        pending = ((pending ?: position) + step).coerceIn(0, duration)
+                        true
+                    }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                        pending?.let(onSeek)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .focusable(),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).background(colors.accent))
+        val barHeight = if (focused) 8.dp else 5.dp
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(barHeight)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.White.copy(alpha = 0.22f)),
+        ) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(playedFraction).background(colors.accent))
+        }
+        if (focused || pending != null) {
+            val knob = 18.dp
+            Box(
+                modifier = Modifier
+                    .offset(x = (maxWidth - knob) * fraction)
+                    .size(knob)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(if (pending != null) colors.text else colors.accent)
+                    .border(2.dp, colors.accent, androidx.compose.foundation.shape.CircleShape),
+            )
+        }
     }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        val target = pending
+        if (target != null) {
+            val clockText = startClock?.let { "  (${app.tvplayer.ui.components.clockTime(it + target)})" }.orEmpty()
+            Label(text = "Jump to ${clock(target)}$clockText  ·  OK to go now", style = AppType.label, color = colors.accent)
+            return@Row
+        }
+        if (focused) {
+            Label(text = "Left/Right to move along  ·  hold to go faster", style = AppType.label, color = colors.accent)
+            Spacer(Modifier.weight(1f))
+        }
         if (live) {
             LiveChip(on = behind <= 2_000)
             Spacer(Modifier.width(10.dp))
@@ -515,8 +624,9 @@ private fun clock(millis: Long): String {
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
-private const val LIVE_STEP_MILLIS = 30_000L
-private const val VOD_STEP_MILLIS = 10_000L
+private const val STEP_MILLIS = 30_000L
+private const val BIG_STEP_MILLIS = 300_000L
+private const val SCRUB_SETTLE_MILLIS = 800L
 private const val HIDE_MILLIS = 8_000L
 
 /** Live TV details for the controls: logo, number and name, the programme on, its times, what's next. */

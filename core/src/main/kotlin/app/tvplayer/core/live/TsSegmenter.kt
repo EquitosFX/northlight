@@ -25,10 +25,18 @@ class TsSegmenter(
     private val store: SegmentStore,
     private val windowSeconds: Double,
     private val maxBytes: Long,
-    private val minSeconds: Double = 0.5,
-    private val maxSeconds: Double = 1.0,
+    /** Slices are cut at the first video keyframe after this long. */
+    private val minSeconds: Double = 1.0,
+    /**
+     * A slice is only cut without a keyframe after this long. Cutting mid-picture leaves the next slice
+     * unable to show anything until a keyframe arrives (a black screen when playback starts there), so
+     * this is a safety limit for streams with very far-apart keyframes, not the usual slice length.
+     */
+    private val maxSeconds: Double = 4.0,
     /** The first slice is cut early so a channel starts quickly. */
     private val firstSeconds: Double = 0.6,
+    /** The playlist's target duration. The player re-reads the playlist about this often. */
+    private val targetSeconds: Int = 2,
     /** Milliseconds now; used to time slices when a stream carries no clock. */
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -61,11 +69,8 @@ class TsSegmenter(
     private val partial = ByteArray(PACKET)
     private var partialLength = 0
 
-    /**
-     * The playlist's target duration: the longest slice, rounded. The player re-reads the playlist this
-     * often, so slices are kept short (a second by default) to play close to live without running dry.
-     */
-    val targetDuration: Int = kotlin.math.round(maxSeconds).toInt().coerceAtLeast(1)
+    /** The playlist's target duration, in whole seconds. */
+    val targetDuration: Int = targetSeconds.coerceAtLeast(1)
 
     /** How many slices have been written and kept so far. */
     val sliceCount: Int get() = slices.size

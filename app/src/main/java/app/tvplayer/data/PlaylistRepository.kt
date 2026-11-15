@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import app.tvplayer.player.CatchupPlan
 import java.time.ZoneOffset
 import java.time.ZoneId
 import app.tvplayer.player.VodItem
@@ -200,8 +201,9 @@ class PlaylistRepository(
         } else {
             ZoneOffset.UTC
         }
+        val plan = CatchupPlan(row.url, type, row.catchupSource, zone, programme.start, programme.stop)
         val url = try {
-            Catchup.url(row.url, type, row.catchupSource, CatchupWindow(programme.start, programme.stop, System.currentTimeMillis()), zone)
+            plan.urlFrom(0)
         } catch (e: CatchupException) {
             throw IOException(e.message)
         }
@@ -212,7 +214,7 @@ class PlaylistRepository(
             userAgent = row.userAgent,
             referrer = row.referrer,
             fromStart = true,
-            catchup = true,
+            catchupPlan = plan,
         )
     }
 

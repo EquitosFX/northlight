@@ -122,7 +122,7 @@ class TimeshiftSession(
 
     companion object {
         /** Seconds recorded before playback starts. */
-        const val READY_SECONDS = 3.0
+        const val READY_SECONDS = 2.0
 
         /** Clears recordings left behind by a previous run. */
         fun clearAll(root: File) {

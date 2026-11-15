@@ -55,7 +55,7 @@ val SidebarPictureWidth = 208.dp
 val SidebarPictureHeight = 117.dp
 
 /** The sections in the side menu, top to bottom. */
-val SidebarSections = listOf(Dest.HOME, Dest.GUIDE, Dest.RECENTS, Dest.FILMS, Dest.SERIES, Dest.SEARCH, Dest.SETTINGS)
+val SidebarSections = listOf(Dest.HOME, Dest.GUIDE, Dest.RECENTS, Dest.FILMS, Dest.SERIES, Dest.SEARCH, Dest.MOVIE_NIGHT, Dest.SETTINGS)
 
 /**
  * The side panel: the time, the live picture (drawn over [SidebarPictureTop] by the player when something
