@@ -17,6 +17,10 @@ What is in place:
 - Three colour themes (Lagoon, Orchid, Midnight), chosen in Settings and saved on the device
 - `FocusSurface`, the one focusable building block for the remote
 - Side panel with the clock, the live picture and the menu; Figtree typeface
+- Player controls on OK: rewind, play/pause, fast-forward, go live, subtitles, audio, channels or next episode; Left opens the channel list
+- Pause and rewind live TV: records the channel being watched to local storage (15 min–2 hours, Settings › Player) and plays it as a local live stream
+- Subtitles: any subtitle/caption and audio track a stream carries; films and episodes can fetch subtitles from OpenSubtitles.com with the viewer's own key
+- TV guide: choosing a category shows just the listings; Back returns to the categories, then the menu
 - Settings › Updates: checks GitHub daily (dot on Settings when a build is ready), downloads with progress, verifies size and SHA-256, installs over the top
 - Skyfall branding: launcher icon, Android TV banner, start-up screen and a Skyfall colour theme (default), from the artwork in `branding/`
 - Home screen: your own content only (welcome when there is no playlist yet)

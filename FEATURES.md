@@ -14,6 +14,10 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Bundled typeface (Figtree, SIL Open Font License) | Built |
 | Skyfall branding: icon, TV banner, start-up screen, Skyfall theme | Built |
 | In-app updates from GitHub (daily check, verified download, install over the top) | Built |
+| Player controls on OK (rewind, pause, forward, go live, subtitles, audio, channels / next episode) | Built |
+| Pause and rewind live TV (local rolling recording, 15 min to 2 hours) | Built; needs testing on real streams |
+| Subtitle and audio track choice; OpenSubtitles for films and episodes | Built; needs testing on real streams |
+| TV guide: full-screen listings after choosing a category; two-step Back | Built |
 | Final app name, icon and home-screen banner | Not started (placeholders in place) |
 | Automatic APK build recipe | Built (publishes `northlight.apk` as the latest release) |
 
