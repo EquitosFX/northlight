@@ -3,6 +3,7 @@ package app.tvplayer.demo
 import androidx.test.platform.app.InstrumentationRegistry
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
@@ -68,6 +69,7 @@ class ScreenshotTest {
                 AppRoot(themeId = theme, onThemeChange = {}, container = app.container, startAt = dest)
             }
         }
+        leaveTouchMode()
         settle()
         // Robolectric's window may not hand focus over by itself; put it on the open section's menu item.
         println("Focused after opening ${dest.label}: ${focusedCount()}")
@@ -77,6 +79,20 @@ class ScreenshotTest {
             settle()
             println("Focused after asking: ${focusedCount()}")
         }
+    }
+
+    /** What a remote press does on a real box: takes the window out of touch mode, so focus can show. */
+    private fun leaveTouchMode() {
+        val view = rule.activity.window.decorView
+        runCatching {
+            val root = View::class.java.getDeclaredMethod("getViewRootImpl").apply { isAccessible = true }.invoke(view)!!
+            val method = generateSequence<Class<*>>(root.javaClass) { it.superclass }
+                .flatMap { it.declaredMethods.asSequence() }
+                .first { (it.name == "ensureTouchModeLocally" || it.name == "ensureTouchMode") && it.parameterTypes.size == 1 }
+            method.isAccessible = true
+            rule.runOnUiThread { method.invoke(root, false) }
+            println("Left touch mode with ${method.name}; in touch mode now: ${view.isInTouchMode}")
+        }.onFailure { println("Couldn't leave touch mode: $it") }
     }
 
     private fun focusedCount() = rule.onAllNodes(isFocused()).fetchSemanticsNodes().size
