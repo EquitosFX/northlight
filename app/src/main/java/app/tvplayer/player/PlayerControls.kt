@@ -309,7 +309,7 @@ private fun Timeline(
                     repeat < 12 -> 30_000L
                     repeat < 30 -> 120_000L
                     else -> 300_000L
-                }
+                }.coerceAtLeast(if (startClock != null) 60_000L else 0L) // catch-up servers work in whole minutes
                 when (event.key) {
                     Key.DirectionLeft -> {
                         pending = ((pending ?: position) - step).coerceIn(0, duration)

@@ -153,6 +153,19 @@ object DemoData {
                     "{\"media_type\":\"movie\",\"title\":\"${f.title}\",\"release_date\":\"${f.year}-03-01\"}"
                 },
             )
+            // Movie night: full details (running time, seasons) for a suggestion.
+            Regex("/(movie|tv)/(7\\d{3})$").find(path) != null -> {
+                val m = Regex("/(movie|tv)/(7\\d{3})$").find(path)!!
+                val tv = m.groupValues[1] == "tv"
+                val i = m.groupValues[2].toInt() - 7000
+                val f = (if (tv) series else films).getOrNull(i)
+                if (f == null) reply(404, "{}") else reply(
+                    200,
+                    "{\"id\":${7000 + i},\"${if (tv) "name" else "title"}\":\"${f.title}\",\"${if (tv) "first_air_date" else "release_date"}\":\"${f.year}-03-01\"," +
+                        "\"vote_average\":${6.1 + (i * 37 % 19) / 10.0},\"runtime\":${88 + i * 9 % 60},\"number_of_seasons\":${1 + i % 4}," +
+                        "\"genres\":[{\"name\":\"${f.genre}\"}],\"overview\":\"${f.overview}\"}",
+                )
+            }
             // Movie night: TMDB's discover search suggests some of the demo films or series.
             path.contains("/discover/") -> {
                 val page = url.queryParameter("page")?.toIntOrNull() ?: 1

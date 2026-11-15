@@ -329,7 +329,11 @@ object MovieNight {
         return notes.mapIndexed { i, list -> (list.ifEmpty { listOf(describe(picks[i])) }).take(3) }
     }
 
-    private fun describe(p: PickFacts): String = listOfNotNull(p.genres.firstOrNull(), p.year?.toString()).joinToString(", ").ifEmpty { "A good fit" }
+    private fun describe(p: PickFacts): String = listOfNotNull(
+        p.genres.firstOrNull(),
+        p.runtimeMinutes?.takeIf { !p.isSeries }?.let { hours(it) },
+        p.rating?.let { "★ %.1f".format(it) },
+    ).joinToString(", ").ifEmpty { "A good fit" }
 
     fun hours(minutes: Int): String = if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "$minutes min"
 }
