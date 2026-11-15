@@ -1,5 +1,7 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.onFocusChanged
 import app.tvplayer.ui.components.entersAt
 import app.tvplayer.ui.components.EntryFocus
 import app.tvplayer.ui.components.EntryPoint
@@ -115,7 +117,14 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
         else -> current.inGroup(group)
     }
 
-    Row(modifier = Modifier.fillMaxSize().padding(start = 34.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 34.dp)
+            // Once anything in the guide has focus, it never jumps to the first programme by itself.
+            .onFocusChanged { if (it.hasFocus) placedFocus = true }
+            .focusGroup(),
+    ) {
     Categories(
         groups = current.groups,
         selected = group,
