@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 
 /** The colour themes the user can pick in Settings › Appearance. */
 enum class ThemeId(val key: String, val label: String, val description: String) {
-    SKYFALL("skyfall", "Skyfall", "Midnight and ice blue"),
+    SKYFALL("skyfall", "Skyfall", "Navy and ice"),
     LAGOON("lagoon", "Lagoon", "Teal and amber"),
     ORCHID("orchid", "Orchid", "Plum and lime"),
     MIDNIGHT("midnight", "Midnight", "Navy and mint");
