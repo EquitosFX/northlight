@@ -40,7 +40,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import app.tvplayer.data.ChannelsRepository
+import app.tvplayer.core.tmdb.TmdbPerson
 import app.tvplayer.data.MetadataRepository
+import app.tvplayer.data.peopleList
+import app.tvplayer.ui.person.PeopleRow
 import app.tvplayer.data.db.MetadataEntity
 import app.tvplayer.data.PlaylistRepository
 import app.tvplayer.data.SeriesDetails
@@ -78,6 +81,7 @@ fun VodScreen(
     playlists: PlaylistRepository,
     metadata: MetadataRepository,
     onPlay: (VodItem, List<VodItem>) -> Unit,
+    onPerson: (TmdbPerson) -> Unit,
 ) {
     val colors = AppTheme.colors
     val series = state.series
@@ -87,13 +91,21 @@ fun VodScreen(
             playlists = playlists,
             metadata = metadata,
             onPlay = onPlay,
+            onPerson = onPerson,
             onBack = { state.series = null },
         )
         return
     }
     val film = state.film
     if (film != null) {
-        FilmPane(film = film, channels = channels, metadata = metadata, onPlay = onPlay, onBack = { state.film = null })
+        FilmPane(
+            film = film,
+            channels = channels,
+            metadata = metadata,
+            onPlay = onPlay,
+            onPerson = onPerson,
+            onBack = { state.film = null },
+        )
         return
     }
 
@@ -206,7 +218,7 @@ fun VodScreen(
 }
 
 @Composable
-private fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = AppTheme.colors
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FocusSurface(
@@ -244,6 +256,7 @@ private fun EpisodesPane(
     playlists: PlaylistRepository,
     metadata: MetadataRepository,
     onPlay: (VodItem, List<VodItem>) -> Unit,
+    onPerson: (TmdbPerson) -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = AppTheme.colors
@@ -295,6 +308,7 @@ private fun EpisodesPane(
         }
 
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            info?.let { PeopleRow(people = it.peopleList(), onPerson = onPerson) }
             val loaded = details
             val message = when {
                 problem != null -> problem

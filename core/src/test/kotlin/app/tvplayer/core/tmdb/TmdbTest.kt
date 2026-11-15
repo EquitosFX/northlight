@@ -71,18 +71,81 @@ class TmdbTest {
             {"id":11,"title":"Low Tide","release_date":"2019-10-04","overview":"A summer on the shore.",
              "poster_path":"/p.jpg","backdrop_path":"/b.jpg","vote_average":6.8,"runtime":86,
              "genres":[{"id":1,"name":"Drama"},{"id":2,"name":"Thriller"}],
-             "credits":{"cast":[{"name":"A"},{"name":"B"},{"name":"C"},{"name":"D"},{"name":"E"},{"name":"F"},{"name":"G"}]}}
+             "credits":{"cast":[{"id":1,"name":"A","character":"Mara","profile_path":"/a.jpg"},{"id":2,"name":"B"},{"id":3,"name":"C"},
+                                {"id":4,"name":"D"},{"id":5,"name":"E"},{"id":6,"name":"F"},{"id":7,"name":"G"},{"id":8,"name":"H"},{"id":9,"name":"I"}],
+                        "crew":[{"id":20,"name":"Dee Rector","job":"Director"},{"id":21,"name":"Pro Ducer","job":"Producer"}]}}
             """.trimIndent(),
         )
         assertEquals(86, film.runtimeMinutes)
         assertEquals(listOf("Drama", "Thriller"), film.genres)
-        assertEquals(6, film.cast.size)
+        assertEquals(8, film.cast.size)
+        assertEquals(TmdbPerson(1, "A", "Mara", "https://image.tmdb.org/t/p/w185/a.jpg"), film.cast[0])
+        assertEquals(listOf(TmdbPerson(20, "Dee Rector", "Director")), film.directors)
         assertEquals("https://image.tmdb.org/t/p/w1280/b.jpg", film.backdrop)
         assertEquals(6.8, film.rating)
 
-        val show = TmdbParser.parseDetails("""{"id":5,"name":"The Paper Round","episode_run_time":[45],"number_of_seasons":3,"vote_average":0}""")
+        val show = TmdbParser.parseDetails(
+            """{"id":5,"name":"The Paper Round","episode_run_time":[45],"number_of_seasons":3,"vote_average":0,
+                "created_by":[{"id":30,"name":"Cree Ator"}]}""",
+        )
+        assertEquals(listOf(TmdbPerson(30, "Cree Ator", "Creator")), show.directors)
         assertEquals(45, show.runtimeMinutes)
         assertEquals(3, show.seasons)
         assertNull(show.rating)
+    }
+
+    @Test
+    fun readsPeopleSearchAndCredits() {
+        val people = TmdbParser.parsePeopleSearch(
+            """{"results":[{"id":31,"name":"Tom Hardy","known_for_department":"Acting","profile_path":"/t.jpg"},{"name":"no id"}]}""",
+        )
+        assertEquals(listOf(TmdbPerson(31, "Tom Hardy", "Acting", "https://image.tmdb.org/t/p/w185/t.jpg")), people)
+
+        val credits = TmdbParser.parseCredits(
+            """
+            {"cast":[{"media_type":"movie","title":"Low Tide","release_date":"2019-10-04","character":"Red"},
+                     {"media_type":"tv","name":"The Paper Round","first_air_date":"2022-01-01","character":"Ed"},
+                     {"media_type":"movie","title":"Low Tide","release_date":"2019-10-04","character":"Again"}],
+             "crew":[{"media_type":"movie","title":"Storm Glass","release_date":"2024-02-02","job":"Director"},
+                     {"media_type":"person","name":"skip"}]}
+            """.trimIndent(),
+        )
+        assertEquals(listOf("Storm Glass", "The Paper Round", "Low Tide"), credits.map { it.title })
+        assertEquals("Director", credits[0].role)
+        assertEquals("tv", credits[1].mediaType)
+    }
+
+    @Test
+    fun matchesCreditsToTheLibraryDespiteUntidyNames() {
+        data class Item(val name: String, val series: Boolean = false)
+        val library = listOf(
+            Item("EN - Low Tide (2019) [4K]"),
+            Item("Low Tide (1975)"),
+            Item("|NF| The Paper Round", series = true),
+            Item("The Paper Round (2022)"),
+            Item("Storm Glass"),
+            Item("Unrelated Film (2010)"),
+        )
+        val index = LibraryIndex(library, { it.name }, { it.series })
+        val found = index.find(
+            listOf(
+                TmdbCredit("Storm Glass", 2024, "movie", "Director"),
+                TmdbCredit("The Paper Round", 2022, "tv", "Ed"),
+                TmdbCredit("Low Tide", 2019, "movie", "Red"),
+                TmdbCredit("Not In Library", 2020, "movie", null),
+            ),
+        )
+        assertEquals(
+            listOf(Item("Storm Glass"), Item("|NF| The Paper Round", series = true), Item("EN - Low Tide (2019) [4K]")),
+            found,
+        )
+        assertEquals(6, index.size)
+    }
+
+    @Test
+    fun keepsRemakesApartByYear() {
+        val index = LibraryIndex(listOf("Low Tide (1975)"), { it }, { false })
+        assertTrue(index.find(listOf(TmdbCredit("Low Tide", 2019, "movie", null))).isEmpty())
+        assertEquals(listOf("Low Tide (1975)"), index.find(listOf(TmdbCredit("Low Tide", 1976, "movie", null))))
     }
 }

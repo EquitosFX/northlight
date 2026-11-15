@@ -153,6 +153,7 @@ data class MetadataEntity(
     val rating: Double? = null,
     val runtimeMinutes: Int? = null,
     val genres: String = "",
-    val cast: String = "",
+    /** Directors and cast, one per line: kind (D or C), TMDB id, name, role, photo address, tab-separated. */
+    val people: String = "",
     val seasons: Int? = null,
 )

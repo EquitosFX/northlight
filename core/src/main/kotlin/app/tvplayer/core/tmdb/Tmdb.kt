@@ -52,6 +52,12 @@ data class TmdbResult(
     val popularity: Double,
 )
 
+/** A person on TMDB. [role] is a character, a job such as "Director", or a field such as "Acting". */
+data class TmdbPerson(val id: Long, val name: String, val role: String? = null, val photo: String? = null)
+
+/** One film or show a person worked on. [mediaType] is "movie" or "tv". */
+data class TmdbCredit(val title: String, val year: Int?, val mediaType: String, val role: String?)
+
 /** What the details screens show. Image fields are full addresses. */
 data class TmdbDetails(
     val id: Long,
@@ -63,7 +69,9 @@ data class TmdbDetails(
     val rating: Double?,
     val runtimeMinutes: Int?,
     val genres: List<String>,
-    val cast: List<String>,
+    val cast: List<TmdbPerson>,
+    /** Directors for a film; creators for a show. */
+    val directors: List<TmdbPerson>,
     val seasons: Int?,
 )
 
@@ -82,6 +90,10 @@ object TmdbUrls {
     }
 
     fun details(type: String, id: Long): String = "$BASE/$type/$id?append_to_response=credits&language=en-GB"
+
+    fun searchPerson(name: String): String = "$BASE/search/person?query=${enc(name)}&language=en-GB&include_adult=false"
+
+    fun personCredits(id: Long): String = "$BASE/person/$id/combined_credits?language=en-GB"
 
     /** Cheap call used to check a key works. */
     fun check(): String = "$BASE/configuration?language=en-GB"
@@ -125,10 +137,16 @@ object TmdbParser {
     fun parseDetails(text: String): TmdbDetails {
         val item = root(text)
         val id = item.num("id")?.toLong() ?: throw SerializationException("No id")
-        val cast = ((item["credits"] as? JsonObject)?.get("cast") as? JsonArray)
-            ?.mapNotNull { (it as? JsonObject)?.str("name") }
-            ?.take(6)
+        val credits = item["credits"] as? JsonObject
+        val cast = (credits?.get("cast") as? JsonArray)
+            ?.mapNotNull { person(it, "character") }
+            ?.take(8)
             .orEmpty()
+        val directors = ((credits?.get("crew") as? JsonArray)
+            ?.filter { (it as? JsonObject)?.str("job") == "Director" }
+            ?.mapNotNull { person(it, "job") }
+            .orEmpty() + (item["created_by"] as? JsonArray)?.mapNotNull { person(it, null)?.copy(role = "Creator") }.orEmpty())
+            .distinctBy { it.id }
         val runtime = item.num("runtime")?.toInt()
             ?: (item["episode_run_time"] as? JsonArray)?.firstOrNull()?.let { (it as? JsonPrimitive)?.content?.toIntOrNull() }
         return TmdbDetails(
@@ -142,7 +160,43 @@ object TmdbParser {
             runtimeMinutes = runtime?.takeIf { it > 0 },
             genres = (item["genres"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.str("name") }.orEmpty(),
             cast = cast,
+            directors = directors,
             seasons = item.num("number_of_seasons")?.toInt(),
+        )
+    }
+
+    /** Reads the answer to a person search; [TmdbPerson.role] is what they're known for, e.g. "Acting". */
+    fun parsePeopleSearch(text: String): List<TmdbPerson> =
+        (root(text)["results"] as? JsonArray)?.mapNotNull { person(it, "known_for_department") }.orEmpty()
+
+    /** Reads `combined_credits`: everything acted in, then everything worked on behind the camera, newest first. */
+    fun parseCredits(text: String): List<TmdbCredit> {
+        val root = root(text)
+        fun read(key: String, roleKey: String): List<TmdbCredit> =
+            (root[key] as? JsonArray)?.mapNotNull { element ->
+                val item = element as? JsonObject ?: return@mapNotNull null
+                val type = item.str("media_type") ?: return@mapNotNull null
+                if (type != "movie" && type != "tv") return@mapNotNull null
+                TmdbCredit(
+                    title = item.str("title") ?: item.str("name") ?: return@mapNotNull null,
+                    year = yearOf(item.str("release_date") ?: item.str("first_air_date")),
+                    mediaType = type,
+                    role = item.str(roleKey),
+                )
+            }.orEmpty()
+        return (read("cast", "character") + read("crew", "job"))
+            .distinctBy { Triple(it.mediaType, it.title.lowercase(), it.year) }
+            .sortedByDescending { it.year ?: 0 }
+    }
+
+    private fun person(element: kotlinx.serialization.json.JsonElement, roleKey: String?): TmdbPerson? {
+        val item = element as? JsonObject ?: return null
+        val id = item.num("id")?.toLong() ?: return null
+        return TmdbPerson(
+            id = id,
+            name = item.str("name") ?: return null,
+            role = roleKey?.let { item.str(it) },
+            photo = TmdbUrls.image(item.str("profile_path"), "w185"),
         )
     }
 
@@ -163,4 +217,38 @@ object TmdbParser {
     }
 
     private fun JsonObject.num(key: String): Double? = str(key)?.toDoubleOrNull()
+}
+
+/**
+ * Finds a person's films and shows among the playlist's own, whose names are untidy
+ * ("EN - Low Tide (2019) [4K]"). Names are cleaned and compared letter-for-letter; when both sides
+ * have a year they must be within a year of each other, which keeps remakes apart.
+ */
+class LibraryIndex<T>(items: List<T>, name: (T) -> String, isSeries: (T) -> Boolean) {
+
+    private class Entry<T>(val item: T, val year: Int?)
+
+    private val byKey: Map<String, List<Entry<T>>> = HashMap<String, MutableList<Entry<T>>>().also { map ->
+        for (item in items) {
+            val (title, year) = TitleCleaner.clean(name(item))
+            val key = key(if (isSeries(item)) "tv" else "movie", title)
+            map.getOrPut(key) { ArrayList(1) }.add(Entry(item, year))
+        }
+    }
+
+    val size: Int = items.size
+
+    /** Library items matching [credits], in the credits' order, each once. */
+    fun find(credits: List<TmdbCredit>): List<T> {
+        val found = LinkedHashSet<T>()
+        for (credit in credits) {
+            val candidates = byKey[key(credit.mediaType, credit.title)] ?: continue
+            val match = candidates.firstOrNull { it.year != null && credit.year != null && kotlin.math.abs(it.year - credit.year) <= 1 }
+                ?: candidates.firstOrNull { it.year == null || credit.year == null }
+            if (match != null) found.add(match.item)
+        }
+        return found.toList()
+    }
+
+    private fun key(type: String, title: String) = type + "|" + title.lowercase().filter { it.isLetterOrDigit() }
 }

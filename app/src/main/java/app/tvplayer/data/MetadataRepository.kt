@@ -1,11 +1,14 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.tmdb.LibraryIndex
 import app.tvplayer.core.tmdb.TitleCleaner
+import app.tvplayer.core.tmdb.TmdbPerson
 import app.tvplayer.core.tmdb.TmdbParser
 import app.tvplayer.core.tmdb.TmdbUrls
 import app.tvplayer.data.db.AppDatabase
 import app.tvplayer.data.db.ChannelEntity
 import app.tvplayer.data.db.MetadataEntity
+import app.tvplayer.data.db.VodRow
 import java.io.IOException
 import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +27,9 @@ class MetadataRepository(
     private val settings: SettingsRepository,
 ) {
     private class KeyRejected : IOException("TMDB didn't accept that key.")
+
+    /** The playlist's films and series, indexed by cleaned title; rebuilt when the number of titles changes. */
+    @Volatile private var index: LibraryIndex<VodRow>? = null
 
     suspend fun lookup(name: String, kind: String): MetadataEntity? = withContext(Dispatchers.IO) {
         val key = settings.tmdbKey.first().trim()
@@ -60,7 +66,11 @@ class MetadataRepository(
                     rating = details.rating,
                     runtimeMinutes = details.runtimeMinutes,
                     genres = details.genres.joinToString(", "),
-                    cast = details.cast.joinToString(", "),
+                    people = (details.directors.map { "D" to it } + details.cast.map { "C" to it })
+                        .joinToString("\n") { (kind, p) ->
+                            listOf(kind, p.id.toString(), p.name, p.role.orEmpty(), p.photo.orEmpty())
+                                .joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') }
+                        },
                     seasons = details.seasons,
                 )
             }
@@ -69,6 +79,38 @@ class MetadataRepository(
         } catch (e: Exception) {
             null
         }
+    }
+
+    suspend fun hasKey(): Boolean = settings.tmdbKey.first().isNotBlank()
+
+    /** People whose names match [text]; empty without a key or when offline. */
+    suspend fun searchPeople(text: String): List<TmdbPerson> = withContext(Dispatchers.IO) {
+        val key = settings.tmdbKey.first().trim()
+        if (key.isEmpty()) return@withContext emptyList()
+        try {
+            TmdbParser.parsePeopleSearch(get(TmdbUrls.searchPerson(text), key)).take(6)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Everything [personId] worked on that is in the viewer's playlists, newest first. Null when it can't be checked. */
+    suspend fun personInLibrary(personId: Long): List<VodRow>? = withContext(Dispatchers.IO) {
+        val key = settings.tmdbKey.first().trim()
+        if (key.isEmpty()) return@withContext null
+        try {
+            val credits = TmdbParser.parseCredits(get(TmdbUrls.personCredits(personId), key))
+            libraryIndex().find(credits)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private suspend fun libraryIndex(): LibraryIndex<VodRow> {
+        val count = db.channels().vodCount()
+        index?.let { if (it.size == count) return it }
+        val rows = db.channels().allVod()
+        return LibraryIndex(rows, { it.name }, { it.kind == ChannelEntity.KIND_SERIES }).also { index = it }
     }
 
     /** Returns null when [key] works, otherwise a reason it doesn't. */
@@ -104,3 +146,17 @@ class MetadataRepository(
         const val RETRY_MISS_MILLIS = 7 * 86_400_000L
     }
 }
+
+/** Directors (and creators) first, then cast, as stored with a TMDB look-up. */
+fun MetadataEntity.peopleList(): List<Pair<Boolean, TmdbPerson>> =
+    people.lines().mapNotNull { line ->
+        val parts = line.split('\t')
+        if (parts.size < 3) return@mapNotNull null
+        val id = parts[1].toLongOrNull() ?: return@mapNotNull null
+        (parts[0] == "D") to TmdbPerson(
+            id = id,
+            name = parts[2],
+            role = parts.getOrNull(3)?.takeIf { it.isNotBlank() },
+            photo = parts.getOrNull(4)?.takeIf { it.isNotBlank() },
+        )
+    }

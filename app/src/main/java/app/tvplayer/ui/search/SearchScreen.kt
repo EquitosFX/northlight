@@ -25,7 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
+import app.tvplayer.core.tmdb.TmdbPerson
 import app.tvplayer.data.ChannelsRepository
+import app.tvplayer.data.MetadataRepository
+import app.tvplayer.ui.person.PersonPhoto
 import app.tvplayer.data.db.ChannelEntity
 import app.tvplayer.data.db.VodRow
 import app.tvplayer.ui.components.FocusSurface
@@ -38,7 +41,12 @@ import kotlinx.coroutines.delay
 
 /** Search across live channels, films and series by name. Results update as you type. */
 @Composable
-fun SearchScreen(channels: ChannelsRepository, onOpen: (VodRow) -> Unit) {
+fun SearchScreen(
+    channels: ChannelsRepository,
+    metadata: MetadataRepository,
+    onOpen: (VodRow) -> Unit,
+    onPerson: (TmdbPerson) -> Unit,
+) {
     val colors = AppTheme.colors
     var query by rememberSaveable { mutableStateOf("") }
     val fieldFocus = remember { FocusRequester() }
@@ -55,6 +63,16 @@ fun SearchScreen(channels: ChannelsRepository, onOpen: (VodRow) -> Unit) {
         value = channels.search(text)
     }
 
+    // Actors, directors and writers, from TMDB when a key is set.
+    val people by produceState<List<TmdbPerson>>(initialValue = emptyList(), text) {
+        if (text.length < 3) {
+            value = emptyList()
+            return@produceState
+        }
+        delay(400)
+        value = metadata.searchPeople(text)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -65,7 +83,7 @@ fun SearchScreen(channels: ChannelsRepository, onOpen: (VodRow) -> Unit) {
         TvTextField(
             value = query,
             onValueChange = { query = it },
-            label = "Channels, films and series",
+            label = "Channels, films, series and people",
             placeholder = "Press OK to type",
             modifier = Modifier
                 .width(430.dp)
@@ -86,6 +104,38 @@ fun SearchScreen(channels: ChannelsRepository, onOpen: (VodRow) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.weight(1f),
         ) {
+            items(people, key = { "person${it.id}" }) { person ->
+                FocusSurface(
+                    onClick = { onPerson(person) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    focusScale = 1.01f,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PersonPhoto(person = person, modifier = Modifier.size(34.dp))
+                        Label(text = person.name, style = AppType.title, modifier = Modifier.weight(1f))
+                        Label(
+                            text = when (person.role) {
+                                "Acting" -> "Actor"
+                                "Directing" -> "Director"
+                                "Writing" -> "Writer"
+                                "Production" -> "Producer"
+                                null -> "Person"
+                                else -> person.role ?: "Person"
+                            },
+                            style = AppType.caption,
+                            color = colors.textDim,
+                        )
+                    }
+                }
+            }
             items(list.orEmpty(), key = { it.id }) { row ->
                 FocusSurface(
                     onClick = { onOpen(row) },

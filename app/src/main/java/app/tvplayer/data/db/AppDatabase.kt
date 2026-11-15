@@ -110,6 +110,15 @@ interface ChannelDao {
     )
     suspend fun search(pattern: String): List<VodRow>
 
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
+            "WHERE kind IN ('movie', 'series')",
+    )
+    suspend fun allVod(): List<VodRow>
+
+    @Query("SELECT COUNT(*) FROM channels WHERE kind IN ('movie', 'series')")
+    suspend fun vodCount(): Int
+
     @Query("UPDATE channels SET epgId = :epgId WHERE playlistId = :playlistId AND variantKey = :variantKey")
     fun setEpgIdBlocking(playlistId: Long, variantKey: String, epgId: String?)
 
@@ -181,7 +190,7 @@ interface MetadataDao {
         FavouriteEntity::class,
         MetadataEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {

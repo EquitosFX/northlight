@@ -27,7 +27,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import app.tvplayer.data.ChannelsRepository
+import app.tvplayer.core.tmdb.TmdbPerson
 import app.tvplayer.data.MetadataRepository
+import app.tvplayer.data.peopleList
+import app.tvplayer.ui.person.PeopleRow
 import app.tvplayer.data.db.MetadataEntity
 import app.tvplayer.data.db.ProgressEntity
 import app.tvplayer.data.db.VodRow
@@ -45,6 +48,7 @@ internal fun FilmPane(
     channels: ChannelsRepository,
     metadata: MetadataRepository,
     onPlay: (VodItem, List<VodItem>) -> Unit,
+    onPerson: (TmdbPerson) -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = AppTheme.colors
@@ -107,9 +111,6 @@ internal fun FilmPane(
             ).joinToString(" · ")
             if (meta.isNotEmpty()) Label(text = meta, style = AppType.label, color = colors.accent)
             details?.overview?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 5) }
-            details?.cast?.takeIf { it.isNotEmpty() }?.let {
-                Label(text = "Starring $it", style = AppType.caption, color = colors.textDim, maxLines = 2)
-            }
             if (details == null) {
                 Label(text = film.name, style = AppType.caption, color = colors.textFaint)
             }
@@ -124,6 +125,8 @@ internal fun FilmPane(
                     PageButton(text = "Start over") { onPlay(item.copy(fromStart = true), listOf(item)) }
                 }
             }
+            // Down from the buttons reaches the director and cast; selecting one shows their other titles.
+            details?.let { PeopleRow(people = it.peopleList(), onPerson = onPerson, modifier = Modifier.width(900.dp)) }
         }
     }
 }

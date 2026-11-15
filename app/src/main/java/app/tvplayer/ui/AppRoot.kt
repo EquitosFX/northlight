@@ -41,6 +41,9 @@ import app.tvplayer.player.PlayerMode
 import app.tvplayer.player.VodItem
 import app.tvplayer.data.db.ChannelEntity
 import app.tvplayer.ui.search.SearchScreen
+import app.tvplayer.ui.person.PersonScreen
+import app.tvplayer.core.tmdb.TmdbPerson
+import app.tvplayer.data.db.VodRow
 import app.tvplayer.ui.vod.VodBrowseState
 import app.tvplayer.ui.vod.VodScreen
 import app.tvplayer.ui.components.Dest
@@ -106,6 +109,27 @@ fun AppRoot(
     val filmsState = remember { VodBrowseState() }
     val seriesState = remember { VodBrowseState() }
 
+    // A person's page sits over whatever section opened it; Back returns there.
+    var person by remember { mutableStateOf<TmdbPerson?>(null) }
+
+    fun openTitle(row: VodRow) {
+        person = null
+        when {
+            row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null -> {
+                seriesState.series = row
+                dest = Dest.SERIES
+            }
+            row.kind == ChannelEntity.KIND_SERIES -> {
+                seriesState.film = row
+                dest = Dest.SERIES
+            }
+            else -> {
+                filmsState.film = row
+                dest = Dest.FILMS
+            }
+        }
+    }
+
     val progress by container.channels.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val continueWatching = remember(progress) {
         progress.map { saved ->
@@ -128,6 +152,8 @@ fun AppRoot(
         controller.close()
         mode = PlayerMode.NONE
     }
+
+    BackHandler(enabled = person != null && mode != PlayerMode.FULL) { person = null }
 
     val liveChannels by container.playlists.firstLiveChannels.collectAsStateWithLifecycle(initialValue = emptyList())
     val yourChannels = remember(liveChannels) {
@@ -173,11 +199,17 @@ fun AppRoot(
             Column(modifier = Modifier.fillMaxSize()) {
                 TopNavBar(
                     selected = dest,
-                    onSelect = { chosen -> dest = chosen },
+                    onSelect = { chosen ->
+                        person = null
+                        dest = chosen
+                    },
                     appName = stringResource(R.string.app_name),
                 )
                 Spacer(Modifier.height(10.dp))
-                when (dest) {
+                val shownPerson = person
+                if (shownPerson != null) {
+                    PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) })
+                } else when (dest) {
                     Dest.HOME -> HomeScreen(
                         yourChannels = yourChannels,
                         continueWatching = continueWatching,
@@ -198,6 +230,7 @@ fun AppRoot(
                         playlists = container.playlists,
                         metadata = container.metadata,
                         onPlay = { item, episodes -> playVod(item, episodes) },
+                        onPerson = { chosen -> person = chosen },
                     )
                     Dest.SERIES -> VodScreen(
                         kind = ChannelEntity.KIND_SERIES,
@@ -206,9 +239,12 @@ fun AppRoot(
                         playlists = container.playlists,
                         metadata = container.metadata,
                         onPlay = { item, episodes -> playVod(item, episodes) },
+                        onPerson = { chosen -> person = chosen },
                     )
                     Dest.SEARCH -> SearchScreen(
                         channels = container.channels,
+                        metadata = container.metadata,
+                        onPerson = { chosen -> person = chosen },
                         onOpen = { row ->
                             when {
                                 row.kind == ChannelEntity.KIND_LIVE -> play(row.id)
