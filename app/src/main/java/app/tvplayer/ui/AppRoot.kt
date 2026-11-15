@@ -282,7 +282,7 @@ fun AppRoot(
         }
     }
     val hero = when {
-        lists == null -> HomeHero("NORTHLIGHT", "Loading…", null, null, null, "Settings", { dest = Dest.SETTINGS })
+        lists == null -> HomeHero("NORTHLIGHT", "Loading…", null, null, null, "Settings", onPrimary = { dest = Dest.SETTINGS })
         lists.isEmpty() -> HomeHero(
             overline = "WELCOME",
             title = "Welcome to Northlight",
