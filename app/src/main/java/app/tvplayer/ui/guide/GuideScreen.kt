@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import app.tvplayer.core.catchup.Catchup
@@ -163,6 +164,7 @@ fun GuideScreen(
             // Once anything in the guide has focus, it never jumps to the first programme by itself.
             // Leaving the guide altogether (to the side menu) brings the categories back for next time.
             .onFocusChanged {
+                android.util.Log.d("GuideDebug", "guide focus $it", Throwable())
                 if (it.hasFocus) placedFocus = true else listings = false
             }
             .focusGroup(),
@@ -445,6 +447,7 @@ private fun GuideRow(
                         true
                     }
                     event.key == Key.DirectionLeft && start <= windowStart && canGoBack -> {
+                        android.util.Log.d("GuideDebug", "shift back from ${channel.name}")
                         onShift(-HOUR)
                         true
                     }
@@ -536,6 +539,7 @@ private fun GuideCell(
         focusScale = 1f,
     ) { focused ->
         LaunchedEffect(focused) { if (focused) onFocus() }
+        DisposableEffect(Unit) { onDispose { android.util.Log.d("GuideDebug", "cell disposed $title focused=$focused") } }
         val tint = when {
             focused -> colors.onAccent
             past && !catchup -> colors.textFaint
