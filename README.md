@@ -74,3 +74,12 @@ The newest build is always at:
 - **Never commit playlist addresses, usernames, passwords or a TMDB key.** This repository is public. The TMDB key is entered on the device and stored there only.
 - **Font:** Figtree, bundled in `app/src/main/res/font/` under the SIL Open Font License (`third_party/figtree/OFL.txt`).
 - **Package name** is `app.tvplayer`, deliberately neutral so it does not depend on the final app name.
+
+## Screenshots
+
+Every push also runs the **Screenshots** workflow. It draws the real screens at the Shield's
+resolution (1920×1080) with made-up demo content (invented channels, films and artwork from
+`app/src/test/`), and saves them to the
+[`demo-screens` branch](https://github.com/EquitosFX/northlight/tree/demo-screens).
+To draw them locally: `./gradlew :app:testDebugUnitTest --tests 'app.tvplayer.demo.ScreenshotTest'`
+(pictures land in `app/build/screenshots/`).
