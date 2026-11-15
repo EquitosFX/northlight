@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.LocalHoldFocus
 import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -89,6 +90,7 @@ fun VodScreen(
     onPerson: (TmdbPerson) -> Unit,
 ) {
     val colors = AppTheme.colors
+    val holdFocus = LocalHoldFocus.current
     val series = state.series
     if (series != null) {
         EpisodesPane(
@@ -97,7 +99,10 @@ fun VodScreen(
             metadata = metadata,
             onPlay = onPlay,
             onPerson = onPerson,
-            onBack = { state.series = null },
+            onBack = {
+                holdFocus()
+                state.series = null
+            },
         )
         return
     }
@@ -109,7 +114,10 @@ fun VodScreen(
             metadata = metadata,
             onPlay = onPlay,
             onPerson = onPerson,
-            onBack = { state.film = null },
+            onBack = {
+                holdFocus()
+                state.film = null
+            },
         )
         return
     }
@@ -234,6 +242,7 @@ fun VodScreen(
                     modifier = if (index == state.lastIndex) Modifier.focusRequester(gridFocus) else Modifier,
                     onFocus = { highlighted = row },
                     onClick = {
+                        holdFocus()
                         state.lastIndex = index
                         state.returnToGrid = true
                         // Xtream Codes series are listed as whole series; M3U lists each episode on its own.

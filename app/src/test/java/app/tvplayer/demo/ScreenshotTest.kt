@@ -129,7 +129,7 @@ class ScreenshotTest {
     }
 
     private fun press(vararg names: String) {
-        val keys = names.map { mapOf("right" to Key.DirectionRight, "down" to Key.DirectionDown, "ok" to Key.DirectionCenter).getValue(it) }
+        val keys = names.map { mapOf("right" to Key.DirectionRight, "down" to Key.DirectionDown, "ok" to Key.DirectionCenter, "back" to Key.Back).getValue(it) }
         for (key in keys) {
             val target = if (focusedCount() > 0) rule.onNode(isFocused()) else rule.onRoot()
             runCatching { target.performKeyInput { pressKey(key) } }
@@ -172,6 +172,8 @@ class ScreenshotTest {
         shot("07-films-browsing")
         press("ok")
         shot("08-film-page")
+        press("back")
+        shot("08b-back-to-films")
     }
 
     @Test fun series() {

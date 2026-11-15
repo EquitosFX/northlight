@@ -1,5 +1,8 @@
 package app.tvplayer.ui
 
+import app.tvplayer.ui.components.LocalHoldFocus
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.offset
@@ -148,7 +151,16 @@ fun AppRoot(
     // A person's page sits over whatever section opened it; Back returns there.
     var person by remember { mutableStateOf<TmdbPerson?>(null) }
 
+    // An invisible spot in the content that holds focus while one view replaces another.
+    val holder = remember { FocusRequester() }
+    var holding by remember { mutableStateOf(false) }
+    fun holdFocus() {
+        holding = true
+        runCatching { holder.requestFocus() }
+    }
+
     fun openTitle(row: VodRow) {
+        holdFocus()
         person = null
         when {
             row.kind == ChannelEntity.KIND_SERIES && row.remoteId != null -> {
@@ -223,7 +235,10 @@ fun AppRoot(
     }
     // From the content, Back returns to the menu.
     BackHandler(enabled = !onMenuSide && mode != PlayerMode.FULL) { focusMenu() }
-    BackHandler(enabled = person != null && mode != PlayerMode.FULL) { person = null }
+    BackHandler(enabled = person != null && mode != PlayerMode.FULL) {
+        holdFocus()
+        person = null
+    }
 
     // Home and Recents are built from the viewer's own playlists, history and favourites.
     val playlistList by container.playlists.playlists.collectAsStateWithLifecycle(initialValue = null)
@@ -390,7 +405,15 @@ fun AppRoot(
                     .padding(start = SidebarWidth + sidebarOffset, top = 14.dp)
                     .focusRequester(contentFocus),
             ) {
-                CompositionLocalProvider(LocalAutoFocus provides autoFocusAllowed) {
+                Box(
+                    modifier = Modifier
+                        .size(1.dp)
+                        .focusProperties { canFocus = holding }
+                        .focusRequester(holder)
+                        .onFocusChanged { if (!it.isFocused) holding = false }
+                        .focusable(),
+                )
+                CompositionLocalProvider(LocalAutoFocus provides autoFocusAllowed, LocalHoldFocus provides { holdFocus() }) {
                 val shownPerson = person
                 if (shownPerson != null) {
                     PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) })
@@ -421,7 +444,10 @@ fun AppRoot(
                         playlists = container.playlists,
                         metadata = container.metadata,
                         onPlay = { item, episodes -> playVod(item, episodes) },
-                        onPerson = { chosen -> person = chosen },
+                        onPerson = { chosen ->
+                            holdFocus()
+                            person = chosen
+                        },
                     )
                     Dest.SERIES -> VodScreen(
                         kind = ChannelEntity.KIND_SERIES,
@@ -430,13 +456,19 @@ fun AppRoot(
                         playlists = container.playlists,
                         metadata = container.metadata,
                         onPlay = { item, episodes -> playVod(item, episodes) },
-                        onPerson = { chosen -> person = chosen },
+                        onPerson = { chosen ->
+                            holdFocus()
+                            person = chosen
+                        },
                     )
                     Dest.SEARCH -> SearchScreen(
                         channels = container.channels,
                         metadata = container.metadata,
                         voiceToken = voiceToken,
-                        onPerson = { chosen -> person = chosen },
+                        onPerson = { chosen ->
+                            holdFocus()
+                            person = chosen
+                        },
                         onOpen = { row ->
                             when {
                                 row.kind == ChannelEntity.KIND_LIVE -> play(row.id)

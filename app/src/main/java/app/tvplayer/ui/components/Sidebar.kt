@@ -1,5 +1,6 @@
 package app.tvplayer.ui.components
 
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -98,13 +99,28 @@ fun Sidebar(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Which item had focus last; null while focus is outside the menu.
+            var focusedItem by remember { mutableStateOf<Dest?>(null) }
+            Column(
+                modifier = Modifier.onFocusChanged { if (!it.hasFocus) focusedItem = null },
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 for (dest in SidebarSections) {
                     MenuItem(
                         dest = dest,
                         current = dest == selected,
                         focusRequester = itemFocus.getValue(dest),
-                        onFocus = { onSelect(dest) },
+                        onFocus = {
+                            val movingWithinMenu = focusedItem != null
+                            focusedItem = dest
+                            val openItem = itemFocus[selected]
+                            when {
+                                // Moving up and down the menu shows each section.
+                                movingWithinMenu || dest == selected || openItem == null -> onSelect(dest)
+                                // Arriving from elsewhere lands on the open section rather than switching.
+                                else -> runCatching { openItem.requestFocus() }
+                            }
+                        },
                         onClick = onEnter,
                     )
                 }
