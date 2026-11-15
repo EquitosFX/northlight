@@ -2,6 +2,8 @@
 
 package app.tvplayer.ui
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import kotlinx.coroutines.delay
@@ -562,7 +564,9 @@ fun AppRoot(
                             onCatchup = { channel, programme ->
                                 scope.launch {
                                     try {
-                                        playVod(container.playlists.catchupItem(channel, programme))
+                                        val item = container.playlists.catchupItem(channel, programme)
+                                        // The player must be driven from the main thread.
+                                        withContext(Dispatchers.Main) { playVod(item) }
                                     } catch (e: Exception) {
                                         notice = container.playlists.explainError(e)
                                     }
