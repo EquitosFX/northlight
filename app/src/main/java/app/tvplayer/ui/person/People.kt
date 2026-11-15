@@ -37,6 +37,7 @@ import app.tvplayer.data.MetadataRepository
 import app.tvplayer.data.db.VodRow
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
+import app.tvplayer.ui.components.LocalAutoFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import app.tvplayer.ui.vod.PosterCard
@@ -104,6 +105,7 @@ fun PersonScreen(person: TmdbPerson, metadata: MetadataRepository, onOpen: (VodR
     val found by produceState<List<VodRow>?>(initialValue = null, person.id) { value = metadata.personInLibrary(person.id) }
     var loaded = false
     val firstItem = remember { FocusRequester() }
+    val autoFocus = LocalAutoFocus.current
 
     Column(
         modifier = Modifier
@@ -153,6 +155,6 @@ fun PersonScreen(person: TmdbPerson, metadata: MetadataRepository, onOpen: (VodR
     LaunchedEffect(found != null && loaded) {
         if (!loaded) return@LaunchedEffect
         withFrameNanos { }
-        runCatching { firstItem.requestFocus() }
+        if (autoFocus()) runCatching { firstItem.requestFocus() }
     }
 }

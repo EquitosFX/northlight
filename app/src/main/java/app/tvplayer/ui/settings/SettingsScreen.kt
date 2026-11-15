@@ -28,6 +28,7 @@ import app.tvplayer.data.PlaylistRepository
 import app.tvplayer.data.SettingsRepository
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
+import app.tvplayer.ui.components.LocalAutoFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import app.tvplayer.ui.theme.ThemeId
@@ -50,7 +51,8 @@ fun SettingsScreen(
     val colors = AppTheme.colors
     var section by rememberSaveable { mutableStateOf(SettingsSection.PLAYLISTS) }
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
+    val autoFocus = LocalAutoFocus.current
+    LaunchedEffect(Unit) { if (autoFocus()) runCatching { firstFocus.requestFocus() } }
 
     Row(
         modifier = Modifier

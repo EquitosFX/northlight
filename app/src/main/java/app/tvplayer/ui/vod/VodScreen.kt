@@ -1,6 +1,7 @@
 package app.tvplayer.ui.vod
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.delay
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import app.tvplayer.data.ChannelsRepository
@@ -53,6 +56,7 @@ import app.tvplayer.data.db.VodRow
 import app.tvplayer.player.VodItem
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
+import app.tvplayer.ui.components.LocalAutoFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import coil.compose.AsyncImage
@@ -132,17 +136,39 @@ fun VodScreen(
     }
     val groupFocus = remember { FocusRequester() }
     val gridFocus = remember { FocusRequester() }
+    val autoFocus = LocalAutoFocus.current
     val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = state.lastIndex)
+    // The header shows the highlighted poster's details, looked up once the highlight settles.
+    var highlighted by remember(kind) { mutableStateOf<VodRow?>(null) }
+    val highlightInfo by produceState<MetadataEntity?>(initialValue = null, highlighted?.id) {
+        val row = highlighted ?: return@produceState
+        delay(350)
+        value = metadata.lookup(row.name, row.kind)
+    }
 
     // On arrival focus the chosen group; coming back from watching, focus the poster that was picked.
     LaunchedEffect(items != null) {
         if (items == null) return@LaunchedEffect
         withFrameNanos { }
         val target = if (state.returnToGrid) gridFocus else groupFocus
-        runCatching { target.requestFocus() }
+        if (autoFocus()) runCatching { target.requestFocus() }
         state.returnToGrid = false
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+    val backdrop = highlightInfo?.backdrop?.takeIf { highlighted != null }
+    if (backdrop != null) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .fillMaxWidth(0.72f)
+                .height(250.dp),
+        ) {
+            AsyncImage(model = backdrop, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to colors.groundTop, 0.45f to Color.Transparent)))
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to colors.groundTop)))
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -189,8 +215,10 @@ fun VodScreen(
         }
 
         val rows = items.orEmpty()
+        Column(modifier = Modifier.weight(1f)) {
+        HighlightHeader(row = highlighted, info = highlightInfo)
         LazyVerticalGrid(
-            columns = GridCells.Fixed(5),
+            columns = GridCells.Fixed(6),
             state = gridState,
             contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -201,6 +229,7 @@ fun VodScreen(
                 PosterCard(
                     row = row,
                     modifier = if (index == state.lastIndex) Modifier.focusRequester(gridFocus) else Modifier,
+                    onFocus = { highlighted = row },
                     onClick = {
                         state.lastIndex = index
                         state.returnToGrid = true
@@ -214,11 +243,38 @@ fun VodScreen(
                 )
             }
         }
+        }
+    }
+    }
+}
+
+/** The highlighted title's details, above the posters. */
+@Composable
+private fun HighlightHeader(row: VodRow?, info: MetadataEntity?) {
+    val colors = AppTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth(0.62f)
+            .height(132.dp)
+            .padding(top = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (row == null) return@Column
+        Label(text = info?.title ?: row.name, style = AppType.headline, maxLines = 1)
+        val meta = listOfNotNull(
+            info?.year?.toString(),
+            info?.runtimeMinutes?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
+            info?.rating?.let { "★ %.1f".format(it) },
+            info?.seasons?.let { if (it == 1) "1 season" else "$it seasons" },
+            info?.genres?.takeIf { it.isNotEmpty() },
+        ).joinToString(" · ")
+        if (meta.isNotEmpty()) Label(text = meta, style = AppType.label, color = colors.accent)
+        info?.overview?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 3) }
     }
 }
 
 @Composable
-internal fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = Modifier, onFocus: () -> Unit = {}) {
     val colors = AppTheme.colors
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FocusSurface(
@@ -228,7 +284,8 @@ internal fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = M
                 .aspectRatio(2f / 3f),
             shape = RoundedCornerShape(8.dp),
             outlined = false,
-        ) {
+        ) { focused ->
+            LaunchedEffect(focused) { if (focused) onFocus() }
             // The title stays underneath, so it shows if the poster is missing or fails to load.
             Label(
                 text = row.name,
@@ -264,6 +321,7 @@ private fun EpisodesPane(
     var problem by remember(series.id) { mutableStateOf<String?>(null) }
     var season by remember(series.id) { mutableIntStateOf(-1) }
     val firstEpisode = remember { FocusRequester() }
+    val autoFocus = LocalAutoFocus.current
     val info by produceState<MetadataEntity?>(initialValue = null, series.id) {
         value = metadata.lookup(series.name, ChannelEntity.KIND_SERIES)
     }
@@ -349,7 +407,7 @@ private fun EpisodesPane(
             val episodes = loaded.episodes.filter { it.season == shown }
             LaunchedEffect(loaded) {
                 withFrameNanos { }
-                runCatching { firstEpisode.requestFocus() }
+                if (autoFocus()) runCatching { firstEpisode.requestFocus() }
             }
             LazyColumn(
                 contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp),

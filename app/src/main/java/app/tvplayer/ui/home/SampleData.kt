@@ -10,6 +10,7 @@ data class HomeHero(
     val meta: String?,
     val logo: String?,
     val primaryLabel: String,
+    val backdrop: String? = null,
     val onPrimary: () -> Unit,
     val secondaryLabel: String? = null,
     val onSecondary: () -> Unit = {},

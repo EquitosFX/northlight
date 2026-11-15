@@ -37,6 +37,7 @@ import app.tvplayer.data.db.VodRow
 import app.tvplayer.player.VodItem
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
+import app.tvplayer.ui.components.LocalAutoFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import coil.compose.AsyncImage
@@ -55,11 +56,12 @@ internal fun FilmPane(
     val info by produceState<MetadataEntity?>(initialValue = null, film.id) { value = metadata.lookup(film.name, film.kind) }
     val progress by produceState<ProgressEntity?>(initialValue = null, film.url) { value = channels.progressFor(film.url) }
     val firstButton = remember { FocusRequester() }
+    val autoFocus = LocalAutoFocus.current
 
     BackHandler { onBack() }
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        runCatching { firstButton.requestFocus() }
+        if (autoFocus()) runCatching { firstButton.requestFocus() }
     }
 
     val details = info

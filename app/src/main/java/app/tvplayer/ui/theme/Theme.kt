@@ -7,7 +7,11 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontVariation
+import app.tvplayer.R
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -67,18 +71,30 @@ fun paletteFor(id: ThemeId): AppColors = when (id) {
     )
 }
 
-/**
- * Type scale, sized for a TV viewed from the sofa (a 1080p TV is 960 x 540 dp).
- * The design uses Inter and Space Grotesk; until those font files are bundled the system sans is used.
- */
+/** Figtree (SIL Open Font License, see third_party/figtree/OFL.txt): one variable font file, four weights. */
+@OptIn(ExperimentalTextApi::class)
+private val Figtree = FontFamily(
+    listOf(400, 500, 600, 700).map { weight ->
+        Font(
+            resId = R.font.figtree,
+            weight = FontWeight(weight),
+            variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+        )
+    },
+)
+
+/** Type scale, sized for a TV viewed from the sofa (a 1080p TV is 960 x 540 dp). */
 object AppType {
-    private val family = FontFamily.SansSerif
+    private val family = Figtree
     val display = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 44.sp, lineHeight = 46.sp)
     val headline = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 22.sp, lineHeight = 26.sp)
     val title = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 19.sp)
     val body = TextStyle(fontFamily = family, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp)
     val label = TextStyle(fontFamily = family, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, lineHeight = 16.sp)
     val caption = TextStyle(fontFamily = family, fontWeight = FontWeight.Normal, fontSize = 11.sp, lineHeight = 14.sp)
+    val menu = TextStyle(fontFamily = family, fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 22.sp)
+    val menuSelected = TextStyle(fontFamily = family, fontWeight = FontWeight.Bold, fontSize = 19.sp, lineHeight = 23.sp)
+    val clock = TextStyle(fontFamily = family, fontWeight = FontWeight.Medium, fontSize = 20.sp, lineHeight = 24.sp)
     val overline = TextStyle(
         fontFamily = family,
         fontWeight = FontWeight.Bold,

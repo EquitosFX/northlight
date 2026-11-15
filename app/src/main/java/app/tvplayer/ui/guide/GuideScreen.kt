@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -45,10 +46,12 @@ import app.tvplayer.core.live.Lineup
 import app.tvplayer.core.live.LineupChannel
 import app.tvplayer.data.ChannelsRepository
 import app.tvplayer.data.db.ProgrammeEntity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.Logo
 import app.tvplayer.ui.components.clockTime
+import app.tvplayer.ui.components.LocalAutoFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 
@@ -61,7 +64,8 @@ private const val WINDOW = 2 * HOUR
 
 private val ChannelColumn = 196.dp
 private val RowHeight = 40.dp
-private val SideMargin = 48.dp
+private val SideMargin = 14.dp
+private const val FAVOURITES = "\u0000favourites"
 
 /** The programme the viewer is on, for the header. A null programme means the channel has no guide data. */
 private data class Focused(val channel: LineupChannel, val programme: ProgrammeEntity?)
@@ -81,6 +85,9 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
     var focused by remember { mutableStateOf<Focused?>(null) }
     val firstFocus = remember { FocusRequester() }
     var placedFocus by remember { mutableStateOf(false) }
+    // The category list on the left: Favourites, All channels, then the playlist's groups.
+    var group by remember { mutableStateOf<String?>(null) }
+    val favourites by channels.favouriteKeys.collectAsStateWithLifecycle(initialValue = emptySet())
 
     val current = lineup
     if (current == null || current.isEmpty) {
@@ -98,15 +105,37 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
         windowStart = (windowStart + by).coerceIn(earliest, earliest + 7 * 24 * HOUR - WINDOW)
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    val rows = when (group) {
+        null -> current.channels
+        FAVOURITES -> current.channels.filter { it.key in favourites }
+        else -> current.inGroup(group)
+    }
+
+    Row(modifier = Modifier.fillMaxSize().padding(start = 34.dp)) {
+    Categories(
+        groups = current.groups,
+        selected = group,
+        onSelect = { group = it },
+        modifier = Modifier.width(150.dp).fillMaxHeight(),
+    )
+    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
         Header(focused = focused, modifier = Modifier.padding(horizontal = SideMargin))
         TimeRuler(windowStart = windowStart, now = now)
+        if (rows.isEmpty()) {
+            Label(
+                text = if (group == FAVOURITES) "No favourites yet. In live TV, press OK for the channel list, then Right on a channel." else "No channels in this group.",
+                style = AppType.body,
+                color = colors.textDim,
+                maxLines = 2,
+                modifier = Modifier.padding(horizontal = SideMargin, vertical = 12.dp),
+            )
+        }
         LazyColumn(
-            contentPadding = PaddingValues(start = SideMargin, end = SideMargin, top = 4.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = SideMargin, end = 40.dp, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.weight(1f),
         ) {
-            itemsIndexed(current.channels, key = { _, channel -> channel.key }) { index, channel ->
+            itemsIndexed(rows, key = { _, channel -> channel.key }) { index, channel ->
                 GuideRow(
                     channel = channel,
                     channels = channels,
@@ -119,6 +148,48 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
                     onShift = ::shift,
                     onPlay = { onPlay(channel) },
                 )
+            }
+        }
+    }
+    }
+}
+
+/** Favourites, All channels and the playlist's groups. Moving through them changes the channels shown. */
+@Composable
+private fun Categories(groups: List<String>, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
+    val colors = AppTheme.colors
+    val entries = remember(groups) { listOf<String?>(FAVOURITES, null) + groups }
+    Column(modifier = modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Label(text = "TV guide", style = AppType.headline, modifier = Modifier.padding(start = 10.dp, bottom = 6.dp))
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            modifier = Modifier.weight(1f),
+        ) {
+            items(entries.size) { index ->
+                val name = entries[index]
+                val current = name == selected
+                FocusSurface(
+                    onClick = { onSelect(name) },
+                    modifier = Modifier.fillMaxWidth().height(34.dp),
+                    shape = RoundedCornerShape(3.dp),
+                    container = if (current) colors.glass else Color.Transparent,
+                    focusedContainer = colors.glassStrong,
+                    outlined = false,
+                    focusScale = 1f,
+                ) { focused ->
+                    LaunchedEffect(focused) { if (focused) onSelect(name) }
+                    Label(
+                        text = when (name) {
+                            null -> "All channels"
+                            FAVOURITES -> "Favourites"
+                            else -> name
+                        },
+                        style = if (focused || current) AppType.title else AppType.body,
+                        color = if (focused || current) colors.text else colors.textDim,
+                        modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 10.dp),
+                    )
+                }
             }
         }
     }
@@ -369,9 +440,10 @@ private fun GuideCell(
 /** Puts focus on the first row's current programme once, when the guide opens. */
 @Composable
 private fun FocusOnce(requester: FocusRequester, onPlaced: () -> Unit) {
+    val autoFocus = LocalAutoFocus.current
     LaunchedEffect(requester) {
         withFrameNanos { }
-        if (runCatching { requester.requestFocus() }.isSuccess) onPlaced()
+        if (autoFocus() && runCatching { requester.requestFocus() }.isSuccess) onPlaced()
     }
 }
 

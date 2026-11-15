@@ -40,6 +40,7 @@ import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.Logo
 import app.tvplayer.ui.components.TvTextField
+import app.tvplayer.ui.components.LocalAutoFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import kotlinx.coroutines.delay
@@ -57,7 +58,8 @@ fun SearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var voiceProblem by remember { mutableStateOf<String?>(null) }
     val fieldFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
+    val autoFocus = LocalAutoFocus.current
+    LaunchedEffect(Unit) { if (autoFocus()) runCatching { fieldFocus.requestFocus() } }
 
     // Android TV's own speech screen listens through the remote's mic and hands back the words.
     val listener = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

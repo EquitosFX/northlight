@@ -30,8 +30,11 @@ import androidx.compose.ui.unit.dp
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.Logo
+import app.tvplayer.ui.components.LocalAutoFocus
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 
 private val SideMargin = 48.dp
 
@@ -46,7 +49,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
+    val autoFocus = LocalAutoFocus.current
+    LaunchedEffect(Unit) { if (autoFocus()) runCatching { firstFocus.requestFocus() } }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -88,16 +92,40 @@ private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp),
+            .height(250.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .fillMaxWidth(0.55f)
-                .background(Brush.horizontalGradient(listOf(Color.Transparent, colors.glassStrong))),
-        )
-        if (hero.logo != null) {
+        val backdrop = hero.backdrop
+        if (backdrop != null) {
+            // Full-bleed artwork to the right, fading into the background behind the text and at the bottom.
+            AsyncImage(
+                model = backdrop,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.78f),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.horizontalGradient(0.15f to colors.groundTop, 0.55f to Color.Transparent)),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to colors.groundTop)),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.55f)
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, colors.glassStrong))),
+            )
+        }
+        if (hero.logo != null && backdrop == null) {
             Logo(
                 url = hero.logo,
                 modifier = Modifier
@@ -111,12 +139,12 @@ private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = SideMargin)
-                .width(460.dp),
+                .width(430.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Label(text = hero.overline, style = AppType.overline, color = colors.accent)
             Label(text = hero.title, style = AppType.display, maxLines = 2)
-            hero.tagline?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 2) }
+            hero.tagline?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 3) }
             hero.meta?.let { Label(text = it, style = AppType.label, color = colors.textFaint) }
 
             Row(

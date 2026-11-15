@@ -1,6 +1,23 @@
 package app.tvplayer.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import app.tvplayer.ui.components.LocalAutoFocus
+import app.tvplayer.ui.components.Sidebar
+import app.tvplayer.ui.components.SidebarPeek
+import app.tvplayer.ui.components.SidebarPictureHeight
+import app.tvplayer.ui.components.SidebarPictureSide
+import app.tvplayer.ui.components.SidebarPictureTop
+import app.tvplayer.ui.components.SidebarPictureWidth
+import app.tvplayer.ui.components.SidebarSections
+import app.tvplayer.ui.components.SidebarWidth
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -46,11 +63,11 @@ import app.tvplayer.ui.search.SearchScreen
 import app.tvplayer.ui.person.PersonScreen
 import app.tvplayer.core.tmdb.TmdbPerson
 import app.tvplayer.data.db.VodRow
+import app.tvplayer.data.db.MetadataEntity
 import app.tvplayer.ui.vod.VodBrowseState
 import app.tvplayer.ui.vod.VodScreen
 import app.tvplayer.ui.components.Dest
 import app.tvplayer.ui.components.Label
-import app.tvplayer.ui.components.TopNavBar
 import app.tvplayer.ui.guide.GuideScreen
 import app.tvplayer.core.live.LineupChannel
 import app.tvplayer.ui.home.HomeHero
@@ -70,7 +87,7 @@ private fun tileColor(seed: String): Long = tileColors[(seed.hashCode() and 0x7f
 
 private val shortcuts = listOf("Live TV", "TV Guide", "Films", "Series", "Search")
 
-/** The app shell: themed background, top navigation, the open section, and the video when something is playing. */
+/** The app shell: themed background, side panel, the open section, and the video when something is playing. */
 @Composable
 fun AppRoot(
     themeId: ThemeId,
@@ -162,14 +179,45 @@ fun AppRoot(
         }
     }
 
-    // Back returns to Home from any other section; from Home it leaves the app as usual.
-    BackHandler(enabled = dest != Dest.HOME) { dest = Dest.HOME }
-    // On Home with the small picture showing, Back stops playback first.
-    BackHandler(enabled = dest == Dest.HOME && mode == PlayerMode.MINI) {
+    // The side panel is open while the menu or the live picture has focus, and tucks away while browsing content.
+    var menuFocused by remember { mutableStateOf(false) }
+    var pictureFocused by remember { mutableStateOf(false) }
+    var startupPending by remember { mutableStateOf(true) }
+    val onMenuSide = menuFocused || pictureFocused
+    val sidebarOpen = onMenuSide || startupPending
+    val menuFocus = remember { SidebarSections.associateWith { FocusRequester() } }
+    val contentFocus = remember { FocusRequester() }
+    val autoFocusAllowed = remember { { !(menuFocused || pictureFocused || startupPending) } }
+
+    fun focusMenu() {
+        scope.launch {
+            withFrameNanos { }
+            runCatching { menuFocus.getValue(if (dest in SidebarSections) dest else Dest.HOME).requestFocus() }
+        }
+    }
+
+    // The app opens with the menu focused on Home.
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        runCatching { menuFocus.getValue(Dest.HOME).requestFocus() }
+    }
+    LaunchedEffect(menuFocused) { if (menuFocused) startupPending = false }
+    // Leaving full-screen live TV puts the picture in the side panel and focus on the menu.
+    LaunchedEffect(mode) {
+        // Focus can't be on the menu or picture while they're not on screen.
+        if (mode == PlayerMode.FULL) menuFocused = false
+        if (mode != PlayerMode.MINI) pictureFocused = false
+        if (mode == PlayerMode.MINI) focusMenu()
+    }
+
+    // From the menu, Back goes Home, then stops playback, then leaves the app.
+    BackHandler(enabled = onMenuSide && dest != Dest.HOME) { dest = Dest.HOME }
+    BackHandler(enabled = onMenuSide && dest == Dest.HOME && mode == PlayerMode.MINI) {
         controller.close()
         mode = PlayerMode.NONE
     }
-
+    // From the content, Back returns to the menu.
+    BackHandler(enabled = !onMenuSide && mode != PlayerMode.FULL) { focusMenu() }
     BackHandler(enabled = person != null && mode != PlayerMode.FULL) { person = null }
 
     // Home and Recents are built from the viewer's own playlists, history and favourites.
@@ -222,6 +270,17 @@ fun AppRoot(
 
     val lists = playlistList
     val lastWatched = history.firstOrNull()
+    // A film or episode in progress leads Home, with its TMDB artwork when a key is set.
+    val firstProgress = progress.firstOrNull()
+    val heroInfo by produceState<MetadataEntity?>(initialValue = null, firstProgress?.url) {
+        value = firstProgress?.let { saved ->
+            val isEpisode = " · S" in saved.title
+            container.metadata.lookup(
+                saved.title.substringBefore(" · "),
+                if (isEpisode) ChannelEntity.KIND_SERIES else ChannelEntity.KIND_MOVIE,
+            )
+        }
+    }
     val hero = when {
         lists == null -> HomeHero("NORTHLIGHT", "Loading…", null, null, null, "Settings", { dest = Dest.SETTINGS })
         lists.isEmpty() -> HomeHero(
@@ -233,8 +292,26 @@ fun AppRoot(
             primaryLabel = "Add a playlist",
             onPrimary = { dest = Dest.SETTINGS },
         )
-        lastWatched != null -> HomeHero(
+        firstProgress != null -> HomeHero(
             overline = "CARRY ON WATCHING",
+            title = firstProgress.title,
+            tagline = heroInfo?.overview,
+            meta = listOfNotNull(
+                heroInfo?.year?.toString(),
+                heroInfo?.rating?.let { "★ %.1f".format(it) },
+                continueWatching.firstOrNull()?.caption,
+            ).joinToString(" · "),
+            logo = null,
+            backdrop = heroInfo?.backdrop,
+            primaryLabel = "Resume",
+            onPrimary = {
+                playVod(VodItem(firstProgress.url, firstProgress.title, firstProgress.poster, firstProgress.userAgent, firstProgress.referrer))
+            },
+            secondaryLabel = "Live TV",
+            onSecondary = { play(null) },
+        )
+        lastWatched != null -> HomeHero(
+            overline = "LIVE TV",
             title = lastWatched.name,
             tagline = recentTiles.firstOrNull()?.caption?.takeIf { !it.startsWith("Channel ") },
             meta = "Channel ${lastWatched.number}",
@@ -297,17 +374,18 @@ fun AppRoot(
                 }
             },
     ) {
+        val sidebarOffset by animateDpAsState(
+            targetValue = if (sidebarOpen) 0.dp else -(SidebarWidth - SidebarPeek),
+            label = "sidebar",
+        )
         if (mode != PlayerMode.FULL) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                TopNavBar(
-                    selected = dest,
-                    onSelect = { chosen ->
-                        person = null
-                        dest = chosen
-                    },
-                    appName = stringResource(R.string.app_name),
-                )
-                Spacer(Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = SidebarWidth + sidebarOffset, top = 14.dp)
+                    .focusRequester(contentFocus),
+            ) {
+                CompositionLocalProvider(LocalAutoFocus provides autoFocusAllowed) {
                 val shownPerson = person
                 if (shownPerson != null) {
                     PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) })
@@ -382,7 +460,24 @@ fun AppRoot(
                     )
                     else -> ComingLater(dest)
                 }
+                }
             }
+            Sidebar(
+                selected = dest,
+                onSelect = { chosen ->
+                    if (dest != chosen) {
+                        person = null
+                        dest = chosen
+                    }
+                },
+                onEnter = { runCatching { contentFocus.requestFocus() } },
+                appName = stringResource(R.string.app_name),
+                showingPicture = mode == PlayerMode.MINI,
+                itemFocus = menuFocus,
+                modifier = Modifier
+                    .offset(x = sidebarOffset)
+                    .onFocusChanged { menuFocused = it.hasFocus },
+            )
         }
 
         if (mode != PlayerMode.NONE) {
@@ -399,11 +494,12 @@ fun AppRoot(
                 modifier = if (mode == PlayerMode.FULL) {
                     Modifier.fillMaxSize()
                 } else {
+                    // Sits in the picture space of the side panel and slides with it.
                     Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 48.dp, bottom = 24.dp)
-                        .size(width = 256.dp, height = 144.dp)
+                        .offset(x = sidebarOffset + SidebarPictureSide, y = SidebarPictureTop)
+                        .size(width = SidebarPictureWidth, height = SidebarPictureHeight)
                         .border(width = 1.dp, color = colors.glassBorder)
+                        .onFocusChanged { pictureFocused = it.hasFocus }
                 },
             )
         }
