@@ -6,7 +6,7 @@ An IPTV player for Android TV, tuned for the NVIDIA Shield TV and its remote. Th
 
 Two parts, at different levels of confidence:
 
-- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, channel line-up and reconnect timing, TMDB title cleaning and parsing, with 61 passing tests.
+- **`core/` (plain Kotlin): compiled and unit-tested.** Playlist parsing, TV guide parsing, Xtream Codes parsing, channel variant grouping and guide matching, channel line-up and reconnect timing, TMDB title cleaning, parsing and library matching, with 64 passing tests.
 - **`app/` (the Android TV app): compiles in the automatic build, not yet tried on a Shield.** Expect adjustments once it has been used on a real device.
 
 What is in place:
@@ -25,6 +25,7 @@ What is in place:
 - Favourite channels: Right in the channel list adds or removes one; Favourites group in the group list
 - Series: next episode starts after a 10-second countdown
 - TMDB film and series details using your own free key (Settings › Film info); films open a details page with Play, Resume and Start over
+- People (needs the TMDB key): search finds actors and directors; cast and directors on title pages are selectable and open a page of their titles in your playlists
 - Live TV player: Up/Down changes channel, OK opens the channel list (Left for groups), Left/Right shows the info banner, Back shrinks the picture to the corner (hold Back to bring it back)
 
 Everything else is listed in `FEATURES.md`.
@@ -54,7 +55,8 @@ The newest build is always at:
 | `app/src/main/java/app/tvplayer/ui/vod/` | Films and Series screens |
 | `app/src/main/java/app/tvplayer/ui/search/` | Search screen |
 | `core/src/main/kotlin/app/tvplayer/core/tmdb/` | Title cleaning and TMDB parsing |
-| `app/src/main/java/app/tvplayer/data/MetadataRepository.kt` | TMDB look-ups and cache |
+| `app/src/main/java/app/tvplayer/data/MetadataRepository.kt` | TMDB look-ups, cache and people matching |
+| `app/src/main/java/app/tvplayer/ui/person/` | Cast and crew row, person page |
 | `app/src/main/java/app/tvplayer/data/ChannelsRepository.kt` | Channel line-up and programme look-ups |
 | `core/src/main/kotlin/app/tvplayer/core/live/` | Channel line-up and reconnect timing |
 | `app/src/main/java/app/tvplayer/ui/components/` | Shared pieces: focus surface, text, top navigation |

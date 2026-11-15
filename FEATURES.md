@@ -1,6 +1,6 @@
 # Feature checklist
 
-Status key: **Tested** = compiled and unit-tested (61 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
+Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built** = compiles in the automatic build, but has not been tried on a Shield yet. **Designed** = shown in the design previews, no code yet. **Not started** = neither.
 
 ## Foundation and design system
 
@@ -54,7 +54,8 @@ Status key: **Tested** = compiled and unit-tested (61 tests in `core/`). **Built
 | Channel variant grouping (SD/HD/FHD/4K/backup) | Tested |
 | Check playlist tool | Not started |
 | TMDB metadata (viewer's own key): film pages, series details, cached look-ups | Built |
-| TMDB trailers, cast photos, "more like this" | Not started |
+| People: search for actors and directors, selectable cast and crew on title pages, person page listing their titles in your playlists | Built |
+| TMDB trailers, "more like this" | Not started |
 | Plex / Jellyfin / Emby libraries | Not started |
 | Backup and restore | Not started |
 | Encrypted credentials | Not started. Xtream stream addresses contain the username and password, so encrypting the password field alone would not help; it needs stream addresses built at play time instead |
