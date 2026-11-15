@@ -100,6 +100,9 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | OpenSubtitles and styling built; remembering tracks not started |
 | Skip intro / Skip recap and an early Up next over the credits (TheIntroDB timings, needs a TMDB key) | Built |
 | "Because you watched…" suggestions on Home (TMDB recommendations matched to your playlists) | Built |
+| Movie night: ten questions, then a shortlist from your playlists with ratings, running times and how the picks differ (needs a TMDB key) | Built |
+| Search results as poster, person and channel tiles | Built |
+| Progress bar you can move along with Left/Right (faster when held); 30-second and 5-minute skips; catch-up moves by whole minutes | Built |
 
 ## Player
 
