@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -76,23 +77,14 @@ internal fun FilmPane(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .fillMaxWidth(0.68f)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .fadeIntoBackground(solidFrom = 0.4f, solidUntil = 0.55f),
             ) {
                 AsyncImage(
                     model = backdrop,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Brush.horizontalGradient(listOf(colors.groundMid, Color.Transparent))),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to colors.groundBottom)),
                 )
             }
         }

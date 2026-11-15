@@ -129,6 +129,12 @@ class ScreenshotTest {
     }
 
     private fun press(vararg names: String) {
+        if (names.toList() == listOf("back")) {
+            // Back goes through Android's back handling, as the remote's Back button does.
+            rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+            settle()
+            return
+        }
         val keys = names.map { mapOf("right" to Key.DirectionRight, "down" to Key.DirectionDown, "ok" to Key.DirectionCenter, "back" to Key.Back).getValue(it) }
         for (key in keys) {
             val target = if (focusedCount() > 0) rule.onNode(isFocused()) else rule.onRoot()
