@@ -206,6 +206,9 @@ fun AppRoot(
     val sidebarOpen = onMenuSide || startupPending
     val menuFocus = remember { SidebarSections.associateWith { FocusRequester() } }
     val contentFocus = remember { FocusRequester() }
+    // Skyfall checks GitHub for a newer build once a day; a dot on Settings says one is ready.
+    val updateReady by container.updates.available.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { container.updates.checkDaily() }
     val entryFocus = remember { EntryFocus() }
     val autoFocusAllowed = remember { { !(menuFocused || pictureFocused || startupPending) } }
 
@@ -513,6 +516,7 @@ fun AppRoot(
                             playlists = container.playlists,
                             settings = container.settings,
                             metadata = container.metadata,
+                            updates = container.updates,
                         )
                     }
                     else -> TopInset { ComingLater(dest) }
@@ -529,6 +533,7 @@ fun AppRoot(
                 },
                 onEnter = { runCatching { contentFocus.requestFocus() } },
                 appName = stringResource(R.string.app_name),
+                badged = if (updateReady != null) setOf(Dest.SETTINGS) else emptySet(),
                 showingPicture = mode == PlayerMode.MINI,
                 itemFocus = menuFocus,
                 modifier = Modifier

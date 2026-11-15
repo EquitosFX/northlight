@@ -362,6 +362,10 @@ class ScreenshotTest {
         expectShown("Skyfall", "Appearance pane")
         expectShown("Lagoon", "Appearance pane")
         shot("22-settings-appearance")
+        press("down", "ok")
+        expectShown("Build 999 is ready", "Updates pane finds the newer build")
+        expectShown("Download and install", "Updates pane offers to install it")
+        shot("22b-settings-updates")
     }
 
     @Test fun lagoon() {

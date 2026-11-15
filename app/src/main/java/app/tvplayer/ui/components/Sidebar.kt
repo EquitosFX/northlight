@@ -1,5 +1,7 @@
 package app.tvplayer.ui.components
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Row
 import app.tvplayer.R
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
@@ -61,6 +63,8 @@ fun Sidebar(
     onEnter: () -> Unit,
     appName: String,
     showingPicture: Boolean,
+    /** Menu items that show a dot, such as Settings when an update is ready. */
+    badged: Set<Dest> = emptySet(),
     itemFocus: Map<Dest, FocusRequester>,
     modifier: Modifier = Modifier,
 ) {
@@ -121,6 +125,7 @@ fun Sidebar(
                     MenuItem(
                         dest = dest,
                         current = dest == selected,
+                        badged = dest in badged,
                         focusRequester = itemFocus.getValue(dest),
                         // Moving up and down the menu shows each section.
                         onFocus = { onSelect(dest) },
@@ -136,6 +141,7 @@ fun Sidebar(
 private fun MenuItem(
     dest: Dest,
     current: Boolean,
+    badged: Boolean,
     focusRequester: FocusRequester,
     onFocus: () -> Unit,
     onClick: () -> Unit,
@@ -160,14 +166,20 @@ private fun MenuItem(
             Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(1.dp).background(glow))
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(1.dp).background(glow))
         }
-        Label(
-            text = dest.label,
-            style = if (focused || current) AppType.menuSelected else AppType.menu,
-            color = if (focused || current) colors.text else colors.textDim,
+        Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = 14.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Label(
+                text = dest.label,
+                style = if (focused || current) AppType.menuSelected else AppType.menu,
+                color = if (focused || current) colors.text else colors.textDim,
+            )
+            if (badged) Box(Modifier.size(8.dp).clip(CircleShape).background(colors.accent))
+        }
     }
 }
 

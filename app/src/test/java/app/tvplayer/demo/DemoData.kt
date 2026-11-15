@@ -93,6 +93,12 @@ object DemoData {
             .build()
         val path = url.encodedPath
         when {
+            // Settings › Updates: pretend GitHub has a newer build.
+            url.host == "api.github.com" && path.endsWith("/releases/latest") -> reply(
+                200,
+                """{"name":"Skyfall build 999","body":"Automatic build 999.","assets":[{"name":"northlight.apk","size":13915963,""" +
+                    """"browser_download_url":"https://github.com/EquitosFX/northlight/releases/download/latest/northlight.apk"}]}""",
+            )
             url.host != "api.themoviedb.org" -> reply(404, "")
             path.endsWith("/search/person") -> {
                 val query = url.queryParameter("query").orEmpty().lowercase()
