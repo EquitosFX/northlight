@@ -247,7 +247,11 @@ fun AppRoot(
     }
 
     // From the menu, Back goes Home, then stops playback, then leaves the app.
-    BackHandler(enabled = onMenuSide && dest != Dest.HOME) { dest = Dest.HOME }
+    BackHandler(enabled = onMenuSide && dest != Dest.HOME) {
+        dest = Dest.HOME
+        // The menu's highlight follows to Home.
+        runCatching { menuFocus.getValue(Dest.HOME).requestFocus() }
+    }
     BackHandler(enabled = onMenuSide && dest == Dest.HOME && mode == PlayerMode.MINI) {
         controller.close()
         mode = PlayerMode.NONE

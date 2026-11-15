@@ -155,7 +155,11 @@ fun PlayerControls(
             }
             if (live && !seekable) {
                 Label(
-                    text = "Rewinding isn't available on this channel. Pause and rewind live TV can be turned on in Settings › Player.",
+                    text = when {
+                        controller.timeshiftMinutes == 0 -> "Pause and rewind live TV is off. Turn it on in Settings › Player."
+                        controller.status != PlaybackStatus.Playing -> "Rewinding is ready once the channel starts playing."
+                        else -> "This channel can't be rewound."
+                    },
                     style = AppType.caption,
                     color = colors.textFaint,
                 )

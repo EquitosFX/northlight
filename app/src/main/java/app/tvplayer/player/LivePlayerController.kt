@@ -126,6 +126,10 @@ class LivePlayerController(
     var bannerToken by mutableIntStateOf(0)
         private set
 
+    /** The pause-and-rewind setting in force for the channel playing (minutes; 0 is off). */
+    var timeshiftMinutes by mutableIntStateOf(30)
+        private set
+
     /** True while live TV is playing from the pause-and-rewind recording. */
     var timeshiftActive by mutableStateOf(false)
         private set
@@ -550,6 +554,7 @@ class LivePlayerController(
             playingRow = row
             if (stopped) return@launch
             val minutes = settings.timeshiftMinutes.first()
+            timeshiftMinutes = minutes
             val session = if (minutes > 0 && !isHls(row.url)) startTimeshift(row, minutes) else null
             if (stopped) return@launch
             if (session != null) {

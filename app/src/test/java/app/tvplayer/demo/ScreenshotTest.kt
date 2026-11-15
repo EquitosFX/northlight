@@ -270,10 +270,13 @@ class ScreenshotTest {
         // Back once returns to the menu, again goes Home.
         press("back", "back")
         expectShown("CARRY ON WATCHING", "Back from Films returns to Home")
+        expectFocus("Home", "The menu highlight follows Back to Home")
         press("right", "down", "right")
         expectFocus("TV Guide", "The TV Guide shortcut")
         press("ok")
-        expectShown("All channels", "The TV Guide shortcut opens the guide")
+        // It opens straight into the listings, so the categories are tucked away.
+        expectShown("Meridian One", "The TV Guide shortcut opens the guide")
+        expectHidden("Favourites", "The TV Guide shortcut opens the listings")
     }
 
     @Test fun recents() {
