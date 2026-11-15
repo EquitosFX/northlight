@@ -1,5 +1,11 @@
 package app.tvplayer.ui.components
 
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Row
 import app.tvplayer.R
@@ -116,8 +122,17 @@ fun Sidebar(
             Spacer(Modifier.weight(1f))
             // Coming back to the menu from a screen lands on the open section, not the nearest item.
             val menuEntry = remember { EntryFocus() }
+            // Set when Up or Down is pressed in the menu: only that changes the section.
+            val movedByKey = remember { AtomicBoolean(false) }
             Column(
-                modifier = Modifier.entersAt(menuEntry),
+                modifier = Modifier
+                    .entersAt(menuEntry)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
+                            movedByKey.set(true)
+                        }
+                        false
+                    },
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 for (dest in SidebarSections) {
@@ -127,8 +142,16 @@ fun Sidebar(
                         current = dest == selected,
                         badged = dest in badged,
                         focusRequester = itemFocus.getValue(dest),
-                        // Moving up and down the menu shows each section.
-                        onFocus = { onSelect(dest) },
+                        onFocus = {
+                            when {
+                                // Moving up and down the menu shows each section.
+                                movedByKey.getAndSet(false) -> onSelect(dest)
+                                dest == selected -> Unit
+                                // Focus landed here by itself (say, a button that was pressed disappeared):
+                                // stay on the open section rather than switching.
+                                else -> runCatching { itemFocus[selected]?.requestFocus() }
+                            }
+                        },
                         onClick = onEnter,
                     )
                 }

@@ -1,5 +1,6 @@
 package app.tvplayer.demo
 
+import org.junit.rules.TestName
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Handler
@@ -59,6 +60,7 @@ import org.robolectric.annotation.GraphicsMode
 class ScreenshotTest {
 
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val testName = TestName()
 
     private val app: NorthlightApp get() = ApplicationProvider.getApplicationContext()
     private val outDir = File("build/screenshots").apply { mkdirs() }
@@ -71,7 +73,8 @@ class ScreenshotTest {
     fun fill() {
         Coil.setImageLoader(ImageLoader.Builder(app).allowHardware(false).crossfade(false).build())
         app.container.testResponder = DemoData.responder()
-        runBlocking(Dispatchers.IO) { DemoData.fill(app.container, ::image) }
+        // The welcome test starts from a fresh install with no playlist.
+        if (testName.methodName != "welcome") runBlocking(Dispatchers.IO) { DemoData.fill(app.container, ::image) }
     }
 
     @After
@@ -236,6 +239,41 @@ class ScreenshotTest {
         expectFocus("TV guide", "Down the menu")
         expectShown("All channels", "Previewing the TV guide from the menu")
         shot("04-menu-previews-guide")
+    }
+
+    @Test fun welcome() {
+        open(Dest.HOME)
+        expectShown("Welcome to Skyfall", "Fresh install")
+        shot("00a-welcome")
+        press("right")
+        expectFocus("Add a playlist", "Right from the menu on a fresh install")
+        press("ok")
+        expectShown("Add Xtream Codes account", "Add a playlist opens Settings › Playlists")
+        expectHidden("Welcome to Skyfall", "Add a playlist leaves Home")
+        shot("00b-welcome-to-playlists")
+    }
+
+    @Test fun homeShortcuts() {
+        open(Dest.HOME)
+        press("right", "down")
+        expectFocus("Live TV", "Down from the hero to the shortcuts")
+        press("right", "right")
+        expectFocus("Films", "Along the shortcuts")
+        press("ok")
+        expectShown("New releases", "The Films shortcut opens Films")
+        expectHidden("CARRY ON WATCHING", "The Films shortcut leaves Home")
+        open2Guide()
+    }
+
+    /** Back to Home from Films, then the TV Guide shortcut. */
+    private fun open2Guide() {
+        // Back once returns to the menu, again goes Home.
+        press("back", "back")
+        expectShown("CARRY ON WATCHING", "Back from Films returns to Home")
+        press("right", "down", "right")
+        expectFocus("TV Guide", "The TV Guide shortcut")
+        press("ok")
+        expectShown("All channels", "The TV Guide shortcut opens the guide")
     }
 
     @Test fun recents() {

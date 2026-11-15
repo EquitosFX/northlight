@@ -164,6 +164,13 @@ fun AppRoot(
         runCatching { holder.requestFocus() }
     }
 
+    /** Switches section from a button on a screen, keeping focus in the content while the screen changes. */
+    fun goTo(section: Dest) {
+        holdFocus()
+        person = null
+        dest = section
+    }
+
     fun openTitle(row: VodRow) {
         holdFocus()
         person = null
@@ -311,7 +318,7 @@ fun AppRoot(
         }
     }
     val hero = when {
-        lists == null -> HomeHero("SKYFALL", "Loading…", null, null, null, "Settings", onPrimary = { dest = Dest.SETTINGS })
+        lists == null -> HomeHero("SKYFALL", "Loading…", null, null, null, "Settings", onPrimary = { goTo(Dest.SETTINGS) })
         lists.isEmpty() -> HomeHero(
             overline = "WELCOME",
             title = "Welcome to Skyfall",
@@ -319,7 +326,7 @@ fun AppRoot(
             meta = null,
             logo = null,
             primaryLabel = "Add a playlist",
-            onPrimary = { dest = Dest.SETTINGS },
+            onPrimary = { goTo(Dest.SETTINGS) },
         )
         firstProgress != null -> HomeHero(
             overline = "CARRY ON WATCHING",
@@ -348,7 +355,7 @@ fun AppRoot(
             primaryLabel = "Watch",
             onPrimary = { playKey(lastWatched.key) },
             secondaryLabel = "TV Guide",
-            onSecondary = { dest = Dest.GUIDE },
+            onSecondary = { goTo(Dest.GUIDE) },
         )
         else -> HomeHero(
             overline = "LIVE TV",
@@ -360,7 +367,7 @@ fun AppRoot(
             primaryLabel = "Watch live TV",
             onPrimary = { play(null) },
             secondaryLabel = "TV Guide",
-            onSecondary = { dest = Dest.GUIDE },
+            onSecondary = { goTo(Dest.GUIDE) },
         )
     }
     val (hasFavourites, shownChannels) = channelTiles
@@ -442,10 +449,10 @@ fun AppRoot(
                         onShortcut = { label ->
                             when (label) {
                                 "Live TV" -> play(null)
-                                "TV Guide" -> dest = Dest.GUIDE
-                                "Films" -> dest = Dest.FILMS
-                                "Series" -> dest = Dest.SERIES
-                                "Search" -> dest = Dest.SEARCH
+                                "TV Guide" -> goTo(Dest.GUIDE)
+                                "Films" -> goTo(Dest.FILMS)
+                                "Series" -> goTo(Dest.SERIES)
+                                "Search" -> goTo(Dest.SEARCH)
                             }
                         },
                     )
