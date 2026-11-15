@@ -202,6 +202,9 @@ fun AppRoot(
     LaunchedEffect(Unit) {
         withFrameNanos { }
         runCatching { menuFocus.getValue(if (startAt in SidebarSections) startAt else Dest.HOME).requestFocus() }
+        // Whether or not the menu took focus, start-up is over: the panel follows focus from here on.
+        withFrameNanos { }
+        startupPending = false
     }
     LaunchedEffect(menuFocused) { if (menuFocused) startupPending = false }
     // Leaving full-screen live TV puts the picture in the side panel and focus on the menu.

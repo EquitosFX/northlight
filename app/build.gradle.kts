@@ -59,6 +59,8 @@ android {
                 // A fresh JVM per test, so each starts with an empty database and settings store.
                 it.forkEvery = 1
                 it.systemProperty("robolectric.graphicsMode", "NATIVE")
+                // Draw like a real GPU so faded artwork and other layered effects come out right.
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
             }
         }
     }

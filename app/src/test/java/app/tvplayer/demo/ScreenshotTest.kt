@@ -64,12 +64,12 @@ class ScreenshotTest {
         // A TV is never in touch mode; in touch mode the remote-style focus doesn't switch on.
         runCatching { InstrumentationRegistry.getInstrumentation().setInTouchMode(false) }
             .onFailure { println("Couldn't leave touch mode: $it") }
+        leaveTouchMode()
         rule.setContent {
             AppTheme(themeId = theme) {
                 AppRoot(themeId = theme, onThemeChange = {}, container = app.container, startAt = dest)
             }
         }
-        leaveTouchMode()
         settle()
         // Robolectric's window may not hand focus over by itself; put it on the open section's menu item.
         println("Focused after opening ${dest.label}: ${focusedCount()}")
