@@ -117,7 +117,9 @@ fun AppRoot(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val controller = remember {
-        LivePlayerController(context.applicationContext, container.http, container.channels, container.settings, scope)
+        // The player is only ever driven from the main thread.
+        val mainScope = kotlinx.coroutines.CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)
+        LivePlayerController(context.applicationContext, container.http, container.channels, container.settings, mainScope)
     }
     DisposableEffect(controller) { onDispose { controller.release() } }
 
@@ -468,7 +470,7 @@ fun AppRoot(
                     .padding(start = SidebarWidth + panelTarget)
                     .offset { IntOffset((panelSlide.value - panelTarget).roundToPx(), 0) }
                     // Moving in from the menu lands on the screen's starting point, if it has named one.
-                    .focusProperties { enter = { entryFocus.target ?: FocusRequester.Default } }
+                    .focusProperties { enter = { entryFocus.usableTarget() } }
                     .focusRequester(contentFocus)
                     .focusGroup(),
             ) {

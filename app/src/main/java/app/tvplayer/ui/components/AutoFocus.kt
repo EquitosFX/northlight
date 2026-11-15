@@ -26,6 +26,19 @@ val LocalHoldFocus = staticCompositionLocalOf<() -> Unit> { {} }
 /** Where focus lands when the viewer moves from the side menu into the open screen. */
 class EntryFocus {
     var target: FocusRequester? = null
+
+    /**
+     * The target if it's on screen, otherwise the default. A starting point that has scrolled out of
+     * view (a category far down a long list) has nothing to land on, and handing it to the focus
+     * system would crash the app.
+     */
+    fun usableTarget(): FocusRequester {
+        val t = target ?: return FocusRequester.Default
+        // captureFocus() only succeeds on the focused item, so on anything else it changes nothing;
+        // but it throws when the requester isn't attached to anything on screen.
+        val attached = runCatching { if (t.captureFocus()) t.freeFocus() }.isSuccess
+        return if (attached) t else FocusRequester.Default
+    }
 }
 
 val LocalEntryFocus = staticCompositionLocalOf { EntryFocus() }
@@ -59,4 +72,4 @@ fun EntryPoint(requester: FocusRequester, into: EntryFocus) {
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.entersAt(entry: EntryFocus): Modifier =
-    focusProperties { enter = { entry.target ?: FocusRequester.Default } }.focusGroup()
+    focusProperties { enter = { entry.usableTarget() } }.focusGroup()

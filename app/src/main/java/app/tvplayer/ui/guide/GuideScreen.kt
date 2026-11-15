@@ -1,5 +1,7 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import kotlinx.coroutines.delay
 import app.tvplayer.ui.components.LocalHoldFocus
 import androidx.compose.ui.text.font.FontWeight
@@ -157,6 +159,8 @@ fun GuideScreen(
     var listings by remember { mutableStateOf(false) }
     var backToCategories by remember { mutableStateOf(false) }
     val categoryFocus = remember { FocusRequester() }
+    // Kept here, so the category list is still scrolled to the chosen category when it comes back.
+    val categoryList = rememberLazyListState()
     BackHandler(enabled = listings) {
         listings = false
         backToCategories = true
@@ -193,6 +197,7 @@ fun GuideScreen(
             // OK on a category moves into its listings (focus first, so it never falls out of the guide).
             onOpen = { if (runCatching { entryFocus.requestFocus() }.isSuccess) listings = true },
             currentFocus = categoryFocus,
+            listState = categoryList,
             modifier = Modifier.width(150.dp).fillMaxHeight(),
         )
     }
@@ -250,22 +255,28 @@ private fun Categories(
     onSelect: (String?) -> Unit,
     onOpen: () -> Unit,
     currentFocus: FocusRequester,
+    listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
     val entries = remember(groups) { listOf<String?>(FAVOURITES, null) + groups }
     // Coming back to the categories lands on the chosen one.
     val entry = remember { EntryFocus() }
-    // The guide opens here: moving in from the menu, or arriving from a button, lands on the chosen category.
-    EntryPoint(currentFocus)
     val autoFocus = LocalAutoFocus.current
     LaunchedEffect(Unit) {
+        // Make sure the chosen category is on screen, so there's something to land on.
+        val index = entries.indexOf(selected).coerceAtLeast(0)
         withFrameNanos { }
+        if (listState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+            listState.scrollToItem((index - 3).coerceAtLeast(0))
+            withFrameNanos { }
+        }
         if (autoFocus()) runCatching { currentFocus.requestFocus() }
     }
     Column(modifier = modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Label(text = "TV guide", style = AppType.headline, modifier = Modifier.padding(start = 10.dp, bottom = 6.dp))
         LazyColumn(
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(2.dp),
             contentPadding = PaddingValues(bottom = 24.dp),
             modifier = Modifier.weight(1f).entersAt(entry),
@@ -273,7 +284,11 @@ private fun Categories(
             items(entries.size) { index ->
                 val name = entries[index]
                 val current = name == selected
-                if (current) EntryPoint(currentFocus, entry)
+                if (current) {
+                    EntryPoint(currentFocus, entry)
+                    // The guide opens here: moving in from the menu, or arriving from a button, lands on the chosen category.
+                    EntryPoint(currentFocus)
+                }
                 FocusSurface(
                     onClick = {
                         onSelect(name)

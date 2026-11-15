@@ -378,9 +378,13 @@ class ScreenshotTest {
         press("back")
         // A category far down the list, then back to it.
         repeat(30) { press("down") }
+        expectFocus("Group 23", "Far down the categories")
         press("ok", "down", "back")
+        expectFocus("Group 23", "Back from a far-down category's listings returns to it")
         press("back")
+        expectFocus("TV guide", "Back again goes to the side menu")
         press("right")
+        expectFocus("Group 23", "Right from the menu returns to the chosen category")
         press("back", "back")
         press("down", "right", "ok", "back", "back")
     }
