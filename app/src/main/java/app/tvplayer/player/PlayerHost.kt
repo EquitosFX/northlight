@@ -1,5 +1,8 @@
 package app.tvplayer.player
 
+import androidx.media3.ui.SubtitleView
+import androidx.media3.ui.CaptionStyleCompat
+import app.tvplayer.data.SubtitlesRepository
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -74,6 +77,7 @@ enum class PlayerMode { NONE, FULL, MINI }
 @Composable
 fun PlayerHost(
     controller: LivePlayerController,
+    subtitles: SubtitlesRepository,
     mode: PlayerMode,
     onMinimise: () -> Unit,
     onExpand: () -> Unit,
@@ -93,6 +97,21 @@ fun PlayerHost(
                     isFocusable = false
                     descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     player = controller.player
+                    // Subtitles: white text on a soft dark box, a little larger than standard for a TV.
+                    subtitleView?.apply {
+                        setStyle(
+                            CaptionStyleCompat(
+                                android.graphics.Color.WHITE,
+                                android.graphics.Color.argb(150, 0, 0, 0),
+                                android.graphics.Color.TRANSPARENT,
+                                CaptionStyleCompat.EDGE_TYPE_NONE,
+                                android.graphics.Color.BLACK,
+                                null,
+                            ),
+                        )
+                        setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.15f)
+                        setBottomPaddingFraction(0.07f)
+                    }
                 }
             },
             onRelease = { view -> view.player = null },
@@ -100,9 +119,9 @@ fun PlayerHost(
         )
 
         if (mode == PlayerMode.FULL && controller.vod != null) {
-            VodLayer(controller = controller, onClose = onClose)
+            VodLayer(controller = controller, subtitles = subtitles, onClose = onClose)
         } else if (mode == PlayerMode.FULL) {
-            FullScreenLayer(controller = controller, onMinimise = onMinimise, onClose = onClose)
+            FullScreenLayer(controller = controller, subtitles = subtitles, onMinimise = onMinimise, onClose = onClose)
         } else {
             MiniLayer(onExpand = onExpand)
         }
@@ -110,15 +129,21 @@ fun PlayerHost(
 }
 
 @Composable
-private fun FullScreenLayer(controller: LivePlayerController, onMinimise: () -> Unit, onClose: () -> Unit) {
+private fun FullScreenLayer(
+    controller: LivePlayerController,
+    subtitles: SubtitlesRepository,
+    onMinimise: () -> Unit,
+    onClose: () -> Unit,
+) {
     var listOpen by remember { mutableStateOf(false) }
+    var controlsOpen by remember { mutableStateOf(false) }
     val surfaceFocus = remember { FocusRequester() }
 
     // Back from full screen shrinks the picture; with nothing playing it just closes.
     BackHandler { if (controller.current == null) onClose() else onMinimise() }
 
-    LaunchedEffect(listOpen) {
-        if (!listOpen) runCatching { surfaceFocus.requestFocus() }
+    LaunchedEffect(listOpen, controlsOpen) {
+        if (!listOpen && !controlsOpen) runCatching { surfaceFocus.requestFocus() }
     }
 
     Box(
@@ -126,8 +151,8 @@ private fun FullScreenLayer(controller: LivePlayerController, onMinimise: () -> 
             .fillMaxSize()
             .focusRequester(surfaceFocus)
             .onKeyEvent { event ->
-                // While the channel list is open its own rows handle the keys.
-                if (listOpen || event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                // While the channel list or the controls are open, they handle the keys.
+                if (listOpen || controlsOpen || event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
                     Key.DirectionUp, Key.ChannelUp -> {
                         controller.zap(+1)
@@ -137,26 +162,53 @@ private fun FullScreenLayer(controller: LivePlayerController, onMinimise: () -> 
                         controller.zap(-1)
                         true
                     }
+                    // OK opens the player controls: pause, rewind, live, subtitles, audio, channels.
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (controller.status == PlaybackStatus.Failed) {
-                            controller.retry()
-                        } else if (!controller.lineup.isEmpty) {
-                            listOpen = true
-                        }
+                        if (controller.status == PlaybackStatus.Failed) controller.retry() else controlsOpen = true
                         true
                     }
-                    Key.DirectionLeft, Key.DirectionRight, Key.Info -> {
+                    // Left opens the channel list.
+                    Key.DirectionLeft -> {
+                        if (!controller.lineup.isEmpty) listOpen = true
+                        true
+                    }
+                    Key.DirectionRight, Key.Info -> {
                         controller.showBanner()
+                        true
+                    }
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        controller.togglePause()
+                        true
+                    }
+                    Key.MediaRewind -> {
+                        if (controller.liveSeekable) controller.seekBy(-30_000)
+                        true
+                    }
+                    Key.MediaFastForward -> {
+                        if (controller.liveSeekable) controller.seekBy(30_000)
                         true
                     }
                     else -> false
                 }
             }
-            .focusProperties { canFocus = !listOpen }
+            .focusProperties { canFocus = !listOpen && !controlsOpen }
             .focusable(),
     ) {
-        InfoBanner(controller = controller, modifier = Modifier.align(Alignment.BottomCenter))
+        if (!controlsOpen) InfoBanner(controller = controller, modifier = Modifier.align(Alignment.BottomCenter))
         StatusMessage(status = controller.status, modifier = Modifier.align(Alignment.Center))
+
+        val channel = controller.current
+        if (controlsOpen && channel != null) {
+            val now = controller.nowNext.firstOrNull()
+            PlayerControls(
+                controller = controller,
+                subtitles = subtitles,
+                title = "${channel.number}  ${channel.name}",
+                subtitle = now?.title,
+                onChannels = if (controller.lineup.isEmpty) null else ({ controlsOpen = false; listOpen = true }),
+                onHide = { controlsOpen = false },
+            )
+        }
 
         if (listOpen) {
             ChannelListOverlay(
@@ -174,17 +226,18 @@ private fun FullScreenLayer(controller: LivePlayerController, onMinimise: () -> 
 
 /** Controls for a film or episode: OK pauses, Left and Right skip 10 seconds, Back stops and saves the place. */
 @Composable
-private fun VodLayer(controller: LivePlayerController, onClose: () -> Unit) {
+private fun VodLayer(controller: LivePlayerController, subtitles: SubtitlesRepository, onClose: () -> Unit) {
     val colors = AppTheme.colors
     val item = controller.vod ?: return
     val focus = remember { FocusRequester() }
     var visible by remember { mutableStateOf(true) }
+    var controlsOpen by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
 
     BackHandler { onClose() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    LaunchedEffect(controlsOpen) { if (!controlsOpen) runCatching { focus.requestFocus() } }
     LaunchedEffect(controller.controlsToken) {
         visible = true
         delay(BANNER_MILLIS)
@@ -204,14 +257,19 @@ private fun VodLayer(controller: LivePlayerController, onClose: () -> Unit) {
             .fillMaxSize()
             .focusRequester(focus)
             .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                if (controlsOpen || event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                    // OK opens the controls (pause, skip, subtitles, audio, next episode).
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         when (controller.status) {
                             PlaybackStatus.Failed -> controller.retry()
                             is PlaybackStatus.UpNext -> controller.skipEpisode(+1)
-                            else -> controller.togglePause()
+                            else -> controlsOpen = true
                         }
+                        true
+                    }
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        controller.togglePause()
                         true
                     }
                     Key.MediaNext -> {
@@ -231,17 +289,28 @@ private fun VodLayer(controller: LivePlayerController, onClose: () -> Unit) {
                         true
                     }
                     Key.DirectionUp, Key.DirectionDown, Key.Info -> {
-                        controller.showControls()
+                        controlsOpen = true
                         true
                     }
                     else -> false
                 }
             }
+            .focusProperties { canFocus = !controlsOpen }
             .focusable(),
     ) {
         StatusMessage(status = controller.status, modifier = Modifier.align(Alignment.Center))
+        if (controlsOpen) {
+            PlayerControls(
+                controller = controller,
+                subtitles = subtitles,
+                title = item.title,
+                subtitle = null,
+                onChannels = null,
+                onHide = { controlsOpen = false },
+            )
+        }
         AnimatedVisibility(
-            visible = visible || !playing,
+            visible = !controlsOpen && (visible || !playing),
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -279,7 +348,7 @@ private fun VodLayer(controller: LivePlayerController, onClose: () -> Unit) {
                     )
                     Box(modifier = Modifier.weight(1f))
                     Label(
-                        text = if (playing) "OK pause · Left/Right skip 10 s · Back to stop" else "Paused · OK to play",
+                        text = if (playing) "OK for controls · Left/Right skip 10 s · Back to stop" else "Paused · OK for controls",
                         style = AppType.label,
                         color = colors.textDim,
                     )

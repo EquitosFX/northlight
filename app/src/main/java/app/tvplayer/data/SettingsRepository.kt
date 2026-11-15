@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.tvplayer.ui.theme.ThemeId
@@ -18,6 +19,11 @@ class SettingsRepository(private val context: Context) {
     private val themeKey = stringPreferencesKey("theme")
     private val lastChannelKey = stringPreferencesKey("last_channel")
     private val tmdbKeyKey = stringPreferencesKey("tmdb_key")
+    private val timeshiftKey = intPreferencesKey("timeshift_minutes")
+    private val subtitleLanguageKey = stringPreferencesKey("subtitle_language")
+    private val osKeyKey = stringPreferencesKey("opensubtitles_key")
+    private val osUserKey = stringPreferencesKey("opensubtitles_user")
+    private val osPasswordKey = stringPreferencesKey("opensubtitles_password")
 
     val theme: Flow<ThemeId> = context.settingsStore.data.map { prefs -> ThemeId.fromKey(prefs[themeKey]) }
 
@@ -38,4 +44,37 @@ class SettingsRepository(private val context: Context) {
     suspend fun setLastChannel(key: String) {
         context.settingsStore.edit { prefs -> prefs[lastChannelKey] = key }
     }
+
+    /** How many minutes of live TV are kept so it can be paused and rewound; 0 turns it off. */
+    val timeshiftMinutes: Flow<Int> = context.settingsStore.data.map { prefs -> prefs[timeshiftKey] ?: DEFAULT_TIMESHIFT_MINUTES }
+
+    suspend fun setTimeshiftMinutes(minutes: Int) {
+        context.settingsStore.edit { prefs -> prefs[timeshiftKey] = minutes }
+    }
+
+    /** The language subtitles are searched for in, as an OpenSubtitles code. */
+    val subtitleLanguage: Flow<String> = context.settingsStore.data.map { prefs -> prefs[subtitleLanguageKey] ?: "en" }
+
+    suspend fun setSubtitleLanguage(code: String) {
+        context.settingsStore.edit { prefs -> prefs[subtitleLanguageKey] = code }
+    }
+
+    /** The viewer's OpenSubtitles API key, and optional account (which raises the daily download limit). */
+    val openSubtitles: Flow<OpenSubtitlesAccount> = context.settingsStore.data.map { prefs ->
+        OpenSubtitlesAccount(prefs[osKeyKey].orEmpty(), prefs[osUserKey].orEmpty(), prefs[osPasswordKey].orEmpty())
+    }
+
+    suspend fun setOpenSubtitles(account: OpenSubtitlesAccount) {
+        context.settingsStore.edit { prefs ->
+            prefs[osKeyKey] = account.apiKey.trim()
+            prefs[osUserKey] = account.username.trim()
+            prefs[osPasswordKey] = account.password
+        }
+    }
+
+    companion object {
+        const val DEFAULT_TIMESHIFT_MINUTES = 30
+    }
 }
+
+data class OpenSubtitlesAccount(val apiKey: String, val username: String, val password: String)

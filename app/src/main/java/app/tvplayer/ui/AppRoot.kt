@@ -2,6 +2,9 @@
 
 package app.tvplayer.ui
 
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import app.tvplayer.ui.components.LocalEntryFocus
 import app.tvplayer.ui.components.EntryFocus
 import androidx.compose.foundation.focusGroup
@@ -410,15 +413,20 @@ fun AppRoot(
                 }
             },
     ) {
-        val sidebarOffset by animateDpAsState(
-            targetValue = if (sidebarOpen) 0.dp else -(SidebarWidth - SidebarPeek),
+        // The side panel slides in and out. Only the drawing moves during the slide: the screens are
+        // laid out once at their new width, so nothing has to be measured again on every frame.
+        val panelTarget = if (sidebarOpen) 0.dp else -(SidebarWidth - SidebarPeek)
+        val panelSlide = animateDpAsState(
+            targetValue = panelTarget,
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
             label = "sidebar",
         )
         if (mode != PlayerMode.FULL) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = SidebarWidth + sidebarOffset)
+                    .padding(start = SidebarWidth + panelTarget)
+                    .offset { IntOffset((panelSlide.value - panelTarget).roundToPx(), 0) }
                     // Moving in from the menu lands on the screen's starting point, if it has named one.
                     .focusProperties { enter = { entryFocus.target ?: FocusRequester.Default } }
                     .focusRequester(contentFocus)
@@ -524,6 +532,7 @@ fun AppRoot(
                             settings = container.settings,
                             metadata = container.metadata,
                             updates = container.updates,
+                            subtitles = container.subtitles,
                         )
                     }
                     else -> TopInset { ComingLater(dest) }
@@ -544,7 +553,7 @@ fun AppRoot(
                 showingPicture = mode == PlayerMode.MINI,
                 itemFocus = menuFocus,
                 modifier = Modifier
-                    .offset(x = sidebarOffset)
+                    .offset { IntOffset(panelSlide.value.roundToPx(), 0) }
                     .onFocusChanged { menuFocused = it.hasFocus },
             )
         }
@@ -553,6 +562,7 @@ fun AppRoot(
             val colors = AppTheme.colors
             PlayerHost(
                 controller = controller,
+                subtitles = container.subtitles,
                 mode = mode,
                 onMinimise = { mode = PlayerMode.MINI },
                 onExpand = { mode = PlayerMode.FULL },
@@ -565,7 +575,7 @@ fun AppRoot(
                 } else {
                     // Sits in the picture space of the side panel and slides with it.
                     Modifier
-                        .offset(x = sidebarOffset + SidebarPictureSide, y = SidebarPictureTop)
+                        .offset { IntOffset((panelSlide.value + SidebarPictureSide).roundToPx(), SidebarPictureTop.roundToPx()) }
                         .size(width = SidebarPictureWidth, height = SidebarPictureHeight)
                         .border(width = 1.dp, color = colors.glassBorder)
                         .onFocusChanged { pictureFocused = it.hasFocus }

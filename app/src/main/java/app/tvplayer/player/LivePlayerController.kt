@@ -1,5 +1,14 @@
 package app.tvplayer.player
 
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.Dispatchers
+import java.util.Locale
+import java.io.File
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Format
+import androidx.media3.common.C
+import android.net.Uri
 import android.content.Context
 import androidx.annotation.OptIn
 import androidx.compose.runtime.getValue
@@ -74,7 +83,7 @@ data class VodItem(
  */
 @OptIn(UnstableApi::class)
 class LivePlayerController(
-    context: Context,
+    private val context: Context,
     private val http: OkHttpClient,
     private val channels: ChannelsRepository,
     private val settings: SettingsRepository,
@@ -117,6 +126,10 @@ class LivePlayerController(
     var bannerToken by mutableIntStateOf(0)
         private set
 
+    /** True while live TV is playing from the pause-and-rewind recording. */
+    var timeshiftActive by mutableStateOf(false)
+        private set
+
     /** Keys of the viewer's favourite channels. */
     var favourites by mutableStateOf<Set<String>>(emptySet())
         private set
@@ -140,6 +153,11 @@ class LivePlayerController(
     private var resumeAt = 0L
     private var queue: List<VodItem> = emptyList()
     private var upNextJob: Job? = null
+    private var timeshift: TimeshiftSession? = null
+    private val timeshiftRoot = File(context.cacheDir, "timeshift").also { TimeshiftSession.clearAll(it) }
+
+    /** Subtitle files added to the film playing (from OpenSubtitles). */
+    private var addedSubtitles: List<MediaItem.SubtitleConfiguration> = emptyList()
 
     // Lets players start on any frame in a TS stream, which makes channel changes noticeably quicker.
     private val extractors = DefaultExtractorsFactory().setTsExtractorFlags(
@@ -209,6 +227,8 @@ class LivePlayerController(
     /** Plays a film or episode, carrying on from where the viewer left it if they got part-way. */
     fun playVod(item: VodItem, episodes: List<VodItem> = listOf(item)) {
         leaveVod()
+        stopTimeshift()
+        addedSubtitles = emptyList()
         queue = episodes
         loadJob?.cancel()
         tuneJob?.cancel()
@@ -231,6 +251,10 @@ class LivePlayerController(
         }
     }
 
+    /** Whether there's another episode after this one. */
+    val hasNextEpisode: Boolean
+        get() = queue.indexOfFirst { it.url == vod?.url }.let { it >= 0 && it + 1 < queue.size }
+
     /** Moves to the next (+1) or previous (-1) episode, when playing from a series. */
     fun skipEpisode(delta: Int) {
         val index = queue.indexOfFirst { it.url == vod?.url }
@@ -243,13 +267,98 @@ class LivePlayerController(
         controlsToken++
     }
 
+    /** Whether live TV can be rewound and fast-forwarded right now. */
+    val liveSeekable: Boolean
+        get() = vod == null && (timeshiftActive || (player.isCurrentMediaItemSeekable && player.duration > 60_000))
+
     fun seekBy(millis: Long) {
         val duration = player.duration
         var target = (player.currentPosition + millis).coerceAtLeast(0)
-        if (duration > 0) target = target.coerceAtMost(duration - 1_000)
+        if (duration > 0) {
+            // Live TV can't go past the live point; a film stops just short of its end.
+            target = target.coerceAtMost(if (vod == null) duration else duration - 1_000)
+        }
         player.seekTo(target)
         controlsToken++
     }
+
+    /** How far behind live the picture is, in milliseconds (0 when watching live). */
+    fun behindLiveMillis(): Long {
+        if (vod != null || !liveSeekable) return 0
+        val duration = player.duration
+        if (duration <= 0) return 0
+        return (duration - player.currentPosition - LIVE_OFFSET_MILLIS).coerceAtLeast(0)
+    }
+
+    /** Jumps back to live after pausing or rewinding. */
+    fun goLive() {
+        player.seekToDefaultPosition()
+        player.play()
+        controlsToken++
+    }
+
+    /** A choice in the subtitle or audio menu. */
+    data class TrackOption(val label: String, val selected: Boolean, internal val group: Tracks.Group?, internal val index: Int)
+
+    fun trackOptions(type: Int): List<TrackOption> {
+        val options = ArrayList<TrackOption>()
+        player.currentTracks.groups.filter { it.type == type }.forEach { group ->
+            for (i in 0 until group.length) {
+                if (!group.isTrackSupported(i)) continue
+                options += TrackOption(trackLabel(group.getTrackFormat(i), type, options.size + 1), group.isTrackSelected(i), group, i)
+            }
+        }
+        return options
+    }
+
+    /** Shows the chosen subtitle or audio track; for subtitles, null turns them off. */
+    fun selectTrack(type: Int, option: TrackOption?) {
+        val params = player.trackSelectionParameters.buildUpon()
+        val group = option?.group
+        if (group == null) {
+            params.setTrackTypeDisabled(type, true)
+        } else {
+            params.setTrackTypeDisabled(type, false)
+                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, option.index))
+        }
+        player.trackSelectionParameters = params.build()
+        controlsToken++
+    }
+
+    /** Adds a downloaded subtitle file to the film playing and shows it. */
+    fun addSubtitles(file: File, language: String) {
+        val item = vod ?: return
+        addedSubtitles = addedSubtitles + MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
+            .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+            .setLanguage(language)
+            .setLabel("OpenSubtitles")
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+        val position = player.currentPosition
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setPreferredTextLanguage(language)
+            .build()
+        startVod(item, position)
+        controlsToken++
+    }
+
+    private fun trackLabel(format: Format, type: Int, number: Int): String {
+        val language = format.language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
+            ?.let { Locale.forLanguageTag(it).getDisplayLanguage(Locale.UK).ifBlank { it } }
+        val name = format.label?.takeIf { it.isNotBlank() }
+        val kind = when {
+            type == C.TRACK_TYPE_TEXT && format.sampleMimeType == MimeTypes.APPLICATION_CEA608 -> "Closed captions"
+            type == C.TRACK_TYPE_TEXT && format.sampleMimeType == MimeTypes.APPLICATION_DVBSUBS -> "Subtitles"
+            type == C.TRACK_TYPE_AUDIO && format.channelCount >= 6 -> "Surround"
+            else -> null
+        }
+        return listOfNotNull(name ?: language, kind).distinct().joinToString(" · ").ifEmpty {
+            if (type == C.TRACK_TYPE_AUDIO) "Audio $number" else "Subtitles $number"
+        }
+    }
+
 
     fun showControls() {
         controlsToken++
@@ -257,7 +366,7 @@ class LivePlayerController(
 
     private fun startVod(item: VodItem, from: Long) {
         if (stopped) return
-        player.setMediaSource(sourceFor(item.url, item.userAgent, item.referrer))
+        player.setMediaSource(sourceFor(item.url, item.userAgent, item.referrer, addedSubtitles))
         player.prepare()
         if (from > 0) player.seekTo(from)
         player.play()
@@ -380,6 +489,7 @@ class LivePlayerController(
         stopped = true
         cancelRecovery()
         tuneJob?.cancel()
+        stopTimeshift()
         player.stop()
     }
 
@@ -406,6 +516,7 @@ class LivePlayerController(
         guideJob?.cancel()
         nowNext = emptyList()
         cancelRecovery()
+        stopTimeshift()
         player.stop()
         player.clearMediaItems()
         current = null
@@ -427,6 +538,7 @@ class LivePlayerController(
             return
         }
         tuneJob?.cancel()
+        stopTimeshift()
         status = showing
         tuneJob = scope.launch {
             val row = channels.row(id)
@@ -437,12 +549,83 @@ class LivePlayerController(
             }
             playingRow = row
             if (stopped) return@launch
-            player.setMediaSource(sourceFor(row.url, row.userAgent, row.referrer))
+            val minutes = settings.timeshiftMinutes.first()
+            val session = if (minutes > 0 && !isHls(row.url)) startTimeshift(row, minutes) else null
+            if (stopped) return@launch
+            if (session != null) {
+                player.setMediaSource(timeshiftSource(session))
+            } else {
+                player.setMediaSource(sourceFor(row.url, row.userAgent, row.referrer))
+            }
             player.prepare()
             player.play()
             watchForStall()
         }
     }
+
+    /**
+     * Starts recording [row] so it can be paused and rewound, and waits for the first slice.
+     * Returns null (play the stream directly instead) if the recording doesn't get going.
+     */
+    private suspend fun startTimeshift(row: ChannelEntity, minutes: Int): TimeshiftSession? {
+        val session = TimeshiftSession(
+            http = http,
+            url = row.url,
+            userAgent = row.userAgent ?: USER_AGENT,
+            referrer = row.referrer,
+            root = timeshiftRoot,
+            windowSeconds = minutes * 60.0,
+            scope = scope,
+            onFailed = { scope.launch(Dispatchers.Main) { onTimeshiftFailed() } },
+        )
+        timeshift = session
+        val started = withTimeoutOrNull(TIMESHIFT_START_MILLIS) { runCatching { session.ready.await() }.isSuccess } ?: false
+        if (!started || timeshift !== session) {
+            session.stop()
+            if (timeshift === session) timeshift = null
+            return null
+        }
+        timeshiftActive = true
+        return session
+    }
+
+    private fun stopTimeshift() {
+        timeshift?.stop()
+        timeshift = null
+        timeshiftActive = false
+    }
+
+    /** The recording lost the stream for good: try the channel's next copy, or give up. */
+    private fun onTimeshiftFailed() {
+        val channel = current ?: return
+        if (!timeshiftActive) return
+        stopTimeshift()
+        if (variantIndex + 1 < channel.variantIds.size) {
+            variantIndex++
+            attempt = 0
+            playVariant(PlaybackStatus.TryingBackup)
+        } else {
+            player.stop()
+            status = PlaybackStatus.Failed
+        }
+    }
+
+    private fun timeshiftSource(session: TimeshiftSession): MediaSource {
+        val item = MediaItem.Builder()
+            .setUri(Uri.fromFile(session.playlist))
+            .setMimeType(MimeTypes.APPLICATION_M3U8)
+            .setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(LIVE_OFFSET_MILLIS)
+                    .setMinOffsetMs(2_000)
+                    .build(),
+            )
+            .build()
+        return DefaultMediaSourceFactory(DefaultDataSource.Factory(context), extractors).createMediaSource(item)
+    }
+
+    private fun isHls(url: String) = url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)
+
 
     private fun recover() {
         if (stopped) return
@@ -491,15 +674,22 @@ class LivePlayerController(
         stallJob?.cancel()
     }
 
-    private fun sourceFor(url: String, userAgent: String?, referrer: String?): MediaSource {
+    private fun sourceFor(
+        url: String,
+        userAgent: String?,
+        referrer: String?,
+        subtitles: List<MediaItem.SubtitleConfiguration> = emptyList(),
+    ): MediaSource {
         val data = OkHttpDataSource.Factory(http).setUserAgent(userAgent ?: USER_AGENT)
         referrer?.let { data.setDefaultRequestProperties(mapOf("Referer" to it)) }
 
-        val item = MediaItem.Builder().setUri(url)
-        if (url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)) {
+        val item = MediaItem.Builder().setUri(url).setSubtitleConfigurations(subtitles)
+        if (isHls(url)) {
             item.setMimeType(MimeTypes.APPLICATION_M3U8)
         }
-        return DefaultMediaSourceFactory(data, extractors).createMediaSource(item.build())
+        // Subtitle files added from OpenSubtitles are local files; everything else comes over the network.
+        val factory = if (subtitles.isEmpty()) data else DefaultDataSource.Factory(context, data)
+        return DefaultMediaSourceFactory(factory, extractors).createMediaSource(item.build())
     }
 
     private fun updateStreamInfo() {
@@ -567,7 +757,8 @@ class LivePlayerController(
 
         override fun onPlayerError(error: PlaybackException) {
             if (vod == null && error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
-                player.seekToDefaultPosition()
+                // Paused or rewound past the oldest part kept: carry on from the oldest part still there.
+                if (timeshiftActive) player.seekTo(5_000) else player.seekToDefaultPosition()
                 player.prepare()
                 return
             }
@@ -591,5 +782,8 @@ class LivePlayerController(
         const val END_MARGIN_MILLIS = 120_000L
         const val UP_NEXT_SECONDS = 10
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
+        const val TIMESHIFT_START_MILLIS = 12_000L
+        /** How far behind the newest recorded slice "live" plays, so it never runs dry. */
+        const val LIVE_OFFSET_MILLIS = 5_000L
     }
 }

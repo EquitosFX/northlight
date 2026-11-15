@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.onFocusChanged
 import app.tvplayer.ui.components.entersAt
@@ -111,6 +112,22 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
         windowStart = (windowStart + by).coerceIn(earliest, earliest + 7 * 24 * HOUR - WINDOW)
     }
 
+    // Once a category is chosen the categories step aside and the listings fill the screen.
+    // Back brings them back with the chosen one highlighted; Back again goes to the side menu.
+    var listings by remember { mutableStateOf(false) }
+    var backToCategories by remember { mutableStateOf(false) }
+    val categoryFocus = remember { FocusRequester() }
+    BackHandler(enabled = listings) {
+        listings = false
+        backToCategories = true
+    }
+    LaunchedEffect(backToCategories) {
+        if (!backToCategories) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { categoryFocus.requestFocus() }
+        backToCategories = false
+    }
+
     val rows = when (group) {
         null -> current.channels
         FAVOURITES -> current.channels.filter { it.key in favourites }
@@ -122,16 +139,29 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
             .fillMaxSize()
             .padding(start = 34.dp)
             // Once anything in the guide has focus, it never jumps to the first programme by itself.
-            .onFocusChanged { if (it.hasFocus) placedFocus = true }
+            // Leaving the guide altogether (to the side menu) brings the categories back for next time.
+            .onFocusChanged {
+                if (it.hasFocus) placedFocus = true else listings = false
+            }
             .focusGroup(),
     ) {
-    Categories(
-        groups = current.groups,
-        selected = group,
-        onSelect = { group = it },
-        modifier = Modifier.width(150.dp).fillMaxHeight(),
-    )
-    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+    if (!listings) {
+        Categories(
+            groups = current.groups,
+            selected = group,
+            onSelect = { group = it },
+            // OK on a category moves into its listings (focus first, so it never falls out of the guide).
+            onOpen = { if (runCatching { entryFocus.requestFocus() }.isSuccess) listings = true },
+            currentFocus = categoryFocus,
+            modifier = Modifier.width(150.dp).fillMaxHeight(),
+        )
+    }
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .onFocusChanged { if (it.hasFocus) listings = true },
+    ) {
         Header(focused = focused, modifier = Modifier.padding(horizontal = SideMargin))
         TimeRuler(windowStart = windowStart, now = now)
         if (rows.isEmpty()) {
@@ -170,11 +200,17 @@ fun GuideScreen(channels: ChannelsRepository, onPlay: (LineupChannel) -> Unit) {
 
 /** Favourites, All channels and the playlist's groups. Moving through them changes the channels shown. */
 @Composable
-private fun Categories(groups: List<String>, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
+private fun Categories(
+    groups: List<String>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+    onOpen: () -> Unit,
+    currentFocus: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
     val colors = AppTheme.colors
     val entries = remember(groups) { listOf<String?>(FAVOURITES, null) + groups }
-    // Left from the listings returns to the chosen category.
-    val currentFocus = remember { FocusRequester() }
+    // Coming back to the categories lands on the chosen one.
     val entry = remember { EntryFocus() }
     Column(modifier = modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Label(text = "TV guide", style = AppType.headline, modifier = Modifier.padding(start = 10.dp, bottom = 6.dp))
@@ -188,7 +224,10 @@ private fun Categories(groups: List<String>, selected: String?, onSelect: (Strin
                 val current = name == selected
                 if (current) EntryPoint(currentFocus, entry)
                 FocusSurface(
-                    onClick = { onSelect(name) },
+                    onClick = {
+                        onSelect(name)
+                        onOpen()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(34.dp)

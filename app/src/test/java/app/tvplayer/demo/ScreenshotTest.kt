@@ -289,28 +289,53 @@ class ScreenshotTest {
         expectShown("Meridian One", "Guide channels")
         shot("06-guide-menu")
 
+        // Right from the menu: just the listings, no menu or categories.
         press("right")
         expectPanel(open = false, step = "Into the guide")
-        if (isCategory(focusedText())) {
-            problems += "Into the guide: landed on the category list (\"${focusedText()}\") rather than the listings"
-        }
+        expectHidden("Favourites", "The categories step aside in the listings")
+        if (isCategory(focusedText())) problems += "Into the guide: landed on the categories rather than the listings"
         press("down", "down")
-        shot("07-guide-browsing")
+        shot("07-guide-listings")
 
-        // Left along the listings until the category list.
-        repeat(8) { if (!isCategory(focusedText())) press("left") }
-        expectFocus("All channels", "Left from the listings returns to the open category")
+        // Back once: the categories, with the one in use highlighted.
+        press("back")
+        expectFocus("All channels", "Back from the listings goes to the categories")
+        expectShown("Favourites", "The categories come back")
         press("down", "down")
         expectFocus("News", "Down the categories")
-        expectShown("Atlas News", "News category shows news channels")
-        expectHidden("Meridian Two", "News category hides other channels")
         shot("08-guide-categories")
 
-        press("right")
-        expectFocus("", "Into the news listings")
+        // OK on a category: its listings fill the screen.
         press("ok")
-        expectShown("Atlas News", "Playing shows the channel banner")
+        expectHidden("Favourites", "Choosing a category hides the categories")
+        expectShown("Atlas News", "News category shows news channels")
+        expectHidden("Meridian Two", "News category hides other channels")
+        expectPanel(open = false, step = "Choosing a category")
+        shot("08b-guide-news-listings")
+
+        // Back twice: the categories, then the side menu.
+        press("back")
+        expectFocus("News", "Back returns to the chosen category")
+        press("back")
+        expectFocus("TV guide", "Back again goes to the side menu")
+        expectPanel(open = true, step = "Back in the side menu")
+
+        // Play the news channel and open the player controls.
+        press("right", "ok")
+        expectShown("Atlas News", "Playing shows the channel")
         shot("09-playing-live")
+        press("ok")
+        expectShown("Subtitles", "OK shows the player controls")
+        expectShown("Channels", "The controls offer the channel list")
+        shot("09b-player-controls")
+        press("right", "right", "right")
+        expectFocus("Subtitles", "Along the controls to Subtitles")
+        press("ok")
+        expectShown("Off", "The subtitles menu")
+        expectShown("isn't sending any subtitles", "The subtitles menu explains there are none")
+        shot("09c-subtitles-menu")
+        press("back", "back")
+        expectHidden("Subtitles", "Back closes the menu, then the controls")
         press("back")
         expectPanel(open = true, step = "Back from full-screen TV")
         expectFocus("TV guide", "Back from full-screen TV lands on the menu")
@@ -352,6 +377,22 @@ class ScreenshotTest {
 
         press("back")
         expectFocus("Play", "Back from the person page")
+
+        // Play the film and open its controls; subtitles offer OpenSubtitles.
+        press("ok")
+        press("ok")
+        expectShown("Subtitles", "OK shows the film's controls")
+        expectShown("10 s", "The film's controls skip 10 seconds")
+        shot("13b-film-controls")
+        press("right", "right")
+        expectFocus("Subtitles", "Along the film controls to Subtitles")
+        press("ok")
+        expectShown("Find on OpenSubtitles", "Films can search OpenSubtitles")
+        press("down", "ok")
+        expectShown("Add your free OpenSubtitles API key", "Without a key, it says how to add one")
+        shot("13c-opensubtitles-no-key")
+        press("back", "back", "back", "back")
+        expectFocus("Play", "Back from the film returns to its page")
         press("back")
         expectFocus("Harbour of Glass", "Back from the film page")
         shot("15-back-to-films")
@@ -400,6 +441,10 @@ class ScreenshotTest {
         expectShown("Skyfall", "Appearance pane")
         expectShown("Lagoon", "Appearance pane")
         shot("22-settings-appearance")
+        press("down", "ok")
+        expectShown("Pause and rewind live TV", "Player pane")
+        expectShown("OpenSubtitles API key", "Player pane has the subtitles key")
+        shot("22a-settings-player")
         press("down", "ok")
         expectShown("Build 999 is ready", "Updates pane finds the newer build")
         expectShown("Download and install", "Updates pane offers to install it")

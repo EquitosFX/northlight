@@ -1,5 +1,6 @@
 package app.tvplayer
 
+import app.tvplayer.data.SubtitlesRepository
 import app.tvplayer.data.UpdateRepository
 import android.app.Application
 import android.content.Context
@@ -62,4 +63,6 @@ class AppContainer(context: Context) {
     val metadata: MetadataRepository by lazy { MetadataRepository(database, http, settings) }
 
     val updates: UpdateRepository by lazy { UpdateRepository(appContext, http, scope) }
+
+    val subtitles: SubtitlesRepository by lazy { SubtitlesRepository(appContext, http, settings, metadata) }
 }

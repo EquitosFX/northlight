@@ -1,5 +1,8 @@
 package app.tvplayer.demo
 
+import okhttp3.ResponseBody.Companion.asResponseBody
+import okio.source
+import okio.buffer
 import app.tvplayer.AppContainer
 import app.tvplayer.core.tmdb.TitleCleaner
 import app.tvplayer.data.db.ChannelEntity
@@ -93,6 +96,22 @@ object DemoData {
             .build()
         val path = url.encodedPath
         when {
+            // The demo channels and films never finish loading, so the player stays on "Tuning…"
+            // and its controls can be opened the same way every time.
+            url.host == "demo.invalid" -> Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body(
+                    object : java.io.InputStream() {
+                        override fun read(): Int {
+                            Thread.sleep(120_000)
+                            return -1
+                        }
+                    }.source().buffer().asResponseBody("video/mp2t".toMediaType(), -1),
+                )
+                .build()
             // Settings › Updates: pretend GitHub has a newer build.
             url.host == "api.github.com" && path.endsWith("/releases/latest") -> reply(
                 200,

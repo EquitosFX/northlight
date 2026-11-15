@@ -1,5 +1,6 @@
 package app.tvplayer.ui.settings
 
+import app.tvplayer.data.SubtitlesRepository
 import app.tvplayer.data.UpdateRepository
 import app.tvplayer.ui.components.EntryPoint
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +40,7 @@ enum class SettingsSection(val label: String) {
     PLAYLISTS("Playlists"),
     FILM_INFO("Film info (TMDB)"),
     APPEARANCE("Appearance"),
+    PLAYER("Player"),
     UPDATES("Updates"),
 }
 
@@ -51,6 +53,7 @@ fun SettingsScreen(
     settings: SettingsRepository,
     metadata: MetadataRepository,
     updates: UpdateRepository,
+    subtitles: SubtitlesRepository,
 ) {
     val colors = AppTheme.colors
     var section by rememberSaveable { mutableStateOf(SettingsSection.PLAYLISTS) }
@@ -103,6 +106,7 @@ fun SettingsScreen(
                 SettingsSection.PLAYLISTS -> PlaylistsPane(repo = playlists)
                 SettingsSection.FILM_INFO -> TmdbPane(settings = settings, metadata = metadata)
                 SettingsSection.APPEARANCE -> AppearancePane(themeId = themeId, onThemeChange = onThemeChange)
+                SettingsSection.PLAYER -> PlayerPane(settings = settings, subtitles = subtitles)
                 SettingsSection.UPDATES -> UpdatesPane(updates = updates)
             }
         }
