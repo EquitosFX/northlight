@@ -1,4 +1,4 @@
-# TV player (working title: Skyfall)
+# Skyfall
 
 > The app was called Northlight while it was being built; the repository and download link keep that name.
 
