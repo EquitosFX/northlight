@@ -81,7 +81,7 @@ class ScreenshotTest {
 
     // ---- Driving the app ----
 
-    private fun open(dest: Dest, theme: ThemeId = ThemeId.LAGOON) {
+    private fun open(dest: Dest, theme: ThemeId = ThemeId.SKYFALL) {
         leaveTouchMode()
         rule.setContent {
             AppTheme(themeId = theme) {
@@ -359,17 +359,23 @@ class ScreenshotTest {
         press("down", "ok")
         shot("21-settings-tmdb")
         press("down", "ok")
+        expectShown("Skyfall", "Appearance pane")
         expectShown("Lagoon", "Appearance pane")
         shot("22-settings-appearance")
     }
 
+    @Test fun lagoon() {
+        open(Dest.HOME, ThemeId.LAGOON)
+        shot("23-theme-lagoon")
+    }
+
     @Test fun orchid() {
         open(Dest.HOME, ThemeId.ORCHID)
-        shot("23-theme-orchid")
+        shot("24-theme-orchid")
     }
 
     @Test fun midnight() {
         open(Dest.HOME, ThemeId.MIDNIGHT)
-        shot("24-theme-midnight")
+        shot("25-theme-midnight")
     }
 }

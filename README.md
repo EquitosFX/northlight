@@ -1,4 +1,6 @@
-# TV player (working title: Northlight)
+# TV player (working title: Skyfall)
+
+> The app was called Northlight while it was being built; the repository and download link keep that name.
 
 An IPTV player for Android TV, tuned for the NVIDIA Shield TV and its remote. The app ships with no content; users add their own playlists.
 
@@ -15,6 +17,7 @@ What is in place:
 - Three colour themes (Lagoon, Orchid, Midnight), chosen in Settings and saved on the device
 - `FocusSurface`, the one focusable building block for the remote
 - Side panel with the clock, the live picture and the menu; Figtree typeface
+- Skyfall branding: launcher icon, Android TV banner, start-up screen and a Skyfall colour theme (default), from the artwork in `branding/`
 - Home screen: your own content only (welcome when there is no playlist yet)
 - Recents: recent channels and films to carry on with
 - Voice search: Speak button in Search, or the remote's search/voice key

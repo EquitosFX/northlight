@@ -19,7 +19,7 @@ class MainActivity : ComponentActivity() {
         val settings = container.settings
 
         setContent {
-            val themeId by settings.theme.collectAsStateWithLifecycle(initialValue = ThemeId.LAGOON)
+            val themeId by settings.theme.collectAsStateWithLifecycle(initialValue = ThemeId.SKYFALL)
             val scope = rememberCoroutineScope()
 
             AppTheme(themeId = themeId) {

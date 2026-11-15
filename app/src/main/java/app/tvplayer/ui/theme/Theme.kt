@@ -18,12 +18,13 @@ import androidx.compose.ui.unit.sp
 
 /** The colour themes the user can pick in Settings › Appearance. */
 enum class ThemeId(val key: String, val label: String, val description: String) {
+    SKYFALL("skyfall", "Skyfall", "Midnight and ice blue"),
     LAGOON("lagoon", "Lagoon", "Teal and amber"),
     ORCHID("orchid", "Orchid", "Plum and lime"),
     MIDNIGHT("midnight", "Midnight", "Navy and mint");
 
     companion object {
-        fun fromKey(key: String?): ThemeId = entries.firstOrNull { it.key == key } ?: LAGOON
+        fun fromKey(key: String?): ThemeId = entries.firstOrNull { it.key == key } ?: SKYFALL
     }
 }
 
@@ -48,6 +49,14 @@ data class AppColors(
 }
 
 fun paletteFor(id: ThemeId): AppColors = when (id) {
+    // From the Skyfall brand: midnight navy, electric blue, ice blue and white.
+    ThemeId.SKYFALL -> AppColors(
+        groundTop = Color(0xFF0C2560),
+        groundMid = Color(0xFF061338),
+        groundBottom = Color(0xFF030819),
+        accent = Color(0xFF00BEEB),
+        onAccent = Color(0xFF02121E),
+    )
     ThemeId.LAGOON -> AppColors(
         groundTop = Color(0xFF0B4A52),
         groundMid = Color(0xFF063039),
@@ -104,7 +113,7 @@ object AppType {
     )
 }
 
-private val LocalAppColors = staticCompositionLocalOf { paletteFor(ThemeId.LAGOON) }
+private val LocalAppColors = staticCompositionLocalOf { paletteFor(ThemeId.SKYFALL) }
 
 object AppTheme {
     val colors: AppColors

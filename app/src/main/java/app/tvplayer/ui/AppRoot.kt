@@ -308,10 +308,10 @@ fun AppRoot(
         }
     }
     val hero = when {
-        lists == null -> HomeHero("NORTHLIGHT", "Loading…", null, null, null, "Settings", onPrimary = { dest = Dest.SETTINGS })
+        lists == null -> HomeHero("SKYFALL", "Loading…", null, null, null, "Settings", onPrimary = { dest = Dest.SETTINGS })
         lists.isEmpty() -> HomeHero(
             overline = "WELCOME",
-            title = "Welcome to Northlight",
+            title = "Welcome to Skyfall",
             tagline = "Add your Xtream Codes account or M3U playlist to bring in your channels, films and series.",
             meta = null,
             logo = null,

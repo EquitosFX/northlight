@@ -12,6 +12,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Focus component (fill, ring, scale) | Built |
 | Side panel: clock, live picture, menu that previews sections, tucks away while browsing | Built |
 | Bundled typeface (Figtree, SIL Open Font License) | Built |
+| Skyfall branding: icon, TV banner, start-up screen, Skyfall theme | Built |
 | Final app name, icon and home-screen banner | Not started (placeholders in place) |
 | Automatic APK build recipe | Built (publishes `northlight.apk` as the latest release) |
 

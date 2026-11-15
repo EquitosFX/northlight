@@ -1,5 +1,8 @@
 package app.tvplayer.ui.components
 
+import app.tvplayer.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,8 +94,17 @@ fun Sidebar(
                 contentAlignment = Alignment.Center,
             ) {
                 if (!showingPicture) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Label(text = appName, style = AppType.headline, color = colors.accent)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_skyfall_s),
+                            contentDescription = appName,
+                            modifier = Modifier.size(width = 26.dp, height = 44.dp),
+                        )
+                        Image(
+                            painter = painterResource(R.drawable.ic_skyfall_wordmark),
+                            contentDescription = null,
+                            modifier = Modifier.size(width = 72.dp, height = 11.dp),
+                        )
                         Label(text = "Live TV shows here", style = AppType.caption, color = colors.textDim)
                     }
                 }

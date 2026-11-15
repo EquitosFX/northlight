@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="window_ground">#063039</color>
+    <color name="window_ground">#030819</color>
 
     <style name="Theme.App" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/window_ground</item>
+        <!-- Shown while the app starts: the S and the wordmark on midnight navy. -->
+        <item name="android:windowBackground">@drawable/splash</item>
         <item name="android:windowNoTitle">true</item>
     </style>
 </resources>
