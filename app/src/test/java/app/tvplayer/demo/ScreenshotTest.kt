@@ -73,7 +73,8 @@ class ScreenshotTest {
         rule.waitForIdle()
     }
 
-    private fun press(vararg keys: Key) {
+    private fun press(vararg names: String) {
+        val keys = names.map { mapOf("right" to Key.DirectionRight, "down" to Key.DirectionDown, "ok" to Key.DirectionCenter).getValue(it) }
         for (key in keys) {
             runCatching { rule.onRoot().performKeyInput { pressKey(key) } }
                 .onFailure { println("Key $key not delivered: $it") }
@@ -94,25 +95,25 @@ class ScreenshotTest {
     @Test fun home() {
         open(Dest.HOME)
         shot("01-home-menu")
-        press(Key.DirectionRight)
+        press("right")
         shot("02-home-browsing")
-        press(Key.DirectionDown, Key.DirectionDown)
+        press("down", "down")
         shot("03-home-rails")
     }
 
     @Test fun guide() {
         open(Dest.GUIDE)
         shot("04-guide-menu")
-        press(Key.DirectionRight, Key.DirectionRight)
+        press("right", "right")
         shot("05-guide-browsing")
     }
 
     @Test fun films() {
         open(Dest.FILMS)
         shot("06-films-menu")
-        press(Key.DirectionRight, Key.DirectionRight, Key.DirectionRight)
+        press("right", "right", "right")
         shot("07-films-browsing")
-        press(Key.DirectionCenter)
+        press("ok")
         shot("08-film-page")
     }
 
