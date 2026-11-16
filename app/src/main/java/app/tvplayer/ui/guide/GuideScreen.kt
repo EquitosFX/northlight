@@ -188,6 +188,7 @@ fun GuideScreen(
                     slideTick.floatValue = value
                 }
                 sliding = false
+                println("DEBUGGUIDE slide done")
             }
         } else {
             slideMillis[0] = 0f
@@ -203,6 +204,7 @@ fun GuideScreen(
         val target = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
         if (target == windowStart) return
         refocus = focusedState.value?.programme?.id
+        println("DEBUGGUIDE shift by=$by refocus=$refocus target=$target")
         if (refocus != null) holdFocus()
         moveWindow(target)
     }
@@ -752,7 +754,8 @@ private fun GuideCell(
     if (refocus) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
-            runCatching { requester.requestFocus() }
+            val result = runCatching { requester.requestFocus() }
+            println("DEBUGGUIDE refocus $title result=$result")
             onRefocused()
         }
     }
