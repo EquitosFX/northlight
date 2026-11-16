@@ -203,9 +203,9 @@ fun GuideScreen(
     fun shift(by: Long) {
         val target = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
         if (target == windowStart) return
-        // The highlighted programme stays drawn (and highlighted) through the slide, so focus just stays
-        // on it; it's put back on it afterwards in case it was moved.
+        // Focus waits to one side during the slide and goes back to the same programme once it's settled.
         refocus = focusedState.value?.programme?.id
+        if (refocus != null) holdFocus()
         moveWindow(target)
     }
 
@@ -671,7 +671,7 @@ private fun GuideRow(
                     catchup = false,
                     onFocus = { onFocus(null) },
                     onClick = onPlay,
-                    refocus = jumpTime != null,
+                    refocus = jumpTime != null && !sliding,
                     onRefocused = onJumped,
                     modifier = edgeKeys(windowStart, windowEnd)
                         .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -706,7 +706,7 @@ private fun GuideRow(
                         catchup = catchup,
                         reminder = "${channel.key}|${programme.start}" in reminders,
                         onFocus = { onFocus(programme) },
-                        refocus = (programme.id == refocus && loadedFor == windowStart) || (jumpId != null && programme.id == jumpId && loadedFor == windowStart),
+                        refocus = !sliding && ((programme.id == refocus && loadedFor == windowStart) || (jumpId != null && programme.id == jumpId && loadedFor == windowStart)),
                         onRefocused = if (jumpId != null && programme.id == jumpId) onJumped else onRefocused,
                         onClick = {
                             when {
