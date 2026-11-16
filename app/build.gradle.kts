@@ -55,6 +55,14 @@ android {
         compose = true
     }
 
+    // Store native libraries compressed: the backup player's VLC engine is large, and this roughly
+    // halves the download. Android unpacks them once when the app is installed.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     // The screenshot test runs the real screens on the build machine (Robolectric) and saves pictures.
     testOptions {
         unitTests {
