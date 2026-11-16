@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -205,6 +206,7 @@ fun GuideScreen(
         // The highlighted programme stays drawn (and highlighted) through the slide, so focus just stays
         // on it; it's put back on it afterwards in case it was moved.
         refocus = focusedState.value?.programme?.id
+        println("DEBUGGUIDE shift $by")
         moveWindow(target)
     }
 
@@ -770,7 +772,11 @@ private fun GuideCell(
         outlined = false,
         focusScale = 1f,
     ) { focused ->
-        LaunchedEffect(focused) { if (focused) onFocus() }
+        LaunchedEffect(focused) {
+            println("DEBUGGUIDE cell '$title' focused=$focused")
+            if (focused) onFocus()
+        }
+        DisposableEffect(Unit) { onDispose { println("DEBUGGUIDE cell '$title' disposed") } }
         val tint = when {
             focused -> colors.onAccent
             past && !catchup -> colors.textFaint
