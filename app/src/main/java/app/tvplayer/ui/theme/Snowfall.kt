@@ -1,11 +1,15 @@
 package app.tvplayer.ui.theme
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -51,10 +55,14 @@ fun Snowfall(modifier: Modifier = Modifier, count: Int = 70) {
             )
         }
     }
-    val seconds by produceState(0f) {
-        val start = withFrameNanos { it }
-        while (true) withFrameNanos { now -> value = (now - start) / 1_000_000_000f }
-    }
+    // An endless clock in seconds (it starts again every hour; flakes just carry on from a new place).
+    val clock = rememberInfiniteTransition(label = "snow")
+    val seconds by clock.animateFloat(
+        initialValue = 0f,
+        targetValue = 3_600f,
+        animationSpec = infiniteRepeatable(tween(3_600_000, easing = LinearEasing), RepeatMode.Restart),
+        label = "seconds",
+    )
     Canvas(modifier) {
         val w = size.width
         val h = size.height
