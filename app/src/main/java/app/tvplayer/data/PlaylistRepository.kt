@@ -187,7 +187,7 @@ class PlaylistRepository(
      * The film-like item for watching [programme] again on [channel] (catch-up). Xtream Codes servers
      * want the start in their own local time, so the server's time zone is asked for once per playlist.
      */
-    suspend fun catchupItem(channel: LineupChannel, programme: ProgrammeEntity): VodItem = withContext(Dispatchers.IO) {
+    suspend fun catchupItem(channel: LineupChannel, programme: ProgrammeEntity, shiftMinutes: Int = 0): VodItem = withContext(Dispatchers.IO) {
         val row = channel.variantIds.firstNotNullOfOrNull { id -> db.channels().getBlocking(id)?.takeIf { (it.catchupDays ?: 0) > 0 } }
             ?: throw IOException("This channel doesn't offer catch-up.")
         val playlist = db.playlists().getBlocking(row.playlistId) ?: throw IOException("That playlist no longer exists.")
@@ -201,7 +201,8 @@ class PlaylistRepository(
         } else {
             ZoneOffset.UTC
         }
-        val plan = CatchupPlan(row.url, type, row.catchupSource, zone, programme.start, programme.stop)
+        val shift = shiftMinutes * 60_000L
+        val plan = CatchupPlan(row.url, type, row.catchupSource, zone, programme.start, programme.stop, shift)
         val url = try {
             plan.urlFrom(0)
         } catch (e: CatchupException) {

@@ -432,7 +432,8 @@ class ScreenshotTest {
     @Test fun movieNight() {
         open(Dest.MOVIE_NIGHT)
         press("right")
-        expectFocus("Start", "Into Movie night")
+        expectFocus("Let's start", "Into Movie night")
+        shot("25b-movie-night-intro")
         press("ok")
         expectShown("QUESTION 1 OF 10", "The first question")
         expectFocus("A film", "The first answer is highlighted")
@@ -604,6 +605,8 @@ class ScreenshotTest {
         press("down", "ok")
         expectShown("Pause and rewind live TV", "Player pane")
         expectShown("OpenSubtitles API key", "Player pane has the subtitles key")
+        expectShown("Catch-up timing", "Player pane has the catch-up timing")
+        expectShown("No change", "Catch-up timing starts unchanged")
         shot("22a-settings-player")
         press("down", "ok")
         expectShown("Build 999 is ready", "Updates pane finds the newer build")

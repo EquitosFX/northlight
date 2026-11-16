@@ -20,6 +20,7 @@ class SettingsRepository(private val context: Context) {
     private val lastChannelKey = stringPreferencesKey("last_channel")
     private val tmdbKeyKey = stringPreferencesKey("tmdb_key")
     private val timeshiftKey = intPreferencesKey("timeshift_minutes")
+    private val catchupOffsetKey = intPreferencesKey("catchup_offset_minutes")
     private val subtitleLanguageKey = stringPreferencesKey("subtitle_language")
     private val osKeyKey = stringPreferencesKey("opensubtitles_key")
     private val osUserKey = stringPreferencesKey("opensubtitles_user")
@@ -52,6 +53,16 @@ class SettingsRepository(private val context: Context) {
         context.settingsStore.edit { prefs -> prefs[timeshiftKey] = minutes }
     }
 
+    /**
+     * Minutes added to a programme's times when asking the provider for catch-up. Some providers' clocks
+     * are off by an hour or more, which plays the programme before (or after) the one chosen.
+     */
+    val catchupOffsetMinutes: Flow<Int> = context.settingsStore.data.map { prefs -> prefs[catchupOffsetKey] ?: 0 }
+
+    suspend fun setCatchupOffsetMinutes(minutes: Int) {
+        context.settingsStore.edit { prefs -> prefs[catchupOffsetKey] = minutes.coerceIn(-MAX_CATCHUP_OFFSET, MAX_CATCHUP_OFFSET) }
+    }
+
     /** The language subtitles are searched for in, as an OpenSubtitles code. */
     val subtitleLanguage: Flow<String> = context.settingsStore.data.map { prefs -> prefs[subtitleLanguageKey] ?: "en" }
 
@@ -74,6 +85,7 @@ class SettingsRepository(private val context: Context) {
 
     companion object {
         const val DEFAULT_TIMESHIFT_MINUTES = 30
+        const val MAX_CATCHUP_OFFSET = 12 * 60
     }
 }
 

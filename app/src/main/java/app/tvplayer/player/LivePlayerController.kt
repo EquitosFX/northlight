@@ -89,6 +89,8 @@ data class CatchupPlan(
     val zone: java.time.ZoneId,
     val startMs: Long,
     val endMs: Long,
+    /** Settings › Player › Catch-up timing: moves the times asked for, for providers whose clocks are off. */
+    val shiftMs: Long = 0,
 ) {
     val lengthMs: Long get() = endMs - startMs
 
@@ -96,7 +98,7 @@ data class CatchupPlan(
         liveUrl,
         type,
         source,
-        app.tvplayer.core.catchup.CatchupWindow(startMs + offsetMs, endMs, System.currentTimeMillis()),
+        app.tvplayer.core.catchup.CatchupWindow(startMs + offsetMs + shiftMs, endMs + shiftMs, System.currentTimeMillis()),
         zone,
     )
 }

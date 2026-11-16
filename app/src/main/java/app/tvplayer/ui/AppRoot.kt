@@ -2,6 +2,7 @@
 
 package app.tvplayer.ui
 
+import kotlinx.coroutines.flow.first
 import app.tvplayer.ui.movienight.MovieNightState
 import app.tvplayer.ui.movienight.MovieNightScreen
 import androidx.compose.foundation.layout.width
@@ -597,7 +598,8 @@ fun AppRoot(
                             onCatchup = { channel, programme ->
                                 scope.launch {
                                     try {
-                                        val item = container.playlists.catchupItem(channel, programme)
+                                        val shift = container.settings.catchupOffsetMinutes.first()
+                                        val item = container.playlists.catchupItem(channel, programme, shift)
                                         // The player must be driven from the main thread.
                                         withContext(Dispatchers.Main) { playVod(item) }
                                     } catch (e: Exception) {

@@ -1,5 +1,6 @@
 package app.tvplayer.ui.settings
 
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     val scope = rememberCoroutineScope()
     val minutes by settings.timeshiftMinutes.collectAsStateWithLifecycle(initialValue = SettingsRepository.DEFAULT_TIMESHIFT_MINUTES)
     val language by settings.subtitleLanguage.collectAsStateWithLifecycle(initialValue = "en")
+    val offset by settings.catchupOffsetMinutes.collectAsStateWithLifecycle(initialValue = 0)
     val saved by settings.openSubtitles.collectAsStateWithLifecycle(initialValue = OpenSubtitlesAccount("", "", ""))
     var key by remember(saved) { mutableStateOf(saved.apiKey) }
     var user by remember(saved) { mutableStateOf(saved.username) }
@@ -63,6 +65,23 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
             listOf(0 to "Off", 15 to "15 min", 30 to "30 min", 60 to "1 hour", 120 to "2 hours").forEach { (value, label) ->
                 Chip(label = label, selected = minutes == value) { scope.launch { settings.setTimeshiftMinutes(value) } }
             }
+        }
+
+        Label(text = "Catch-up timing", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
+        Label(
+            text = "If catch-up from the TV guide starts on the wrong programme, your provider's clock is out. " +
+                "Starts on the programme before? Move it later (+). The one after? Move it earlier (−).",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 3,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Chip(label = "− 30 min", selected = false) { scope.launch { settings.setCatchupOffsetMinutes(offset - 30) } }
+            androidx.compose.foundation.layout.Box(modifier = Modifier.width(150.dp), contentAlignment = Alignment.Center) {
+                Label(text = offsetText(offset), style = AppType.title, color = if (offset == 0) colors.text else colors.accent)
+            }
+            Chip(label = "+ 30 min", selected = false) { scope.launch { settings.setCatchupOffsetMinutes(offset + 30) } }
+            if (offset != 0) Chip(label = "Reset", selected = false) { scope.launch { settings.setCatchupOffsetMinutes(0) } }
         }
 
         Label(text = "Subtitles", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
@@ -140,4 +159,12 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 14.dp),
         )
     }
+}
+
+/** "No change", "1 h 30 min later", "30 min earlier". */
+private fun offsetText(minutes: Int): String {
+    if (minutes == 0) return "No change"
+    val m = kotlin.math.abs(minutes)
+    val text = listOfNotNull((m / 60).takeIf { it > 0 }?.let { "$it h" }, (m % 60).takeIf { it > 0 }?.let { "$it min" }).joinToString(" ")
+    return if (minutes > 0) "$text later" else "$text earlier"
 }
