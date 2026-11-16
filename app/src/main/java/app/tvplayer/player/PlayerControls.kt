@@ -96,8 +96,8 @@ fun PlayerControls(
     var touched by remember { mutableIntStateOf(0) }
     val playFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
-    // Nothing is highlighted when the controls open: focus waits on an invisible spot, and the first
-    // arrow press highlights Pause. That way pressing OK twice never pauses by accident.
+    // Nothing is highlighted when the controls open: focus waits on an invisible spot. OK from there
+    // pauses straight away; an arrow press highlights Pause (Up: the progress bar).
     val restFocus = remember { FocusRequester() }
     val timelineFocus = remember { FocusRequester() }
     var resting by remember { mutableStateOf(true) }
@@ -179,8 +179,14 @@ fun PlayerControls(
                                     runCatching { playFocus.requestFocus() }
                                     true
                                 }
-                                // OK with nothing highlighted does nothing (the controls are already open).
-                                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> true
+                                // OK again pauses (and again plays), with Pause/Play highlighted from then on.
+                                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                                    resting = false
+                                    controller.togglePause()
+                                    playing = !playing
+                                    runCatching { playFocus.requestFocus() }
+                                    true
+                                }
                                 else -> false
                             }
                         }

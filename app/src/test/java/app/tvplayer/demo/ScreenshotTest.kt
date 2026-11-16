@@ -375,11 +375,17 @@ class ScreenshotTest {
         expectShown("min left", "The controls show the programme's times")
         if (focusedText().contains("Pause")) problems += "The controls opened with Pause already highlighted"
         shot("09b-player-controls")
+        // OK again pauses, with Play highlighted; OK once more carries on.
         press("ok")
-        expectShown("Subtitles", "OK with nothing highlighted keeps the controls open")
-        press("right")
+        expectShown("Subtitles", "OK again keeps the controls open")
+        // (The demo channel has no real video, so whether it shows Play or Pause depends on the test player.)
         if (!focusedText().contains("Pause") && !focusedText().contains("Play")) {
-            problems += "The first arrow press should highlight Pause/Play, but it was on \"${focusedText()}\""
+            problems += "OK again should pause and highlight Play, but focus was on \"${focusedText()}\""
+        }
+        shot("09b2-paused")
+        press("ok")
+        if (!focusedText().contains("Pause") && !focusedText().contains("Play")) {
+            problems += "OK on Play/Pause moved focus to \"${focusedText()}\""
         }
         moveTo("Subtitles", "right", step = "Along the controls to Subtitles")
         press("ok")
