@@ -526,27 +526,39 @@ class ScreenshotTest {
 
         // An Xtream series: episodes fetched from the server.
         press("ok")
-        expectShown("Season 1", "An Xtream series lists its seasons")
-        expectShown("Season 2", "An Xtream series lists its seasons")
-        expectFocus("E1", "Opening a series lands on its first episode")
+        expectFocus("Play S1 E1", "Opening a series lands on Play for its first episode")
+        expectShown("Season 1", "The season picker shows the season")
         expectShown("Cold Case", "Episode titles from the server")
-        shot("17-series-episodes")
+        expectShown("Cast:", "The page names the cast")
+        shot("17-series-page")
+        // The season picker opens a list of seasons.
+        press("down", "down")
+        expectFocus("Season 1", "Down to the season picker")
+        press("ok")
+        expectShown("Season 2", "The season list shows every season")
+        shot("17a-series-seasons")
+        moveTo("Season 2", "down", step = "Down the season list")
+        press("ok")
+        expectShown("Season 2 · 3 episodes", "Choosing a season shows its episodes")
+        // Down to the episode cards.
+        press("down")
+        expectShown("S2 E1", "Highlighting an episode describes it")
+        shot("17b-series-episodes")
         press("back")
         expectFocus("Cobalt Street", "Back from a series returns to its poster")
 
         // A series whose server sends seasons as numbered objects.
         press("right", "ok")
-        expectShown("Season 2", "Seasons sent as numbered objects still list")
-        expectFocus("E1", "Its first episode")
+        expectShown("Season 1", "Seasons sent as numbered objects still list")
+        expectFocus("Play S1 E1", "Play for its first episode")
         press("back")
 
         // An M3U series: its separate episode entries gathered by season.
         press("right", "ok")
         expectShown("Season 1", "An M3U series lists its seasons")
-        expectShown("Season 2", "An M3U series lists its seasons")
         expectShown("Episode 4", "An M3U series lists its episodes")
-        expectFocus("E1", "Its first episode")
-        shot("17b-m3u-series-episodes")
+        expectFocus("Play S1 E1", "Play for its first episode")
+        shot("17d-m3u-series-page")
 
         // Playing an episode offers Skip intro while the intro runs.
         press("ok")
@@ -554,6 +566,9 @@ class ScreenshotTest {
         shot("17c-skip-intro")
         press("ok")
         expectHidden("Skip intro", "OK skips the intro")
+        // Back on the page, the button still offers that episode (it was only just started).
+        press("back")
+        expectFocus("Play S1 E1", "Back from an episode returns to the series page")
     }
 
     @Test fun search() {

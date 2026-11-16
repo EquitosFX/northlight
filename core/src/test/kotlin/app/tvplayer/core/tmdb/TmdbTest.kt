@@ -161,4 +161,24 @@ class TmdbTest {
         assertEquals(TmdbCredit("Low Tide", 2019, "movie", null), found[0])
         assertEquals(TmdbCredit("Harbour Lights", 2021, "tv", null), found[1])
     }
+
+    @Test
+    fun readsTheTitleLogoPreferringEnglish() {
+        val text = """{"logos":[{"iso_639_1":"de","file_path":"/de.png"},{"iso_639_1":"en","file_path":"/en.svg"},
+            {"iso_639_1":"en","file_path":"/en.png"}]}"""
+        assertEquals("https://image.tmdb.org/t/p/w500/en.png", TmdbParser.parseLogo(text))
+        assertEquals(null, TmdbParser.parseLogo("""{"logos":[]}"""))
+    }
+
+    @Test
+    fun readsASeason() {
+        val text = """{"episodes":[{"episode_number":1,"name":"A Shadow of the Past","overview":"It begins.",
+            "still_path":"/s1.jpg","runtime":66,"air_date":"2022-09-01","vote_average":7.1},{"name":"no number"}]}"""
+        val episodes = TmdbParser.parseSeason(text)
+        assertEquals(1, episodes.size)
+        assertEquals(
+            TmdbEpisode(1, "A Shadow of the Past", "It begins.", "https://image.tmdb.org/t/p/w300/s1.jpg", 66, "2022-09-01", 7.1),
+            episodes[0],
+        )
+    }
 }

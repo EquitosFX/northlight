@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.tmdb.TmdbEpisode
 import app.tvplayer.core.tmdb.TmdbCredit
 import app.tvplayer.core.movienight.PickFacts
 import app.tvplayer.core.movienight.Found
@@ -108,6 +109,29 @@ class MetadataRepository(
         } catch (e: Exception) {
             null
         }
+    }
+
+    private val logos = HashMap<Long, String?>()
+    private val seasons = HashMap<Pair<Long, Int>, List<TmdbEpisode>>()
+
+    /** The series' name as artwork (its title logo), or null. Needs a TMDB key. */
+    suspend fun titleLogo(tmdbId: Long, isSeries: Boolean): String? = withContext(Dispatchers.IO) {
+        logos[tmdbId]?.let { return@withContext it }
+        val key = settings.tmdbKey.first().trim()
+        if (key.isEmpty()) return@withContext null
+        val logo = runCatching { TmdbParser.parseLogo(get(TmdbUrls.images(if (isSeries) "tv" else "movie", tmdbId), key)) }.getOrNull()
+        logos[tmdbId] = logo
+        logo
+    }
+
+    /** TMDB's episodes for one season (titles, descriptions, stills), or empty. Needs a TMDB key. */
+    suspend fun season(tmdbId: Long, season: Int): List<TmdbEpisode> = withContext(Dispatchers.IO) {
+        seasons[tmdbId to season]?.let { return@withContext it }
+        val key = settings.tmdbKey.first().trim()
+        if (key.isEmpty()) return@withContext emptyList()
+        val found = runCatching { TmdbParser.parseSeason(get(TmdbUrls.season(tmdbId, season), key)) }.getOrNull() ?: return@withContext emptyList()
+        seasons[tmdbId to season] = found
+        found
     }
 
     /** Suggestions already worked out this session, by watched title. */

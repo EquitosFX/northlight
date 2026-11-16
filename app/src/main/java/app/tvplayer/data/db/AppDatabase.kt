@@ -161,6 +161,9 @@ interface ProgressDao {
     @Query("SELECT * FROM progress ORDER BY updatedAt DESC LIMIT 20")
     fun observeRecent(): Flow<List<ProgressEntity>>
 
+    @Query("SELECT * FROM progress WHERE url IN (:urls)")
+    suspend fun getAll(urls: List<String>): List<ProgressEntity>
+
     @Query("SELECT * FROM progress WHERE url = :url")
     suspend fun get(url: String): ProgressEntity?
 

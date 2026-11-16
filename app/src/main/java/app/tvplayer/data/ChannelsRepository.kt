@@ -128,6 +128,10 @@ class ChannelsRepository(private val db: AppDatabase) {
 
     suspend fun progressFor(url: String): ProgressEntity? = db.progress().get(url)
 
+    /** Saved positions for any of [urls] (a series' episodes). */
+    suspend fun progressFor(urls: List<String>): List<ProgressEntity> =
+        urls.chunked(500).flatMap { db.progress().getAll(it) }
+
     suspend fun saveProgress(progress: ProgressEntity) = db.progress().save(progress)
 
     suspend fun clearProgress(url: String) = db.progress().delete(url)

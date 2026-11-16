@@ -121,7 +121,9 @@ fun AppRoot(
     val controller = remember {
         // The player is only ever driven from the main thread.
         val mainScope = kotlinx.coroutines.CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)
-        LivePlayerController(context.applicationContext, container.http, container.channels, container.settings, mainScope)
+        LivePlayerController(context.applicationContext, container.http, container.channels, container.settings, mainScope).also { player ->
+            player.onFinished = { item -> container.watched.finished(item.url) }
+        }
     }
     DisposableEffect(controller) { onDispose { controller.release() } }
 
@@ -168,7 +170,7 @@ fun AppRoot(
     }
 
     fun playVod(item: VodItem, episodes: List<VodItem> = listOf(item)) {
-        if (!item.catchup) container.watched.record(item.title)
+        if (!item.catchup) container.watched.record(item.title, item.url)
         controller.playVod(item, episodes)
         mode = PlayerMode.FULL
     }
@@ -529,6 +531,7 @@ fun AppRoot(
                             person = chosen
                         },
                         onReturn = { back -> goTo(back) },
+                        watched = container.watched,
                     )
                     Dest.SERIES -> VodScreen(
                         kind = ChannelEntity.KIND_SERIES,
@@ -542,6 +545,7 @@ fun AppRoot(
                             person = chosen
                         },
                         onReturn = { back -> goTo(back) },
+                        watched = container.watched,
                     )
                     Dest.MOVIE_NIGHT -> TopInset {
                         MovieNightScreen(

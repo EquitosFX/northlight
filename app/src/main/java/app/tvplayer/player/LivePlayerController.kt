@@ -317,6 +317,9 @@ class LivePlayerController(
     val liveSeekable: Boolean
         get() = vod == null && (timeshiftActive || (player.isCurrentMediaItemSeekable && player.duration > 60_000))
 
+    /** Called when a film or episode has been watched to the end. */
+    var onFinished: ((VodItem) -> Unit)? = null
+
     /** For catch-up: where the stream being played starts, measured from the programme's start. */
     private var catchupOffset = 0L
     /** For catch-up: the exact point to move to once a fresh request has loaded, if the stream allows. */
@@ -516,6 +519,7 @@ class LivePlayerController(
         scope.launch {
             if (duration > 0 && position > duration - END_MARGIN_MILLIS) {
                 channels.clearProgress(item.url)
+                onFinished?.invoke(item)
             } else {
                 channels.saveProgress(
                     ProgressEntity(

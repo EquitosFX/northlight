@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.data.WatchedTitles
 import app.tvplayer.ui.components.Dest
 import app.tvplayer.ui.components.entersAt
 import app.tvplayer.ui.components.EntryFocus
@@ -95,6 +96,7 @@ fun VodScreen(
     onPlay: (VodItem, List<VodItem>) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
     onReturn: (Dest) -> Unit = {},
+    watched: WatchedTitles? = null,
 ) {
     val colors = AppTheme.colors
     val holdFocus = LocalHoldFocus.current
@@ -105,10 +107,12 @@ fun VodScreen(
     }
     val series = state.series
     if (series != null) {
-        EpisodesPane(
+        SeriesPane(
             series = series,
+            channels = channels,
             playlists = playlists,
             metadata = metadata,
+            watched = watched,
             onPlay = onPlay,
             onPerson = onPerson,
             onBack = {
@@ -342,149 +346,3 @@ internal fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = M
     }
 }
 
-@Composable
-private fun EpisodesPane(
-    series: VodRow,
-    playlists: PlaylistRepository,
-    metadata: MetadataRepository,
-    onPlay: (VodItem, List<VodItem>) -> Unit,
-    onPerson: (TmdbPerson) -> Unit,
-    onBack: () -> Unit,
-) {
-    val colors = AppTheme.colors
-    var details by remember(series.id) { mutableStateOf<SeriesDetails?>(null) }
-    var problem by remember(series.id) { mutableStateOf<String?>(null) }
-    var season by remember(series.id) { mutableIntStateOf(-1) }
-    val firstEpisode = remember { FocusRequester() }
-    val autoFocus = LocalAutoFocus.current
-    val info by produceState<MetadataEntity?>(initialValue = null, series.id) {
-        value = metadata.lookup(series.name, ChannelEntity.KIND_SERIES)
-    }
-
-    BackHandler { onBack() }
-    LaunchedEffect(series.id) {
-        try {
-            details = playlists.seriesDetails(series)
-        } catch (e: Exception) {
-            problem = playlists.explainError(e)
-        }
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = SideMargin, end = SideMargin, top = 18.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
-    ) {
-        Column(modifier = Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val poster = series.logo?.takeIf { it.isNotBlank() } ?: info?.poster
-            if (poster != null) {
-                AsyncImage(
-                    model = poster,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .width(150.dp)
-                        .aspectRatio(2f / 3f)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
-            }
-            Label(text = info?.title ?: series.name, style = AppType.headline, maxLines = 2)
-            val meta = listOfNotNull(
-                info?.year?.toString(),
-                info?.rating?.let { "★ %.1f".format(it) },
-                info?.seasons?.let { if (it == 1) "1 season" else "$it seasons" },
-            ).joinToString(" · ")
-            if (meta.isNotEmpty()) Label(text = meta, style = AppType.label, color = colors.accent)
-            info?.genres?.takeIf { it.isNotEmpty() }?.let { Label(text = it, style = AppType.caption, color = colors.textDim) }
-            (details?.plot ?: info?.overview)?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 6) }
-        }
-
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            info?.let { PeopleRow(people = it.peopleList(), onPerson = onPerson) }
-            val loaded = details
-            val message = when {
-                problem != null -> problem
-                loaded == null -> "Loading episodes…"
-                loaded.episodes.isEmpty() -> "No episodes found for this series."
-                else -> null
-            }
-            if (message != null || loaded == null) {
-                Label(text = message.orEmpty(), style = AppType.body, color = colors.textDim, maxLines = 3)
-                return@Column
-            }
-
-            // Every episode in order, so playback can carry on into the next one, across seasons.
-            val queue = loaded.episodes.map { episode ->
-                VodItem(
-                    url = episode.url,
-                    title = "${series.name} · S${episode.season} E${episode.number}",
-                    poster = series.logo,
-                    userAgent = series.userAgent,
-                    referrer = series.referrer,
-                )
-            }
-            val seasons = loaded.episodes.map { it.season }.distinct()
-            val shown = if (season in seasons) season else seasons.first()
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(seasons) { number ->
-                    FocusSurface(
-                        onClick = { season = number },
-                        modifier = Modifier.height(32.dp),
-                        container = if (number == shown) colors.glassStrong else null,
-                    ) { focused ->
-                        LaunchedEffect(focused) { if (focused) season = number }
-                        Label(text = "Season $number", style = AppType.label, modifier = Modifier.padding(horizontal = 14.dp))
-                    }
-                }
-            }
-
-            val episodes = loaded.episodes.filter { it.season == shown }
-            LaunchedEffect(loaded) {
-                withFrameNanos { }
-                if (autoFocus()) runCatching { firstEpisode.requestFocus() }
-            }
-            LazyColumn(
-                contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                itemsIndexed(episodes, key = { _, episode -> episode.url }) { index, episode ->
-                    if (index == 0) EntryPoint(firstEpisode)
-                    FocusSurface(
-                        onClick = {
-                            queue.firstOrNull { it.url == episode.url }?.let { item -> onPlay(item, queue) }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .then(if (index == 0) Modifier.focusRequester(firstEpisode) else Modifier),
-                        focusScale = 1.01f,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Label(
-                                text = "E${episode.number}",
-                                style = AppType.title,
-                                color = colors.accent,
-                                modifier = Modifier.width(44.dp),
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Label(text = episode.title, style = AppType.title)
-                                episode.plot?.let { Label(text = it, style = AppType.caption, color = colors.textDim) }
-                            }
-                            episode.durationSecs?.takeIf { it > 0 }?.let {
-                                Label(text = "${it / 60} min", style = AppType.caption, color = colors.textDim)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

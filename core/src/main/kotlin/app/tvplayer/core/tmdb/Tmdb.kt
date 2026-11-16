@@ -98,6 +98,12 @@ object TmdbUrls {
     /** Titles TMDB suggests for people who liked this one; [type] is "movie" or "tv". */
     fun recommendations(type: String, id: Long): String = "$BASE/$type/$id/recommendations?language=en-GB&page=1"
 
+    /** A series' or film's artwork, including its title logo. */
+    fun images(type: String, id: Long): String = "$BASE/$type/$id/images?include_image_language=en,null"
+
+    /** One season of a series: its episodes with titles, descriptions and stills. */
+    fun season(id: Long, season: Int): String = "$BASE/tv/$id/season/$season?language=en-GB"
+
     /** Cheap call used to check a key works. */
     fun check(): String = "$BASE/configuration?language=en-GB"
 
@@ -167,6 +173,29 @@ object TmdbParser {
             seasons = item.num("number_of_seasons")?.toInt(),
         )
     }
+
+    /** The title logo (the show's name as artwork), English first, or null if TMDB has none. */
+    fun parseLogo(text: String): String? {
+        val logos = (root(text)["logos"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+        val best = logos.firstOrNull { it.str("iso_639_1") == "en" && it.str("file_path")?.endsWith(".png") == true }
+            ?: logos.firstOrNull { it.str("iso_639_1") == "en" }
+            ?: logos.firstOrNull { it.str("iso_639_1") == null }
+        return TmdbUrls.image(best?.str("file_path"), "w500")
+    }
+
+    fun parseSeason(text: String): List<TmdbEpisode> =
+        (root(text)["episodes"] as? JsonArray)?.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            TmdbEpisode(
+                number = item.num("episode_number")?.toInt() ?: return@mapNotNull null,
+                name = item.str("name"),
+                overview = item.str("overview"),
+                still = TmdbUrls.image(item.str("still_path"), "w300"),
+                runtimeMinutes = item.num("runtime")?.toInt()?.takeIf { it > 0 },
+                airDate = item.str("air_date"),
+                rating = item.num("vote_average")?.takeIf { it > 0 },
+            )
+        }.orEmpty()
 
     /** Reads a recommendations answer as credits, so they can be matched to the library like a person's work. */
     fun parseRecommendations(text: String, type: String): List<TmdbCredit> =
@@ -267,3 +296,14 @@ class LibraryIndex<T>(items: List<T>, name: (T) -> String, isSeries: (T) -> Bool
 
     private fun key(type: String, title: String) = type + "|" + title.lowercase().filter { it.isLetterOrDigit() }
 }
+
+/** One episode as TMDB describes it. */
+data class TmdbEpisode(
+    val number: Int,
+    val name: String?,
+    val overview: String?,
+    val still: String?,
+    val runtimeMinutes: Int?,
+    val airDate: String?,
+    val rating: Double?,
+)
