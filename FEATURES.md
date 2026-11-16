@@ -101,7 +101,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Continue Watching rail on Home | Built |
 | Autoplay next episode with countdown, next/previous episode media keys | Built |
 | Watchlist (My list, Home rail) | Built |
-| Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | OpenSubtitles and styling built; remembering tracks not started |
+| Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | OpenSubtitles and styling (Netflix style, box, outline; size, font, colour) built; remembering tracks not started |
 | Skip intro / Skip recap and an early Up next over the credits (TheIntroDB timings, needs a TMDB key) | Built |
 | "Because you watched…" suggestions on Home (TMDB recommendations matched to your playlists) | Built |
 | Movie night: ten questions, then a shortlist from your playlists with ratings, running times and how the picks differ, and Show me others for the same answers (needs a TMDB key) | Built |
