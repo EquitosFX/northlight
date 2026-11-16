@@ -135,6 +135,7 @@ fun GuideScreen(
     var windowStart by remember { mutableLongStateOf(liveStart) }
     // Read only by the header (and when sliding the grid), so moving around the grid doesn't redraw every row.
     val focusedState = remember { mutableStateOf<Focused?>(null) }
+    DisposableEffect(Unit) { onDispose { println("DEBUGGUIDE screen disposed") } }
     val firstFocus = remember { FocusRequester() }
     val entryFocus = remember { FocusRequester() }
     var placedFocus by remember { mutableStateOf(false) }
@@ -592,6 +593,7 @@ private fun GuideRow(
     // Only the row being moved to notices the move.
     val jumpTime by remember(jumpState, index) { derivedStateOf { jumpState?.value?.takeIf { it.row == index }?.time } }
     val onJumped: () -> Unit = { if (jumpState?.value?.row == index) jumpState.value = null }
+    DisposableEffect(Unit) { onDispose { println("DEBUGGUIDE row ${channel.name} disposed") } }
     // Keeps showing the previous programmes while new ones load, so the grid doesn't flash.
     var programmes by remember { mutableStateOf<List<ProgrammeEntity>?>(null) }
     var loadedFor by remember { mutableLongStateOf(-1L) }
