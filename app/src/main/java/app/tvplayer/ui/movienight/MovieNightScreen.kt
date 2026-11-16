@@ -663,4 +663,4 @@ private fun AutoFocusOnce(requester: FocusRequester) {
 }
 
 /** The shortlist's details block: title, details line, three lines of description and the notes. */
-private val DetailsHeight = 40.dp + 22.dp + 63.dp + 30.dp + 3 * 8.dp
+private val DetailsHeight = 40.dp + 22.dp + 63.dp + 30.dp + 8.dp * 3
