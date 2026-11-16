@@ -33,14 +33,14 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Settings: other sections | Designed (list only) |
 | TV Guide: info header, time ruler, programme grid, mini player over it | Built |
 | TV Guide: category list (Favourites, All channels, groups) | Built |
-| TV Guide: jump by day | Not started |
+| TV Guide: jump by day | Built |
 | Programme actions panel | Designed |
 | Live TV: full-screen player, channel list with groups, info banner | Built |
 | Voice search overlay | Designed |
 | Search: channels, films and series by name | Built |
 | Voice search: Speak button and the remote's search/voice key, via Android TV's speech screen | Built (what the Shield mic button sends needs checking on the device) |
 | Library and Recordings | Not started |
-| Sport hub and team pages | Not started |
+| Sport hub (from the TV guide) and team pages | Hub built |
 
 ## Sources and data
 
@@ -52,18 +52,18 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Stalker/MAC portals, local M3U files | Not started |
 | Multiple playlists | Built |
 | Quick switcher, merged view | Not started |
-| Per-playlist User-Agent, referrer, backup hosts, auto-refresh | Not started |
+| Per-playlist User-Agent, referrer, backup hosts, auto-refresh | Auto-refresh built |
 | XMLTV guide parsing (streaming, gzip-aware) | Tested |
 | Automatic guide-to-channel matching | Tested |
 | Importing guides (several per playlist), automatic matching, refresh when older than 12 hours | Built |
 | Manual matching, time offset, extra guide addresses, catch-up backfill | Not started |
 | Channel variant grouping (SD/HD/FHD/4K/backup) | Tested |
-| Check playlist tool | Not started |
+| Check playlist tool (channel check, marks in the guide) | Built |
 | TMDB metadata (viewer's own key): film pages, series details, cached look-ups | Built |
 | People: search for actors and directors, selectable cast and crew on title pages, person page listing their titles in your playlists | Built |
-| TMDB trailers, "more like this" | Not started |
+| TMDB trailers (via YouTube), "more like this" | Trailers built |
 | Plex / Jellyfin / Emby libraries | Not started |
-| Backup and restore | Not started |
+| Backup and restore (on the Shield, Downloads, phone over Wi-Fi) | Built |
 | Encrypted credentials | Not started. Xtream stream addresses contain the username and password, so encrypting the password field alone would not help; it needs stream addresses built at play time instead |
 | Local database: playlists and channels | Built |
 | Local database: guide tables, search index, timing with 100k+ channels on a Shield | Not started |
@@ -81,7 +81,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Catch-up: the guide goes back as far as the provider keeps programmes; OK on a past programme plays it from the start (Xtream Codes and M3U catch-up types) | Built |
 | Timeshift (pause and rewind live, back to live) | Built |
 | Recording: one-off, series, recurring, manual; USB/NAS; conflicts | Not started |
-| Reminders | Not started |
+| Reminders (pop-up while Skyfall is open; listed in My list) | Built |
 | Multiview | Not started |
 | Live picture in the side panel while browsing (hold Back or select it to return) | Built |
 | Android picture-in-picture outside the app | Not started |
@@ -96,7 +96,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Watched marks, sorting | Not started |
 | Continue Watching rail on Home | Built |
 | Autoplay next episode with countdown, next/previous episode media keys | Built |
-| Watchlist | Not started |
+| Watchlist (My list, Home rail) | Built |
 | Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | OpenSubtitles and styling built; remembering tracks not started |
 | Skip intro / Skip recap and an early Up next over the credits (TheIntroDB timings, needs a TMDB key) | Built |
 | "Because you watched…" suggestions on Home (TMDB recommendations matched to your playlists) | Built |
@@ -109,7 +109,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Feature | Status |
 | --- | --- |
 | ExoPlayer playback (TS and HLS), per-channel User-Agent and referrer | Built |
-| VLC fallback, FFmpeg software decoders, external player hand-off | Not started |
+| VLC backup player (automatic), external player hand-off | Backup player built |
 | Frame-rate matching, HDR, audio passthrough | Built on the player's defaults; needs checking on a Shield |
 | Audio delay | Not started |
 | Stream info, auto-reconnect, fall-through to backup copies, retry | Built |
@@ -122,7 +122,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Profiles, kids profile, PINs, app lock | Not started |
 | Sport: followed teams, fixtures, scores, channel finder, match centre | Not started |
 | Voice: mic button and in-app recognition in Search | Built; natural requests and help screen not started |
-| Android TV global search and home-screen rows | Not started |
+| Android TV global search and home-screen rows | Home-screen rows built (Continue watching, recent channels) |
 | Remappable Shield menu button | Not started |
 
 ## Quality
