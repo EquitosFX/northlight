@@ -33,6 +33,8 @@ class SportTest {
         assertTrue(SportFinder.isMatch("Wolves v Fulham"))
         assertFalse(SportFinder.isMatch("Vote Now"))
         assertEquals("Wolves v Fulham", SportFinder.cleanTitle("LIVE: Wolves v Fulham"))
+        assertEquals("Boxing: Fight Night", SportFinder.cleanTitle("Live Boxing: Fight Night"))
+        assertEquals("Liverpool v Spurs", SportFinder.cleanTitle("Liverpool v Spurs"))
         assertTrue(SportFinder.isSportsChannel("UK: TNT Sports 1 HD"))
         assertTrue(SportFinder.isSportsChannel("Channel 7", "UK Sports"))
         assertFalse(SportFinder.isSportsChannel("BBC One"))

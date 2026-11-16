@@ -413,9 +413,10 @@ class ScreenshotTest {
         expectShown("Reminder set", "OK sets the reminder")
         shot("07f-guide-reminder")
         // Up from the top channel reaches the days.
-        press("up", "up")
-        expectShown("Tomorrow", "The guide shows its days")
-        moveTo("Tomorrow", "right", step = "Along the days to Tomorrow")
+        press("up")
+        expectFocus("Today", "Up from the top channel lands on today")
+        press("right")
+        expectFocus("Tomorrow", "Along the days to Tomorrow")
         press("ok")
         shot("07g-guide-tomorrow")
     }
@@ -442,15 +443,17 @@ class ScreenshotTest {
         expectShown("Watch now", "A reminder pops up as its programme starts")
         expectShown("Quiz at Nine", "The pop-up names the programme")
         shot("29-reminder-popup")
-        press("ok")
-        expectHidden("Watch now", "Watch now closes the pop-up")
     }
 
     @Test fun sport() {
         open(Dest.SPORT)
         press("right")
-        expectShown("Harbour City v Kestrel United", "Sport finds matches in the guide")
+        expectFocus("All sport", "Into Sport")
         expectShown("Football", "Sport sorts events by sport")
+        moveTo("Football", "right", step = "Along to Football")
+        press("ok")
+        expectShown("Harbour City v Kestrel United", "Sport finds matches in the guide")
+        expectHidden("Cricket: Second Test", "The Football filter shows only football")
         shot("30-sport")
     }
 

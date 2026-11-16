@@ -726,11 +726,15 @@ private fun DayBar(earliest: Long, now: Long, windowStart: Long, onDay: (Long) -
         val index = days.indexOf(today)
         if (index > 2) listState.scrollToItem(index - 2)
     }
+    // Coming up from the listings lands on the day being shown, not the nearest chip.
+    val entry = remember { EntryFocus() }
+    val shownFocus = remember { FocusRequester() }
     androidx.compose.foundation.lazy.LazyRow(
         state = listState,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(horizontal = SideMargin),
         modifier = Modifier
+            .entersAt(entry)
             .fillMaxWidth()
             .height(34.dp)
             .padding(vertical = 3.dp),
@@ -744,9 +748,10 @@ private fun DayBar(earliest: Long, now: Long, windowStart: Long, onDay: (Long) -
                 else -> day.format(java.time.format.DateTimeFormatter.ofPattern("EEE d", java.util.Locale.UK))
             }
             val selected = day == shown
+            if (selected) EntryPoint(shownFocus, entry)
             FocusSurface(
                 onClick = { onDay(day.atStartOfDay(zone).toInstant().toEpochMilli()) },
-                modifier = Modifier.fillMaxHeight(),
+                modifier = Modifier.fillMaxHeight().then(if (selected) Modifier.focusRequester(shownFocus) else Modifier),
                 shape = RoundedCornerShape(14.dp),
                 container = if (selected) colors.glassStrong else Color.Transparent,
                 focusedContainer = colors.accent,

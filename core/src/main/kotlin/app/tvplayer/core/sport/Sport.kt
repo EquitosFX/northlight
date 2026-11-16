@@ -86,7 +86,7 @@ object SportFinder {
 
     /** The title without a leading "Live:" or "LIVE", for display. */
     fun cleanTitle(title: String): String =
-        title.replace(Regex("""^\s*(live|LIVE)\s*[:\-–]?\s*"""), "").trim().ifEmpty { title }
+        title.replace(Regex("""^\s*live\b\s*[:\-–]?\s*""", RegexOption.IGNORE_CASE), "").trim().ifEmpty { title }
 
     private fun containsWord(text: String, word: String): Boolean {
         var from = 0
