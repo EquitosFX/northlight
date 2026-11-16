@@ -163,7 +163,7 @@ fun PlayerControls(
             // Scrolls sideways if the buttons don't all fit, so none is ever off the edge.
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -218,12 +218,15 @@ fun PlayerControls(
                         controller.goLive()
                     }
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(6.dp))
                 ControlButton(ControlIcon.SUBTITLES, "Subtitles") { panel = Panel.SUBTITLES }
                 ControlButton(ControlIcon.AUDIO, "Audio") { panel = Panel.AUDIO }
                 if (onChannels != null) ControlButton(ControlIcon.CHANNELS, "Channels") { onChannels() }
                 // Each press moves on: off, 30 min, 1 hour, 1½ hours, 2 hours, off.
-                ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes)) { controller.cycleSleep() }
+                // A fixed width, so the button doesn't grow off the edge as the time is added.
+                ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes), modifier = Modifier.width(118.dp)) {
+                    controller.cycleSleep()
+                }
                 if (!live && controller.hasNextEpisode) ControlButton(ControlIcon.NEXT, "Next episode") { controller.skipEpisode(+1) }
             }
             if (live && !seekable) {
@@ -435,7 +438,7 @@ private fun ControlButton(
             else -> colors.textFaint.copy(alpha = 0.45f)
         }
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp).align(Alignment.Center),
+            modifier = Modifier.padding(horizontal = 10.dp).align(Alignment.Center),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
