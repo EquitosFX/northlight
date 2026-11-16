@@ -126,12 +126,24 @@ fun Sidebar(
             val menuEntry = remember { EntryFocus() }
             // Set when Up or Down is pressed in the menu: only that changes the section.
             val movedByKey = remember { AtomicBoolean(false) }
+            val focusedItem = remember { arrayOfNulls<Dest>(1) }
             Column(
                 modifier = Modifier
                     .entersAt(menuEntry)
                     .onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
                             movedByKey.set(true)
+                            // The list wraps round: Up from the top to Settings, Down from Settings to the top
+                            // (unless the picture is above, which Up from the top goes to).
+                            val wrapTo = when {
+                                event.key == Key.DirectionUp && focusedItem[0] == SidebarSections.first() && !showingPicture -> SidebarSections.last()
+                                event.key == Key.DirectionDown && focusedItem[0] == SidebarSections.last() -> SidebarSections.first()
+                                else -> null
+                            }
+                            if (wrapTo != null) {
+                                runCatching { itemFocus.getValue(wrapTo).requestFocus() }
+                                return@onPreviewKeyEvent true
+                            }
                         }
                         false
                     },
@@ -145,6 +157,7 @@ fun Sidebar(
                         badged = dest in badged,
                         focusRequester = itemFocus.getValue(dest),
                         onFocus = {
+                            focusedItem[0] = dest
                             when {
                                 // Moving up and down the menu shows each section.
                                 movedByKey.getAndSet(false) -> onSelect(dest)

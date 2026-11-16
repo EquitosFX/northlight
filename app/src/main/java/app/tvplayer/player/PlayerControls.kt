@@ -1,5 +1,7 @@
 package app.tvplayer.player
 
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
@@ -98,12 +100,13 @@ fun PlayerControls(
     var touched by remember { mutableIntStateOf(0) }
     val playFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
-    // Nothing is highlighted when the controls open: focus waits on an invisible spot. OK from there
-    // pauses straight away; an arrow press highlights Pause (Up: the progress bar).
+    // When the controls open, focus waits on an invisible spot with Pause shown highlighted: OK pauses
+    // (on letting go, so the press that opened the controls can't), arrows move on from Pause, Up goes to the progress bar.
     val restFocus = remember { FocusRequester() }
     val timelineFocus = remember { FocusRequester() }
     var resting by remember { mutableStateOf(true) }
     var okPressed by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(Unit) {
         runCatching { restFocus.requestFocus() }
@@ -195,7 +198,14 @@ fun PlayerControls(
                                     }
                                     true
                                 }
-                                Key.DirectionLeft, Key.DirectionRight, Key.DirectionDown -> {
+                                // Pause already looks highlighted, so Left and Right move on from it.
+                                Key.DirectionLeft, Key.DirectionRight -> {
+                                    resting = false
+                                    runCatching { playFocus.requestFocus() }
+                                    focusManager.moveFocus(if (event.key == Key.DirectionLeft) FocusDirection.Left else FocusDirection.Right)
+                                    true
+                                }
+                                Key.DirectionDown -> {
                                     resting = false
                                     runCatching { playFocus.requestFocus() }
                                     true
@@ -217,6 +227,8 @@ fun PlayerControls(
                     if (playing) ControlIcon.PAUSE else ControlIcon.PLAY,
                     if (playing) "Pause" else "Play",
                     modifier = Modifier.focusRequester(playFocus),
+                    // When the controls open, Pause shows as highlighted: OK presses it.
+                    highlighted = resting,
                 ) { controller.togglePause() }
                 ControlButton(ControlIcon.FORWARD, "30 s", enabled = seekable && (!live || behind > 2_000)) {
                     controller.seekBy(STEP_MILLIS)
@@ -432,6 +444,8 @@ private fun ControlButton(
     label: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** Shown as highlighted without having focus: what OK will press. */
+    highlighted: Boolean = false,
     onClick: () -> Unit,
 ) {
     val colors = AppTheme.colors
@@ -439,12 +453,12 @@ private fun ControlButton(
         onClick = { if (enabled) onClick() },
         modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(20.dp),
-        container = colors.glass,
+        container = if (highlighted) Color.White else colors.glass,
         focusedContainer = Color.White,
         outlined = false,
     ) { focused ->
         val tint = when {
-            focused -> Color(0xFF0A0F1E)
+            focused || highlighted -> Color(0xFF0A0F1E)
             enabled -> colors.text
             else -> colors.textFaint.copy(alpha = 0.45f)
         }

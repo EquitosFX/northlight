@@ -430,6 +430,8 @@ class ScreenshotTest {
         press("left", "left", "left", "right", "right", "right", "right", "right")
         shot("07d-large-guide")
         press("back")
+        // Moved to another time: the first Back returns to now; the next, to the categories.
+        if (!focusedText().startsWith("Group") && !isCategory(focusedText())) press("back")
         // A category far down the list, then back to it.
         repeat(30) { press("down") }
         expectFocus("Group 23", "Far down the categories")
@@ -571,6 +573,23 @@ class ScreenshotTest {
             expectHidden("YOUR SHORTLIST", "Home leaves Movie night")
             expectShown("CARRY ON WATCHING", "Home from the shortlist goes Home")
         }
+    }
+
+    /** Back after moving to another time in the guide returns to what's on now, on the same channel. */
+    @Test fun guideBackToNow() {
+        open(Dest.GUIDE)
+        press("right", "ok")
+        press("down")
+        val channel = focusedText()
+        press("left", "left", "left", "left")
+        shot("07h-guide-earlier")
+        press("back")
+        expectShown("On now", "Back returns to what's on now")
+        expectHidden("Favourites", "Back to now stays in the listings")
+        shot("07i-guide-back-to-now")
+        if (channel.isEmpty()) problems += "No programme was highlighted before moving back in time"
+        press("back")
+        expectShown("Favourites", "Back again goes to the categories")
     }
 
     /** Quit part-way through the questions. */

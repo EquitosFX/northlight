@@ -1,5 +1,7 @@
 package app.tvplayer.ui.movienight
 
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -96,6 +98,9 @@ class MovieNightState {
     var searching by mutableStateOf(false)
     var problem by mutableStateOf<String?>(null)
     var focusedPick by mutableIntStateOf(0)
+
+    /** Past the welcome screen: the quiz fills the whole screen, with no menu strip at the side. */
+    val inQuiz: Boolean get() = step >= 0 || picks != null || searching || problem != null
     /** Titles already offered for these answers, left out of "Show me others". */
     val shown = HashSet<Long>()
 
@@ -150,7 +155,7 @@ fun MovieNightScreen(
             try {
                 val found = metadata.movieNight(state.answers.toMap(), watched.recent.value, exclude = state.shown.toSet())
                 when {
-                    found == null -> state.problem = "Movie night uses TMDB to find films and series. Add your free TMDB key in Settings › Film info."
+                    found == null -> state.problem = "The Movie Night Quiz uses TMDB to find films and series. Add your free TMDB key in Settings › Film info."
                     found.isEmpty() && reroll -> state.problem = "That's everything in your playlists that fits those answers. Start again to try different ones."
                     found.isEmpty() -> state.problem = "Nothing in your playlists matched, even with looser choices. Try different answers."
                     else -> {
@@ -330,7 +335,7 @@ private fun Intro(onStart: () -> Unit) {
     ) {
         Clapperboard(tint = colors.accent, modifier = Modifier.size(width = 64.dp, height = 56.dp))
         Spacer(Modifier.height(18.dp))
-        Label(text = "MOVIE NIGHT", style = AppType.label.copy(letterSpacing = 3.sp), color = colors.accent)
+        Label(text = "MOVIE NIGHT QUIZ", style = AppType.label.copy(letterSpacing = 3.sp), color = colors.accent)
         Spacer(Modifier.height(6.dp))
         Label(text = "Can't decide what to watch?", style = AppType.display.copy(fontSize = 34.sp, lineHeight = 40.sp))
         Spacer(Modifier.height(10.dp))
@@ -388,7 +393,7 @@ private fun QuestionCard(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Label(text = "MOVIE NIGHT  ·  QUESTION $number OF $total", style = AppType.label.copy(letterSpacing = 2.sp), color = colors.accent)
+        Label(text = "MOVIE NIGHT QUIZ  ·  QUESTION $number OF $total", style = AppType.label.copy(letterSpacing = 2.sp), color = colors.accent)
         Spacer(Modifier.height(12.dp))
         // Progress: fills smoothly from the last question's point.
         val progress by animateFloatAsState(number / total.toFloat(), tween(600, easing = FastOutSlowInEasing), label = "progress")
@@ -428,7 +433,7 @@ private fun QuestionCard(
                     highlighted = id == selected || id == chosen,
                     modifier = Modifier
                         .then(if (isFirst) Modifier.focusRequester(first) else Modifier)
-                        .alpha(appear.value)
+                        .graphicsLayer { alpha = appear.value; compositingStrategy = CompositingStrategy.ModulateAlpha }
                         .offset(y = (14 * (1 - appear.value)).dp)
                         .scale(pop),
                 ) {
@@ -446,7 +451,7 @@ private fun QuestionCard(
         QuitButton(onQuit)
         Spacer(Modifier.height(12.dp))
         Label(
-            text = if (number > 1) "Back for the previous question" else "Back to leave Movie night",
+            text = if (number > 1) "Back for the previous question" else "Back to leave the quiz",
             style = AppType.caption.copy(fontSize = 12.sp),
             color = colors.textFaint,
         )
@@ -523,7 +528,7 @@ private fun Shortlist(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Clapperboard(tint = colors.accent, modifier = Modifier.size(width = 22.dp, height = 19.dp))
-            Label(text = "MOVIE NIGHT  ·  YOUR SHORTLIST", style = AppType.label.copy(letterSpacing = 2.sp), color = colors.accent)
+            Label(text = "MOVIE NIGHT QUIZ  ·  YOUR SHORTLIST", style = AppType.label.copy(letterSpacing = 2.sp), color = colors.accent)
         }
         // The highlighted pick's details change with a gentle fade.
         // Every line has a fixed height, so the posters below never move whatever the length of the description.
@@ -568,7 +573,7 @@ private fun Shortlist(
                     onFocus = { state.focusedPick = index },
                     modifier = Modifier
                         .width(118.dp)
-                        .alpha(appear.value)
+                        .graphicsLayer { alpha = appear.value; compositingStrategy = CompositingStrategy.ModulateAlpha }
                         .offset(y = (20 * (1 - appear.value)).dp)
                         .then(if (index == 0) Modifier.focusRequester(firstPoster) else Modifier),
                 )

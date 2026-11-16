@@ -74,7 +74,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     /** Whether the TV switches to a refresh rate that suits the video (50 Hz for UK channels). */
-    val matchFrameRate: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[matchFrameRateKey] ?: true }
+    val matchFrameRate: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[matchFrameRateKey] ?: false }
 
     suspend fun setMatchFrameRate(on: Boolean) {
         context.settingsStore.edit { prefs -> prefs[matchFrameRateKey] = on }
@@ -164,24 +164,76 @@ class SettingsRepository(private val context: Context) {
 
 /** How subtitles look on screen. */
 data class SubtitleLook(
-    /** "box": white on a dark box; "shadow": no box, a soft shadow (as Netflix); "outline": no box, a dark outline. */
+    /**
+     * "netflix": a soft shadow and the faintest outline, no box (as Netflix); "box": on a dark box;
+     * "shadow": a firmer drop shadow; "outline": a dark outline; "plain": nothing behind the text.
+     */
     val style: String = "box",
     /** Percent of the standard size. */
     val size: Int = 100,
-    /** "standard", "bold" or "serif". */
-    val font: String = "standard",
-    /** "white" or "yellow". */
+    /** One of [FONTS]' keys. */
+    val font: String = "roboto_medium",
+    /** "white", "yellow" or "grey". */
     val colour: String = "white",
+    /** How strong the shadow or outline is: 1 soft, 2 normal, 3 strong. */
+    val edge: Int = 2,
+    /** How dark the box is, in percent (box style only). */
+    val boxOpacity: Int = 60,
+    /** How far up from the bottom: 0 low, 1 normal, 2 higher, 3 highest. */
+    val lift: Int = 1,
 ) {
-    fun encode() = listOf(style, size.toString(), font, colour).joinToString("|")
+    fun encode() = "v2;style=$style;size=$size;font=$font;colour=$colour;edge=$edge;box=$boxOpacity;lift=$lift"
 
     companion object {
-        val NETFLIX = SubtitleLook(style = "shadow", size = 100, font = "standard", colour = "white")
+        /** Closest to Netflix: Inter (much like Netflix Sans), white, a soft shadow, no box. */
+        val NETFLIX = SubtitleLook(style = "netflix", size = 100, font = "inter", colour = "white", edge = 2, lift = 1)
+
+        /** The typefaces on offer: key to the name shown. */
+        val FONTS = listOf(
+            "inter" to "Inter (Netflix-like)",
+            "inter_semibold" to "Inter Semibold",
+            "roboto_medium" to "Roboto",
+            "roboto_bold" to "Roboto Bold",
+            "open_sans" to "Open Sans",
+            "source_sans" to "Source Sans",
+            "lato" to "Lato Bold",
+            "condensed" to "Condensed",
+            "figtree" to "Figtree",
+            "serif" to "Serif",
+            "mono" to "Typewriter",
+            "casual" to "Casual",
+        )
 
         fun decode(text: String?): SubtitleLook {
-            val parts = text?.split('|') ?: return SubtitleLook()
+            if (text == null) return SubtitleLook()
+            if (text.startsWith("v2;")) {
+                val values = text.removePrefix("v2;").split(';').mapNotNull { part ->
+                    part.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
+                }.toMap()
+                val base = SubtitleLook()
+                return SubtitleLook(
+                    style = values["style"] ?: base.style,
+                    size = values["size"]?.toIntOrNull()?.coerceIn(60, 200) ?: base.size,
+                    font = values["font"]?.takeIf { key -> FONTS.any { it.first == key } } ?: base.font,
+                    colour = values["colour"] ?: base.colour,
+                    edge = values["edge"]?.toIntOrNull()?.coerceIn(1, 3) ?: base.edge,
+                    boxOpacity = values["box"]?.toIntOrNull()?.coerceIn(20, 100) ?: base.boxOpacity,
+                    lift = values["lift"]?.toIntOrNull()?.coerceIn(0, 3) ?: base.lift,
+                )
+            }
+            // The first version: style|size|font|colour.
+            val parts = text.split('|')
             if (parts.size != 4) return SubtitleLook()
-            return SubtitleLook(parts[0], parts[1].toIntOrNull()?.coerceIn(60, 200) ?: 100, parts[2], parts[3])
+            return SubtitleLook(
+                style = parts[0],
+                size = parts[1].toIntOrNull()?.coerceIn(60, 200) ?: 100,
+                font = when (parts[2]) {
+                    "bold" -> "roboto_bold"
+                    "serif" -> "serif"
+                    else -> "roboto_medium"
+                },
+                colour = parts[3],
+            )
         }
     }
 }

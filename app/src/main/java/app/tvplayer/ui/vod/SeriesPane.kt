@@ -106,10 +106,11 @@ internal fun SeriesPane(
     val context = LocalContext.current
     var details by remember(series.id) { mutableStateOf(playlists.cachedSeriesDetails(series)) }
     var problem by remember(series.id) { mutableStateOf<String?>(null) }
-    val info by produceState<MetadataEntity?>(initialValue = null, series.id) {
+    // Shown straight away if looked up before, so the page doesn't flash while it's checked.
+    val info by produceState(initialValue = metadata.peek(series.name, ChannelEntity.KIND_SERIES), series.id) {
         value = metadata.lookup(series.name, ChannelEntity.KIND_SERIES)
     }
-    val logo by produceState<String?>(initialValue = null, info?.tmdbId) {
+    val logo by produceState(initialValue = metadata.peekLogo(info?.tmdbId), info?.tmdbId) {
         value = info?.tmdbId?.let { metadata.titleLogo(it, isSeries = true) }
     }
     val trailer = rememberTrailer(metadata, info, isSeries = true)
@@ -122,7 +123,8 @@ internal fun SeriesPane(
         try {
             details = playlists.seriesDetails(series)
         } catch (e: Exception) {
-            problem = playlists.explainError(e)
+            // The list from last time stays if the server doesn't answer now.
+            if (details == null) problem = playlists.explainError(e)
         }
     }
     val episodes = details?.episodes.orEmpty()

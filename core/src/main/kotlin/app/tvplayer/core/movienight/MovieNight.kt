@@ -91,7 +91,12 @@ object MovieNight {
                 Choice("animation", "Animation"), Choice("history", "Real events and history"), Choice("none", "No preference"),
             ),
         ),
-        Question("tone", "Light or dark?", listOf(Choice("light", "Light and easy"), Choice("middle", "Somewhere in between"), Choice("dark", "Dark and gritty"))),
+        Question(
+            "tone",
+            "Light or dark?",
+            // "Either" leaves out nothing, so light and dark titles both come up.
+            listOf(Choice("light", "Light and easy"), Choice("middle", "Somewhere in between"), Choice("dark", "Dark and gritty"), Choice("any", "Either, no preference")),
+        ),
         Question(
             "length", "How much time have you got?",
             listOf(

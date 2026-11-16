@@ -1,5 +1,11 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.runtime.mutableFloatStateOf
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.derivedStateOf
@@ -159,12 +165,46 @@ fun GuideScreen(
         runCatching { entryFocus.requestFocus() }
     }
 
+    // Moving along by an hour slides the grid smoothly rather than jumping. The grid is laid out for
+    // where it's going, then drawn shifted back to where it was and slid into place: only the drawing
+    // moves, so it stays smooth on slower boxes.
+    val slideMillis = remember { floatArrayOf(0f) }
+    val slideTick = remember { mutableFloatStateOf(0f) }
+    var sliding by remember { mutableStateOf(false) }
+    val slideScope = rememberCoroutineScope()
+    var slideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    fun moveWindow(target: Long) {
+        val delta = windowStart - target
+        if (delta == 0L) return
+        slideJob?.cancel()
+        if (kotlin.math.abs(delta) <= WINDOW) {
+            val from = slideMillis[0] + delta
+            slideMillis[0] = from
+            slideTick.floatValue = from
+            sliding = true
+            slideJob = slideScope.launch {
+                androidx.compose.animation.core.animate(from, 0f, tween(SLIDE_MILLIS, easing = FastOutSlowInEasing)) { value, _ ->
+                    slideMillis[0] = value
+                    slideTick.floatValue = value
+                }
+                sliding = false
+            }
+        } else {
+            slideMillis[0] = 0f
+            slideTick.floatValue = 0f
+            sliding = false
+        }
+        windowStart = target
+    }
+    // Read only while drawing, so the slide doesn't rebuild anything.
+    val slide: () -> Float = { slideTick.floatValue }
+
     fun shift(by: Long) {
         val target = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
         if (target == windowStart) return
         refocus = focusedState.value?.programme?.id
         if (refocus != null) holdFocus()
-        windowStart = target
+        moveWindow(target)
     }
 
     // Once a category is chosen the categories step aside and the listings fill the screen.
@@ -203,6 +243,18 @@ fun GuideScreen(
     val jumpState = remember { mutableStateOf<Jump?>(null) }
     val rowsList = remember(group) { LazyListState() }
     val gridScope = rememberCoroutineScope()
+
+    // Back, after moving to another time or day: back to now, on the same channel's programme on now.
+    BackHandler(enabled = listings && windowStart != liveStart && focusedRow[0] >= 0) {
+        val row = focusedRow[0]
+        val nowAgain = System.currentTimeMillis()
+        refocus = null
+        holdFocus()
+        anchor[0] = nowAgain
+        movingVertically[0] = true
+        jumpState.value = Jump(row, nowAgain)
+        moveWindow(liveStart)
+    }
 
     Row(
         modifier = Modifier
@@ -247,10 +299,10 @@ fun GuideScreen(
                 } else {
                     java.time.Instant.ofEpochMilli(dayStart).atZone(zone).toLocalDate().atTime(timeOfDay).atZone(zone).toInstant().toEpochMilli()
                 }
-                windowStart = target.coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
+                moveWindow(target.coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW))
             },
         )
-        TimeRuler(windowStart = windowStart, now = now)
+        TimeRuler(windowStart = windowStart, now = now, slide = slide, sliding = sliding)
         if (rows.isEmpty()) {
             Label(
                 text = if (group == FAVOURITES) "No favourites yet. In live TV, press OK for the channel list, then Right on a channel." else "No channels in this group.",
@@ -316,6 +368,8 @@ fun GuideScreen(
                     },
                     jumpState = jumpState,
                     index = index,
+                    slide = slide,
+                    sliding = sliding,
                     onShift = ::shift,
                     refocus = refocus,
                     onRefocused = { refocus = null },
@@ -459,7 +513,7 @@ private fun Header(focusedState: androidx.compose.runtime.State<Focused?>, remin
 }
 
 @Composable
-private fun TimeRuler(windowStart: Long, now: Long) {
+private fun TimeRuler(windowStart: Long, now: Long, slide: () -> Float = { 0f }, sliding: Boolean = false) {
     val colors = AppTheme.colors
     Row(
         modifier = Modifier
@@ -475,9 +529,13 @@ private fun TimeRuler(windowStart: Long, now: Long) {
                 modifier = Modifier.align(Alignment.CenterStart),
             )
         }
-        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
             val width = maxWidth
-            for (step in 0 until (WINDOW / HALF_HOUR).toInt()) {
+            val widthPx = constraints.maxWidth.toFloat()
+            Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(slide() / WINDOW) * widthPx }) {
+            // While sliding, the times either side are drawn too, coming into view.
+            val steps = if (sliding) (-(WINDOW / HALF_HOUR).toInt() until (2 * WINDOW / HALF_HOUR).toInt()) else (0 until (WINDOW / HALF_HOUR).toInt())
+            for (step in steps) {
                 val at = windowStart + step * HALF_HOUR
                 Label(
                     text = clockTime(at),
@@ -488,7 +546,7 @@ private fun TimeRuler(windowStart: Long, now: Long) {
                         .offset(x = position(at - windowStart, width)),
                 )
             }
-            if (now in windowStart until windowStart + WINDOW) {
+            if (now in windowStart - (if (sliding) WINDOW else 0L) until windowStart + (if (sliding) 2 * WINDOW else WINDOW)) {
                 Box(
                     modifier = Modifier
                         .offset(x = position(now - windowStart, width))
@@ -496,6 +554,7 @@ private fun TimeRuler(windowStart: Long, now: Long) {
                         .fillMaxHeight()
                         .background(colors.accent),
                 )
+            }
             }
         }
     }
@@ -522,6 +581,8 @@ private fun GuideRow(
     notWorking: Boolean = false,
     jumpState: androidx.compose.runtime.MutableState<Jump?>? = null,
     index: Int = -1,
+    slide: () -> Float = { 0f },
+    sliding: Boolean = false,
 ) {
     val colors = AppTheme.colors
     val windowEnd = windowStart + WINDOW
@@ -532,7 +593,8 @@ private fun GuideRow(
     var programmes by remember { mutableStateOf<List<ProgrammeEntity>?>(null) }
     var loadedFor by remember { mutableLongStateOf(-1L) }
     LaunchedEffect(channel.key, windowStart) {
-        programmes = channels.programmes(channel, windowStart, windowEnd)
+        // An extra window either side, ready to slide into view.
+        programmes = channels.programmes(channel, windowStart - WINDOW, windowEnd + WINDOW)
         loadedFor = windowStart
     }
 
@@ -567,10 +629,19 @@ private fun GuideRow(
         BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight(),
+                .fillMaxHeight()
+                .clipToBounds(),
         ) {
             val width = maxWidth
-            val list = programmes ?: return@BoxWithConstraints
+            val widthPx = constraints.maxWidth.toFloat()
+            // Slides with the rest of the grid when moving along by an hour.
+            Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(slide() / WINDOW) * widthPx }) {
+            // Settled: the programmes in view, the first and last trimmed to the edges so their names show.
+            // Sliding: those either side too, at their full lengths, coming into or going out of view.
+            val shownFrom = if (sliding) windowStart - WINDOW else windowStart
+            val shownTo = if (sliding) windowEnd + WINDOW else windowEnd
+            val list = programmes?.filter { it.stop > shownFrom && it.start < shownTo } ?: return@Box
+            val inViewList = list.filter { it.stop > windowStart && it.start < windowEnd }
 
             // Edge keys slide the grid instead of leaving it.
             fun edgeKeys(start: Long, stop: Long) = Modifier.onPreviewKeyEvent { event ->
@@ -588,7 +659,7 @@ private fun GuideRow(
                 }
             }
 
-            if (list.isEmpty()) {
+            if (inViewList.isEmpty()) {
                 GuideCell(
                     title = "No programme information",
                     x = 0.dp,
@@ -605,20 +676,22 @@ private fun GuideRow(
                         .then(if (entry != null) Modifier.focusRequester(entry) else Modifier),
                 )
                 if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
-                return@BoxWithConstraints
+                return@Box
             }
 
-            val focusTarget = list.firstOrNull { now in it.start until it.stop } ?: list.first()
+            val focusTarget = inViewList.firstOrNull { now in it.start until it.stop } ?: inViewList.firstOrNull() ?: list.first()
             // Up or Down landing here: the programme on at the moment being kept to, or the nearest after it.
             val jumpId = jumpTime?.let { time ->
-                (list.firstOrNull { time >= it.start && time < it.stop && it.stop > windowStart && it.start < windowEnd }
-                    ?: list.firstOrNull { it.stop > time && it.start < windowEnd }
-                    ?: list.last()).id
+                (inViewList.firstOrNull { time >= it.start && time < it.stop }
+                    ?: inViewList.firstOrNull { it.stop > time }
+                    ?: inViewList.lastOrNull() ?: list.last()).id
             }
             for (programme in list) {
-                val from = maxOf(programme.start, windowStart)
-                val to = minOf(programme.stop, windowEnd)
+                val from = maxOf(programme.start, shownFrom)
+                val to = minOf(programme.stop, shownTo)
                 if (to - from < MINUTE) continue
+                // Only what's in view once the slide ends can be highlighted.
+                val inView = programme.stop > windowStart && programme.start < windowEnd
                 val live = now in programme.start until programme.stop
                 val catchup = !live && Catchup.available(channel.catchupDays, programme.start, programme.stop, now)
                 key(programme.id) {
@@ -640,7 +713,7 @@ private fun GuideRow(
                                 programme.start > now -> onRemind(programme)
                             }
                         },
-                        modifier = edgeKeys(programme.start, programme.stop).then(
+                        modifier = edgeKeys(programme.start, programme.stop).focusProperties { canFocus = inView }.then(
                             if (focusRequester != null && programme.id == focusTarget.id) {
                                 Modifier.focusRequester(focusRequester)
                             } else {
@@ -654,6 +727,7 @@ private fun GuideRow(
                 }
             }
             if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
+            }
         }
     }
 }
@@ -846,6 +920,9 @@ private fun DayBar(earliest: Long, now: Long, windowStart: Long, onDay: (Long) -
         }
     }
 }
+
+/** How long the grid takes to slide along an hour. */
+private const val SLIDE_MILLIS = 320
 
 /** The quickest the guide moves between channels with the button held down. */
 private const val HELD_MOVE_MILLIS = 120L

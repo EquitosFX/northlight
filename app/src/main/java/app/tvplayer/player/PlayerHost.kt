@@ -100,7 +100,7 @@ fun PlayerHost(
     /** Switch to the backup player by itself when the normal one can't play a stream. */
     backupPlayer: Boolean = true,
     /** Switch the TV to a refresh rate that suits the video. */
-    matchFrameRate: Boolean = true,
+    matchFrameRate: Boolean = false,
     subtitleLook: SubtitleLook = SubtitleLook(),
 ) {
     MatchRefreshRate(fps = controller.frameRate, on = matchFrameRate && mode == PlayerMode.FULL)
@@ -141,15 +141,15 @@ fun PlayerHost(
                     isFocusable = false
                     descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     player = controller.player
-                    subtitleView?.setBottomPaddingFraction(0.07f)
+                    // Subtitles are drawn by Skyfall (SubtitleOverlay), in the look chosen in Settings.
+                    subtitleView?.visibility = android.view.View.GONE
                 }
             },
-            // Subtitles as chosen in Settings › Player.
-            update = { view -> view.subtitleView?.applyLook(subtitleLook) },
             onRelease = { view -> view.player = null },
             modifier = Modifier.fillMaxSize(),
         )
 
+        if (mode == PlayerMode.FULL) SubtitleOverlay(cues = controller.cues, look = subtitleLook)
         if (mode == PlayerMode.FULL && controller.vod != null) {
             VodLayer(controller = controller, subtitles = subtitles, metadata = metadata, intros = intros, onClose = onClose)
         } else if (mode == PlayerMode.FULL) {
@@ -627,28 +627,6 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
     is android.app.Activity -> this
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
-}
-
-/** Sets a subtitle view's look: box or Netflix-style shadow, size, typeface and colour. */
-@OptIn(UnstableApi::class)
-fun SubtitleView.applyLook(look: SubtitleLook) {
-    // Media3 shows subtitles in their own styling unless told not to.
-    setApplyEmbeddedStyles(false)
-    setApplyEmbeddedFontSizes(false)
-    val text = if (look.colour == "yellow") android.graphics.Color.rgb(255, 230, 80) else android.graphics.Color.WHITE
-    val typeface = when (look.font) {
-        "bold" -> android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-        "serif" -> android.graphics.Typeface.SERIF
-        else -> android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-    }
-    val (background, edge) = when (look.style) {
-        "shadow" -> android.graphics.Color.TRANSPARENT to CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
-        "outline" -> android.graphics.Color.TRANSPARENT to CaptionStyleCompat.EDGE_TYPE_OUTLINE
-        else -> android.graphics.Color.argb(150, 0, 0, 0) to CaptionStyleCompat.EDGE_TYPE_NONE
-    }
-    setStyle(CaptionStyleCompat(text, background, android.graphics.Color.TRANSPARENT, edge, android.graphics.Color.BLACK, typeface))
-    // A little larger than standard for a TV, then the chosen size.
-    setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.15f * look.size / 100f)
 }
 
 /** Another channel's now and next, shown while the current one keeps playing. */

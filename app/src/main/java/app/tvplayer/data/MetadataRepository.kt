@@ -125,6 +125,9 @@ class MetadataRepository(
     private val seasons = HashMap<Pair<Long, Int>, List<TmdbEpisode>>()
 
     /** The series' name as artwork (its title logo), or null. Needs a TMDB key. */
+    /** The title logo found earlier, without waiting. */
+    fun peekLogo(tmdbId: Long?): String? = tmdbId?.let { logos[it] }
+
     suspend fun titleLogo(tmdbId: Long, isSeries: Boolean): String? = withContext(Dispatchers.IO) {
         logos[tmdbId]?.let { return@withContext it }
         val key = settings.tmdbKey.first().trim()

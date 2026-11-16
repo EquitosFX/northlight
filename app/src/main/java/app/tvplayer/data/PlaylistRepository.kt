@@ -212,13 +212,16 @@ class PlaylistRepository(
     // A series' episode list, kept for half an hour so going back to a show doesn't ask the server again.
     private val seriesCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, SeriesDetails>>()
 
-    /** The episode list fetched last time, if it's still fresh. */
+    /** The episode list fetched last time this session (however long ago), to show while it's checked. */
     fun cachedSeriesDetails(series: VodRow): SeriesDetails? =
+        seriesCache["${series.playlistId}|${series.remoteId}|${series.name}"]?.second
+
+    private fun freshSeriesDetails(series: VodRow): SeriesDetails? =
         seriesCache["${series.playlistId}|${series.remoteId}|${series.name}"]
             ?.takeIf { System.currentTimeMillis() - it.first < 30 * 60_000L }?.second
 
     suspend fun seriesDetails(series: VodRow, fresh: Boolean = false): SeriesDetails {
-        if (!fresh) cachedSeriesDetails(series)?.let { return it }
+        if (!fresh) freshSeriesDetails(series)?.let { return it }
         return loadSeriesDetails(series).also {
             seriesCache["${series.playlistId}|${series.remoteId}|${series.name}"] = System.currentTimeMillis() to it
         }

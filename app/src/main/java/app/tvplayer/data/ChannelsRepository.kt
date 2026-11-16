@@ -143,9 +143,13 @@ class ChannelsRepository(private val db: AppDatabase) {
         (playlists.sumOf { (it.refreshedAt ?: 0L) % 1_000_000_007L } * 31 + playlists.size) * 1_000_003L + db.channels().vodCount()
     }
 
+    // After a playlist changes, the lists from before are still shown while the new ones are worked out.
+    private val staleCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
     private suspend fun checkStamp() {
         val stamp = currentStamp()
         if (stamp != listStamp) {
+            staleCache.putAll(listCache)
             listCache.clear()
             listStamp = stamp
         }
@@ -153,10 +157,11 @@ class ChannelsRepository(private val db: AppDatabase) {
 
     /** What [groups] returned last time, for showing at once while it's checked. */
     @Suppress("UNCHECKED_CAST")
-    fun cachedGroups(kind: String): List<GroupCount>? = listCache["g|$kind"] as? List<GroupCount>
+    fun cachedGroups(kind: String): List<GroupCount>? = (listCache["g|$kind"] ?: staleCache["g|$kind"]) as? List<GroupCount>
 
     @Suppress("UNCHECKED_CAST")
-    fun cachedInGroup(kind: String, group: String?): List<VodRow>? = listCache["i|$kind|$group"] as? List<VodRow>
+    fun cachedInGroup(kind: String, group: String?): List<VodRow>? =
+        (listCache["i|$kind|$group"] ?: staleCache["i|$kind|$group"]) as? List<VodRow>
 
     @Suppress("UNCHECKED_CAST")
     suspend fun groups(kind: String): List<GroupCount> = withContext(Dispatchers.IO) {

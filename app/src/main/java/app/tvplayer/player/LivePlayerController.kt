@@ -209,7 +209,12 @@ class LivePlayerController(
         updateStreamInfo()
     }
 
+    /** The subtitles to show now (drawn by [SubtitleOverlay]). */
+    var cues by mutableStateOf<List<androidx.media3.common.text.Cue>>(emptyList())
+        private set
+
     private fun newStream() {
+        cues = emptyList()
         frameRate = null
         frameProbe.reset()
     }
@@ -434,7 +439,7 @@ class LivePlayerController(
 
     /** How far into the film, episode or past programme playback is. */
     fun mediaPosition(): Long =
-        (if (vod?.catchupPlan != null) catchupOffset else 0L) + player.currentPosition.coerceAtLeast(0)
+        pendingCatchup ?: ((if (vod?.catchupPlan != null) catchupOffset else 0L) + player.currentPosition.coerceAtLeast(0))
 
     /** The film's, episode's or past programme's length (0 while unknown). */
     fun mediaDuration(): Long = vod?.catchupPlan?.lengthMs ?: player.duration.coerceAtLeast(0)
@@ -467,10 +472,29 @@ class LivePlayerController(
         }
         // Otherwise ask the server again from the new time. It works in whole minutes, so moving
         // forward rounds up and moving back rounds down: a skip never goes the wrong way.
+        // Several presses in a row (5 min, 5 min, 5 min) make one request, once they stop.
         val forward = t > mediaPosition()
-        val from = if (forward) ceilMinute(t) else t - t % MINUTE
-        restartCatchup(from.coerceIn(0, (plan.lengthMs - MINUTE).coerceAtLeast(0)), exact = t)
+        val from = (if (forward) ceilMinute(t) else t - t % MINUTE).coerceIn(0, (plan.lengthMs - MINUTE).coerceAtLeast(0))
+        pendingCatchup = from
+        catchupJob?.cancel()
+        catchupJob = scope.launch {
+            delay(CATCHUP_SETTLE_MILLIS)
+            // Let go of the old stream first: most providers allow one connection at a time, and a
+            // second one opened before the first has closed is refused (which showed as Reconnecting).
+            player.stop()
+            status = PlaybackStatus.Loading
+            delay(CATCHUP_GAP_MILLIS)
+            pendingCatchup = null
+            restartCatchup(from, exact = null)
+        }
     }
+
+    /** For catch-up: where a skip is going while its request is being made. */
+    private var pendingCatchup: Long? = null
+    private var catchupJob: Job? = null
+    /** When the last catch-up request was made, and how many quiet retries it's had. */
+    private var catchupAskedAt = 0L
+    private var quietRetries = 0
 
     private fun ceilMinute(t: Long) = ((t + MINUTE - 1) / MINUTE) * MINUTE
 
@@ -484,7 +508,10 @@ class LivePlayerController(
             return
         }
         catchupOffset = from
-        catchupExact = exact?.takeIf { it > from }
+        // Catch-up plays from the whole minute: moving on to the exact second means a second
+        // connection, which many providers refuse.
+        catchupExact = null
+        catchupAskedAt = System.currentTimeMillis()
         status = PlaybackStatus.Loading
         player.setMediaSource(sourceFor(url, item.userAgent, item.referrer, addedSubtitles))
         player.prepare()
@@ -591,6 +618,8 @@ class LivePlayerController(
 
     private fun startVod(item: VodItem, from: Long) {
         newStream()
+        catchupJob?.cancel()
+        pendingCatchup = null
         if (stopped) return
         if (item.catchupPlan != null) {
             // Catch-up restarts are requests from a new time, not seeks.
@@ -648,6 +677,8 @@ class LivePlayerController(
     /** Saves where a film got to before something else plays. */
     private fun leaveVod() {
         upNextJob?.cancel()
+        catchupJob?.cancel()
+        pendingCatchup = null
         if (vod == null) return
         saveVodProgress()
         progressJob?.cancel()
@@ -656,6 +687,21 @@ class LivePlayerController(
 
     private fun recoverVod() {
         val item = vod ?: return
+        // A catch-up request that fails straight away is usually the provider not having let go of the
+        // last connection yet: try again quietly ("Tuning", not "Reconnecting").
+        val plan = item.catchupPlan
+        if (plan != null && System.currentTimeMillis() - catchupAskedAt < QUIET_RETRY_WINDOW_MILLIS && quietRetries < 2) {
+            quietRetries++
+            val from = catchupOffset
+            status = PlaybackStatus.Loading
+            retryJob = scope.launch {
+                player.stop()
+                delay(1_200L * quietRetries)
+                restartCatchup(from, exact = null)
+            }
+            return
+        }
+        quietRetries = 0
         if (attempt < Reconnect.MAX_ATTEMPTS) {
             attempt++
             status = PlaybackStatus.Reconnecting(attempt)
@@ -1038,6 +1084,7 @@ class LivePlayerController(
                 Player.STATE_READY -> {
                     stallJob?.cancel()
                     attempt = 0
+                    quietRetries = 0
                     status = PlaybackStatus.Playing
                     updateStreamInfo()
                     if (vod == null && !firstFrameSeen) watchForPicture()
@@ -1091,6 +1138,10 @@ class LivePlayerController(
             updateStreamInfo()
         }
 
+        override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
+            cues = cueGroup.cues
+        }
+
         override fun onRenderedFirstFrame() {
             firstFrameSeen = true
             pictureJob?.cancel()
@@ -1104,6 +1155,9 @@ class LivePlayerController(
     private companion object {
         const val STALL_MILLIS = 15_000L
         const val NO_PICTURE_MILLIS = 7_000L
+        const val CATCHUP_SETTLE_MILLIS = 700L
+        const val CATCHUP_GAP_MILLIS = 350L
+        const val QUIET_RETRY_WINDOW_MILLIS = 8_000L
         val SLEEP_OPTIONS = listOf(0, 30, 60, 90, 120)
         const val GUIDE_REFRESH_MILLIS = 60_000L
         const val PROGRESS_SAVE_MILLIS = 10_000L

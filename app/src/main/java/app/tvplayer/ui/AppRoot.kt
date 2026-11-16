@@ -2,6 +2,7 @@
 
 package app.tvplayer.ui
 
+import androidx.compose.ui.graphics.CompositingStrategy
 import app.tvplayer.data.SubtitleLook
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.Animatable
@@ -216,7 +217,7 @@ fun AppRoot(
     val reminderIds = remember(reminders) { reminders.map { it.id }.toSet() }
     val deadChannels by container.channelCheck.dead.collectAsStateWithLifecycle()
     val backupPlayerOn by container.settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
-    val matchFrameRateOn by container.settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = true)
+    val matchFrameRateOn by container.settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = false)
     val subtitleLook by container.settings.subtitleLook.collectAsStateWithLifecycle(initialValue = SubtitleLook())
     fun setReminder(reminder: Reminder) {
         val set = container.myList.toggleReminder(reminder)
@@ -608,7 +609,13 @@ fun AppRoot(
         if (themeId.snows && mode != PlayerMode.FULL) Snowfall(Modifier.fillMaxSize(), animate = !container.lowPower)
         // The side panel slides in and out. Only the drawing moves during the slide: the screens are
         // laid out once at their new width, so nothing has to be measured again on every frame.
-        val panelTarget = if (sidebarOpen) 0.dp else -(SidebarWidth - SidebarPeek)
+        // During the Movie Night Quiz the menu steps right off the screen, so the quiz has it all.
+        val sidebarHidden = !sidebarOpen && dest == Dest.MOVIE_NIGHT && movieNightState.inQuiz && mode != PlayerMode.MINI
+        val panelTarget = when {
+            sidebarOpen -> 0.dp
+            sidebarHidden -> -SidebarWidth
+            else -> -(SidebarWidth - SidebarPeek)
+        }
         val panelSlide = animateDpAsState(
             targetValue = panelTarget,
             animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
@@ -646,7 +653,7 @@ fun AppRoot(
                 key(dest, shownPerson) {
                 val appear = remember { Animatable(0f) }
                 LaunchedEffect(Unit) { appear.animateTo(1f, tween(durationMillis = 200, easing = FastOutSlowInEasing)) }
-                Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = appear.value }) {
+                Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = appear.value; compositingStrategy = CompositingStrategy.ModulateAlpha }) {
                 if (shownPerson != null) {
                     TopInset { PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) }) }
                 } else when (dest) {
@@ -894,9 +901,8 @@ fun AppRoot(
                 } else {
                     // Sits in the picture space of the side panel and slides with it.
                     Modifier
-                        // Moves once to where the panel is going rather than with every frame of its slide:
-                        // a video surface dragged along frame by frame flickers and can flash black on some TV boxes.
-                        .offset { IntOffset((panelTarget + SidebarPictureSide).roundToPx(), SidebarPictureTop.roundToPx()) }
+                        // Slides with the panel, so it stays in its place in the menu.
+                        .offset { IntOffset((panelSlide.value + SidebarPictureSide).roundToPx(), SidebarPictureTop.roundToPx()) }
                         .size(width = SidebarPictureWidth, height = SidebarPictureHeight)
                         .border(width = 1.dp, color = colors.glassBorder)
                         .onFocusChanged { pictureFocused = it.hasFocus }

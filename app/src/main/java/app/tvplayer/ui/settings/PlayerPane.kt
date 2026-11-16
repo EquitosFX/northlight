@@ -56,7 +56,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     val offset by settings.catchupOffsetMinutes.collectAsStateWithLifecycle(initialValue = 0)
     val backupPlayer by settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
     val audioDelay by settings.audioDelayMs.collectAsStateWithLifecycle(initialValue = 0)
-    val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = true)
+    val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = false)
     val look by settings.subtitleLook.collectAsStateWithLifecycle(initialValue = SubtitleLook())
     fun setLook(change: SubtitleLook) {
         scope.launch { settings.setSubtitleLook(change) }
@@ -167,25 +167,38 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
         )
         SubtitlePreview(look)
         Label(text = "Style", style = AppType.caption, color = colors.textDim)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(label = "Netflix style", selected = look == SubtitleLook.NETFLIX) { setLook(SubtitleLook.NETFLIX) }
-            Chip(label = "Dark box", selected = look.style == "box") { setLook(look.copy(style = "box")) }
-            Chip(label = "Shadow, no box", selected = look.style == "shadow") { setLook(look.copy(style = "shadow")) }
-            Chip(label = "Outline, no box", selected = look.style == "outline") { setLook(look.copy(style = "outline")) }
-        }
-        Label(text = "Size", style = AppType.caption, color = colors.textDim)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(80 to "Small", 100 to "Medium", 125 to "Large", 150 to "Extra large").forEach { (size, label) ->
-                Chip(label = label, selected = look.size == size) { setLook(look.copy(size = size)) }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Chip(label = "Netflix style", selected = look == SubtitleLook.NETFLIX) { setLook(SubtitleLook.NETFLIX) } }
+            items(listOf("netflix" to "Soft shadow", "box" to "Dark box", "shadow" to "Drop shadow", "outline" to "Outline", "plain" to "Plain")) { (key, label) ->
+                Chip(label = label, selected = look.style == key && look != SubtitleLook.NETFLIX) { setLook(look.copy(style = key)) }
             }
         }
-        Label(text = "Font and colour", style = AppType.caption, color = colors.textDim)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(label = "Standard", selected = look.font == "standard") { setLook(look.copy(font = "standard")) }
-            Chip(label = "Bold", selected = look.font == "bold") { setLook(look.copy(font = "bold")) }
-            Chip(label = "Serif", selected = look.font == "serif") { setLook(look.copy(font = "serif")) }
-            Chip(label = "White", selected = look.colour == "white") { setLook(look.copy(colour = "white")) }
-            Chip(label = "Yellow", selected = look.colour == "yellow") { setLook(look.copy(colour = "yellow")) }
+        Label(text = "Font", style = AppType.caption, color = colors.textDim)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(SubtitleLook.FONTS) { (key, label) ->
+                Chip(label = label, selected = look.font == key) { setLook(look.copy(font = key)) }
+            }
+        }
+        Label(text = "Size and colour", style = AppType.caption, color = colors.textDim)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(listOf(75 to "Small", 90 to "Medium-small", 100 to "Medium", 115 to "Medium-large", 130 to "Large", 150 to "Extra large")) { (size, label) ->
+                Chip(label = label, selected = look.size == size) { setLook(look.copy(size = size)) }
+            }
+            items(listOf("white" to "White", "grey" to "Soft white", "yellow" to "Yellow")) { (key, label) ->
+                Chip(label = label, selected = look.colour == key) { setLook(look.copy(colour = key)) }
+            }
+        }
+        Label(text = "Shadow or outline strength, box darkness and height on screen", style = AppType.caption, color = colors.textDim)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(listOf(1 to "Soft edge", 2 to "Normal edge", 3 to "Strong edge")) { (edge, label) ->
+                Chip(label = label, selected = look.edge == edge) { setLook(look.copy(edge = edge)) }
+            }
+            items(listOf(40 to "Light box", 60 to "Box", 80 to "Dark box", 100 to "Solid box")) { (opacity, label) ->
+                Chip(label = label, selected = look.style == "box" && look.boxOpacity == opacity) { setLook(look.copy(style = "box", boxOpacity = opacity)) }
+            }
+            items(listOf(0 to "Low", 1 to "Normal height", 2 to "Higher", 3 to "Highest")) { (lift, label) ->
+                Chip(label = label, selected = look.lift == lift) { setLook(look.copy(lift = lift)) }
+            }
         }
         Label(text = "Language", style = AppType.caption, color = colors.textDim)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -263,37 +276,20 @@ private fun offsetText(minutes: Int): String {
     return if (minutes > 0) "$text later" else "$text earlier"
 }
 
-/** A sample line in the chosen subtitle look, over a stand-in for the picture. */
+/** A sample subtitle in the chosen look, drawn exactly as in the player, over a stand-in picture. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun SubtitlePreview(look: SubtitleLook) {
-    val text = if (look.colour == "yellow") Color(0xFFFFE650) else Color.White
-    val family = if (look.font == "serif") FontFamily.Serif else FontFamily.SansSerif
-    val weight = if (look.font == "bold") FontWeight.Bold else FontWeight.Medium
-    val shadow = when (look.style) {
-        "shadow" -> Shadow(Color.Black, Offset(2f, 3f), 8f)
-        "outline" -> Shadow(Color.Black, Offset.Zero, 4f)
-        else -> null
+    val sample = remember {
+        listOf(androidx.media3.common.text.Cue.Builder().setText("I'll be home before the snow comes in.\nKeep the fire going.").build())
     }
     Box(
         modifier = Modifier
-            .width(520.dp)
-            .height(92.dp)
+            .width(448.dp)
+            .height(252.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFF6A7F9A), Color(0xFF2B3446)))),
-        contentAlignment = Alignment.BottomCenter,
+            .background(Brush.verticalGradient(listOf(Color(0xFF8BA3BF), Color(0xFF4A5A73), Color(0xFF1E2533)))),
     ) {
-        BasicText(
-            text = "I'll be home before the snow comes in.",
-            style = TextStyle(
-                color = text,
-                fontSize = (17f * look.size / 100f).sp,
-                fontFamily = family,
-                fontWeight = weight,
-                shadow = shadow,
-            ),
-            modifier = Modifier
-                .padding(bottom = 10.dp)
-                .then(if (look.style == "box") Modifier.background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 2.dp) else Modifier),
-        )
+        app.tvplayer.player.SubtitleOverlay(cues = sample, look = look)
     }
 }

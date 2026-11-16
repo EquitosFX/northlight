@@ -1,5 +1,9 @@
 package app.tvplayer.ui.home
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.heightIn
 import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.fadeIntoBackground
@@ -40,9 +44,25 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 
 private val SideMargin = 48.dp
+
+/** Scrolls only to bring something hidden into view, and then by as little as possible (with a little room). */
+@OptIn(ExperimentalFoundationApi::class)
+private val StayPutUnlessHidden = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val room = containerSize * 0.08f
+        val end = offset + size
+        return when {
+            offset >= 0f && end <= containerSize -> 0f
+            size >= containerSize -> offset
+            offset < 0f -> offset - room
+            else -> end - containerSize + room
+        }
+    }
+}
 private val HeroTopRoom = 40.dp
 
 /** Home: a hero for the channel last watched (or a welcome), then rails of the viewer's own content and shortcuts. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     hero: HomeHero,
@@ -56,6 +76,10 @@ fun HomeScreen(
     val autoFocus = LocalAutoFocus.current
     LaunchedEffect(Unit) { if (autoFocus()) runCatching { firstFocus.requestFocus() } }
 
+    // Highlighting something already fully on screen (the hero's Resume, say) doesn't scroll Home:
+    // Android TV's usual behaviour of sliding it towards the middle pushed the hero half off the top.
+    val usual = LocalBringIntoViewSpec.current
+    CompositionLocalProvider(LocalBringIntoViewSpec provides StayPutUnlessHidden) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 27.dp),
@@ -64,8 +88,16 @@ fun HomeScreen(
         item { Hero(hero = hero, primaryFocus = firstFocus) }
         item { ShortcutRow(labels = shortcuts, onClick = onShortcut) }
         for (rail in rails) {
-            if (rail.tiles.isNotEmpty()) item(key = rail.title) { Rail(title = rail.title, tiles = rail.tiles, onTileClick = onTile) }
+            if (rail.tiles.isNotEmpty()) {
+                item(key = rail.title) {
+                    // Along a rail, the usual TV scrolling.
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides usual) {
+                        Rail(title = rail.title, tiles = rail.tiles, onTileClick = onTile)
+                    }
+                }
+            }
         }
+    }
     }
 }
 
