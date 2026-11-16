@@ -135,7 +135,6 @@ fun GuideScreen(
     var windowStart by remember { mutableLongStateOf(liveStart) }
     // Read only by the header (and when sliding the grid), so moving around the grid doesn't redraw every row.
     val focusedState = remember { mutableStateOf<Focused?>(null) }
-    DisposableEffect(Unit) { onDispose { println("DEBUGGUIDE screen disposed") } }
     val firstFocus = remember { FocusRequester() }
     val entryFocus = remember { FocusRequester() }
     var placedFocus by remember { mutableStateOf(false) }
@@ -207,7 +206,6 @@ fun GuideScreen(
         // The highlighted programme stays drawn (and highlighted) through the slide, so focus just stays
         // on it; it's put back on it afterwards in case it was moved.
         refocus = focusedState.value?.programme?.id
-        println("DEBUGGUIDE shift $by")
         moveWindow(target)
     }
 
@@ -593,7 +591,6 @@ private fun GuideRow(
     // Only the row being moved to notices the move.
     val jumpTime by remember(jumpState, index) { derivedStateOf { jumpState?.value?.takeIf { it.row == index }?.time } }
     val onJumped: () -> Unit = { if (jumpState?.value?.row == index) jumpState.value = null }
-    DisposableEffect(Unit) { onDispose { println("DEBUGGUIDE row ${channel.name} disposed") } }
     // Keeps showing the previous programmes while new ones load, so the grid doesn't flash.
     var programmes by remember { mutableStateOf<List<ProgrammeEntity>?>(null) }
     var loadedFor by remember { mutableLongStateOf(-1L) }
@@ -640,12 +637,12 @@ private fun GuideRow(
             val width = maxWidth
             val widthPx = constraints.maxWidth.toFloat()
             // Slides with the rest of the grid when moving along by an hour.
-            Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(slide() / WINDOW) * widthPx }) {
+            SlideLayer(slide, widthPx) {
             // Settled: the programmes in view, the first and last trimmed to the edges so their names show.
             // Sliding: those either side too, at their full lengths, coming into or going out of view.
             val shownFrom = if (sliding) windowStart - WINDOW else windowStart
             val shownTo = if (sliding) windowEnd + WINDOW else windowEnd
-            val list = programmes?.filter { it.stop > shownFrom && it.start < shownTo } ?: return@Box
+            val list = programmes?.filter { it.stop > shownFrom && it.start < shownTo } ?: return@SlideLayer
             val inViewList = list.filter { it.stop > windowStart && it.start < windowEnd }
 
             // Edge keys slide the grid instead of leaving it.
@@ -681,7 +678,7 @@ private fun GuideRow(
                         .then(if (entry != null) Modifier.focusRequester(entry) else Modifier),
                 )
                 if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
-                return@Box
+                return@SlideLayer
             }
 
             val focusTarget = inViewList.firstOrNull { now in it.start until it.stop } ?: inViewList.firstOrNull() ?: list.first()
@@ -774,11 +771,7 @@ private fun GuideCell(
         outlined = false,
         focusScale = 1f,
     ) { focused ->
-        LaunchedEffect(focused) {
-            println("DEBUGGUIDE cell '$title' focused=$focused")
-            if (focused) onFocus()
-        }
-        DisposableEffect(Unit) { onDispose { println("DEBUGGUIDE cell '$title' disposed") } }
+        LaunchedEffect(focused) { if (focused) onFocus() }
         val tint = when {
             focused -> colors.onAccent
             past && !catchup -> colors.textFaint
@@ -938,3 +931,12 @@ private const val HELD_MOVE_MILLIS = 120L
 
 /** How long a move up or down may take to land before another press is taken anyway. */
 private const val JUMP_TIMEOUT_MILLIS = 600L
+
+/**
+ * Draws its content shifted along by the slide in progress. (A function of its own, not an inline
+ * Box, so the early returns inside the row don't upset Compose's bookkeeping and rebuild every cell.)
+ */
+@Composable
+private fun SlideLayer(slide: () -> Float, widthPx: Float, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(slide() / WINDOW) * widthPx }) { content() }
+}
