@@ -52,6 +52,8 @@ data class BackupStream(
     val referrer: String?,
     val live: Boolean,
     val startMs: Long = 0,
+    /** The viewer's lip-sync setting, in milliseconds. */
+    val audioDelayMs: Int = 0,
 )
 
 /**
@@ -91,6 +93,7 @@ fun BackupPlayerLayer(
         player.setEventListener { event ->
             when (event.type) {
                 MediaPlayer.Event.Playing -> {
+                    if (stream.audioDelayMs != 0) runCatching { player.setAudioDelay(stream.audioDelayMs * 1_000L) }
                     playing = true
                     state = "Playing with the backup player"
                 }

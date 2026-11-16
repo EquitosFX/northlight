@@ -66,7 +66,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The icons on the player buttons, drawn rather than taken from a font so they're crisp at any size. */
-enum class ControlIcon { REWIND, PLAY, PAUSE, FORWARD, LIVE, SUBTITLES, AUDIO, CHANNELS, NEXT }
+enum class ControlIcon { REWIND, PLAY, PAUSE, FORWARD, LIVE, SUBTITLES, AUDIO, CHANNELS, NEXT, SLEEP }
 
 private enum class Panel { NONE, SUBTITLES, AUDIO, FIND }
 
@@ -209,6 +209,8 @@ fun PlayerControls(
                 ControlButton(ControlIcon.SUBTITLES, "Subtitles") { panel = Panel.SUBTITLES }
                 ControlButton(ControlIcon.AUDIO, "Audio") { panel = Panel.AUDIO }
                 if (onChannels != null) ControlButton(ControlIcon.CHANNELS, "Channels") { onChannels() }
+                // Each press moves on: off, 30 min, 1 hour, 1½ hours, 2 hours, off.
+                ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes)) { controller.cycleSleep() }
                 if (!live && controller.hasNextEpisode) ControlButton(ControlIcon.NEXT, "Next episode") { controller.skipEpisode(+1) }
             }
             if (live && !seekable) {
@@ -242,14 +244,17 @@ fun PlayerControls(
                         extra = if (live) null else "Find on OpenSubtitles…" to { panel = Panel.FIND },
                         onDone = { panel = Panel.NONE },
                     )
-                    Panel.AUDIO -> TrackPanel(
-                        heading = "Audio",
-                        controller = controller,
-                        type = C.TRACK_TYPE_AUDIO,
-                        focus = panelFocus,
-                        extra = null,
-                        onDone = { panel = Panel.NONE },
-                    )
+                    Panel.AUDIO -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        TrackPanel(
+                            heading = "Audio",
+                            controller = controller,
+                            type = C.TRACK_TYPE_AUDIO,
+                            focus = panelFocus,
+                            extra = null,
+                            onDone = { panel = Panel.NONE },
+                        )
+                        AudioSyncRows(controller)
+                    }
                     Panel.FIND -> FindSubtitles(controller = controller, subtitles = subtitles, focus = panelFocus, onDone = { panel = Panel.NONE })
                     Panel.NONE -> Unit
                 }
@@ -480,6 +485,16 @@ private fun DrawScope.drawIcon(icon: ControlIcon, tint: Color) {
             drawPath(body, tint)
             drawArc(tint, -45f, 90f, false, Offset(w * 0.45f, h * 0.28f), Size(w * 0.36f, h * 0.44f), style = Stroke(width = w * 0.08f, cap = StrokeCap.Round))
         }
+        ControlIcon.SLEEP -> {
+            // A crescent moon: a circle with a bite taken out of it.
+            val moon = Path().apply {
+                addOval(androidx.compose.ui.geometry.Rect(Offset(w * 0.46f, h * 0.5f), w * 0.38f))
+            }
+            val bite = Path().apply {
+                addOval(androidx.compose.ui.geometry.Rect(Offset(w * 0.68f, h * 0.36f), w * 0.3f))
+            }
+            drawPath(Path.combine(androidx.compose.ui.graphics.PathOperation.Difference, moon, bite), tint)
+        }
         ControlIcon.CHANNELS -> {
             for (k in 0..2) {
                 val y = h * (0.25f + k * 0.25f)
@@ -524,6 +539,36 @@ private fun TrackPanel(
         }
         extra?.let { (text, action) -> row(text, false) { action() } }
     }
+}
+
+/** Lip sync: move the sound earlier or later against the picture, in 50 ms steps. */
+@Composable
+private fun AudioSyncRows(controller: LivePlayerController) {
+    val colors = AppTheme.colors
+    val ms = controller.audioDelayMs
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Label(text = "Sound in sync", style = AppType.title)
+        Label(
+            text = when {
+                ms == 0 -> "In step with the picture"
+                ms > 0 -> "Sound $ms ms later"
+                else -> "Sound ${-ms} ms earlier"
+            },
+            style = AppType.label,
+            color = if (ms == 0) colors.textDim else colors.accent,
+        )
+        PanelRow(text = "Sound earlier (− 50 ms)", selected = false) { controller.changeAudioDelay(-50) }
+        PanelRow(text = "Sound later (+ 50 ms)", selected = false) { controller.changeAudioDelay(+50) }
+        if (ms != 0) PanelRow(text = "Reset", selected = false) { controller.setAudioDelay(0) }
+    }
+}
+
+private fun sleepLabel(minutes: Int) = when (minutes) {
+    0 -> "Sleep: off"
+    60 -> "Sleep: 1 hr"
+    90 -> "Sleep: 1½ hrs"
+    120 -> "Sleep: 2 hrs"
+    else -> "Sleep: $minutes min"
 }
 
 @Composable

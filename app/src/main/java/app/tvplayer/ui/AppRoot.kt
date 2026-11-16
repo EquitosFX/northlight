@@ -2,6 +2,13 @@
 
 package app.tvplayer.ui
 
+import app.tvplayer.core.seasonal.Christmas
+import app.tvplayer.ui.components.NewEpisodeMarks
+import app.tvplayer.ui.components.LocalNewEpisodes
+import app.tvplayer.data.NewEpisodes
+import app.tvplayer.ui.components.WatchedMarks
+import app.tvplayer.ui.components.LocalWatched
+import androidx.compose.runtime.SideEffect
 import app.tvplayer.ui.theme.snows
 import app.tvplayer.ui.theme.Snowfall
 import app.tvplayer.ui.components.clockTime
@@ -470,14 +477,46 @@ fun AppRoot(
             )
         }
     }
+    // November to Twelfth Night: a row of the Christmas films and series in the playlists.
+    val christmasRail by produceState(initialValue = emptyList<Tile>(), playlistList) {
+        if (!Christmas.inSeason(java.time.LocalDate.now())) return@produceState
+        value = runCatching { container.metadata.christmas() }.getOrDefault(emptyList()).map { row ->
+            Tile(
+                title = row.name,
+                caption = if (row.kind == ChannelEntity.KIND_SERIES) "Series" else "Film",
+                color = tileColor(row.url),
+                logo = row.logo,
+                open = row,
+            )
+        }
+    }
+    // Ticks on films and episodes watched to the end.
+    val finishedUrls by container.watched.finishedUrls.collectAsStateWithLifecycle()
+    val watchedMarks = remember(finishedUrls) { WatchedMarks(finishedUrls) { url, on -> container.watched.mark(url, on) } }
+
+    // New episodes of series in My list: checked every few hours, flagged until the series is opened.
+    val newEpisodes by container.newEpisodes.flagged.collectAsStateWithLifecycle()
+    val newEpisodeMarks = remember(newEpisodes) { NewEpisodeMarks(newEpisodes) { key -> container.newEpisodes.seen(key) } }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(120_000)
+            val found = runCatching { container.newEpisodes.check(container.myList.watchlist.value) }.getOrDefault(emptyList())
+            if (found.isNotEmpty()) {
+                notice = if (found.size == 1) "New episodes of ${found.first()} · see My list" else "New episodes of ${found.size} series in My list"
+            }
+            delay(NewEpisodes.CHECK_EVERY_MILLIS)
+        }
+    }
+
     // My list on Home: the saved films and series, found in the playlists.
     val watchlist by container.myList.watchlist.collectAsStateWithLifecycle()
-    val savedRail by produceState(initialValue = emptyList<Tile>(), watchlist, playlistList) {
+    val savedRail by produceState(initialValue = emptyList<Tile>(), watchlist, playlistList, newEpisodes) {
         value = watchlist.mapNotNull { item ->
             val row = container.channels.findTitle(item.kind, item.name, item.url) ?: return@mapNotNull null
             Tile(
                 title = item.name,
                 caption = if (item.kind == "series") "Series" else "Film",
+                badge = if (item.key in newEpisodes) "New episodes" else null,
                 color = tileColor(item.url),
                 logo = item.poster ?: row.logo,
                 open = row,
@@ -503,6 +542,7 @@ fun AppRoot(
     val homeRails = listOf(
         HomeRail("Continue watching", continueWatching),
         HomeRail("My list", savedRail),
+        HomeRail("Christmas films and series", christmasRail),
     ) + suggestions + listOf(
         HomeRail("Recent channels", recentTiles),
         HomeRail(if (hasFavourites) "Favourites" else "Channels", shownChannels),
@@ -571,6 +611,8 @@ fun AppRoot(
                         .focusable(),
                 )
                 CompositionLocalProvider(
+                    LocalWatched provides watchedMarks,
+                    LocalNewEpisodes provides newEpisodeMarks,
                     LocalAutoFocus provides autoFocusAllowed,
                     LocalHoldFocus provides { holdFocus() },
                     LocalEntryFocus provides entryFocus,
@@ -792,6 +834,12 @@ fun AppRoot(
             }
         }
 
+        SideEffect {
+            controller.onSleep = {
+                controller.close()
+                mode = PlayerMode.NONE
+            }
+        }
         if (mode != PlayerMode.NONE) {
             val colors = AppTheme.colors
             PlayerHost(

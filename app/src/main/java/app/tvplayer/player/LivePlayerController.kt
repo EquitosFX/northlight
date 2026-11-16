@@ -199,12 +199,82 @@ class LivePlayerController(
         DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
     )
 
+    private val audioDelay = AudioDelay()
+
+    /** Sound moved against the picture, in milliseconds (positive: later), for lip sync. Kept in settings. */
+    var audioDelayMs by mutableIntStateOf(0)
+        private set
+
+    fun changeAudioDelay(byMs: Int) {
+        setAudioDelay(audioDelayMs + byMs)
+    }
+
+    fun setAudioDelay(ms: Int) {
+        val value = ms.coerceIn(-SettingsRepository.MAX_AUDIO_DELAY_MS, SettingsRepository.MAX_AUDIO_DELAY_MS)
+        audioDelayMs = value
+        audioDelay.micros = value * 1_000L
+        scope.launch { settings.setAudioDelayMs(value) }
+    }
+
+    /** Minutes the sleep timer was set for; 0 when it's off. */
+    var sleepMinutes by mutableIntStateOf(0)
+        private set
+
+    /** When the sleep timer will stop playback, or null. */
+    var sleepAt by mutableStateOf<Long?>(null)
+        private set
+
+    /** True in the last minute before the sleep timer stops playback. */
+    var sleepWarning by mutableStateOf(false)
+        private set
+
+    /** Called when the sleep timer runs out, to close the player. */
+    var onSleep: (() -> Unit)? = null
+    private var sleepJob: Job? = null
+
+    /** Off, 30 min, 1 hour, 1½ hours, 2 hours, then off again. */
+    fun cycleSleep() {
+        val options = SLEEP_OPTIONS
+        val next = options[(options.indexOf(sleepMinutes).coerceAtLeast(0) + 1) % options.size]
+        setSleep(next)
+    }
+
+    fun cancelSleep() = setSleep(0)
+
+    private fun setSleep(minutes: Int) {
+        sleepJob?.cancel()
+        sleepWarning = false
+        sleepMinutes = minutes
+        if (minutes == 0) {
+            sleepAt = null
+            return
+        }
+        val at = System.currentTimeMillis() + minutes * 60_000L
+        sleepAt = at
+        sleepJob = scope.launch {
+            delay((at - System.currentTimeMillis() - 60_000L).coerceAtLeast(0))
+            sleepWarning = true
+            delay((at - System.currentTimeMillis()).coerceAtLeast(0))
+            sleepWarning = false
+            sleepMinutes = 0
+            sleepAt = null
+            onSleep?.invoke()
+        }
+    }
+
     val player: ExoPlayer = ExoPlayer.Builder(context)
-        .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
+        .setRenderersFactory(DelayedAudioRenderersFactory(context, audioDelay).setEnableDecoderFallback(true))
         // Start playing after one second of video rather than the default two and a half.
         .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 50_000, 1_000, 2_000).build())
         .build()
         .also { exo ->
+            // Follows the setting, whether it's changed here or in Settings › Player.
+            scope.launch {
+                settings.audioDelayMs.collect { saved ->
+                    audioDelayMs = saved
+                    audioDelay.micros = saved * 1_000L
+                }
+            }
             exo.playWhenReady = true
             exo.addListener(Listener())
         }
@@ -324,11 +394,11 @@ class LivePlayerController(
         vod?.let { item ->
             val plan = item.catchupPlan
             val url = if (plan != null) runCatching { plan.urlFrom(catchupOffset) }.getOrNull() ?: item.url else item.url
-            return BackupStream(url, item.title, item.userAgent, item.referrer, live = false, startMs = if (plan != null) 0 else mediaPosition())
+            return BackupStream(url, item.title, item.userAgent, item.referrer, live = false, startMs = if (plan != null) 0 else mediaPosition(), audioDelayMs = audioDelayMs)
         }
         val channel = current ?: return null
         val row = channels.row(channel.variantIds.first()) ?: return null
-        return BackupStream(row.url, "${channel.number}  ${channel.name}", row.userAgent, row.referrer, live = true)
+        return BackupStream(row.url, "${channel.number}  ${channel.name}", row.userAgent, row.referrer, live = true, audioDelayMs = audioDelayMs)
     }
 
     /** Lets go of the stream (most providers allow one connection) while the backup player has it. */
@@ -601,6 +671,18 @@ class LivePlayerController(
     }
 
     /** Channel up (+1) or down (-1) within the chosen group, wrapping round at the ends. */
+    /** The channel [delta] places from [from] (or the one playing) in the channel list, for browsing without switching. */
+    fun neighbour(from: LineupChannel?, delta: Int): LineupChannel? {
+        val list = visibleChannels
+        if (list.isEmpty()) return null
+        val index = list.indexOfFirst { it.key == (from ?: current)?.key }
+        return if (index < 0) list.first() else list[Lineup.step(list.size, index, delta)]
+    }
+
+    /** What's on [channel] now and next, for the browse banner. */
+    suspend fun nowAndNextFor(channel: LineupChannel): List<ProgrammeEntity> =
+        if (channel.guideId == null) emptyList() else runCatching { channels.nowAndNext(channel) }.getOrDefault(emptyList())
+
     fun zap(delta: Int) {
         val list = visibleChannels
         if (list.isEmpty()) return
@@ -683,6 +765,11 @@ class LivePlayerController(
         player.release()
     }
 
+    /** Channels (this session) whose streams only show a picture when played directly, not recorded. */
+    private val directOnly = HashSet<String>()
+    private var firstFrameSeen = false
+    private var pictureJob: Job? = null
+
     private fun playVariant(showing: PlaybackStatus) {
         val channel = current ?: return
         val id = channel.variantIds.getOrNull(variantIndex)
@@ -691,6 +778,8 @@ class LivePlayerController(
             return
         }
         tuneJob?.cancel()
+        pictureJob?.cancel()
+        firstFrameSeen = false
         stopTimeshift()
         status = showing
         tuneJob = scope.launch {
@@ -704,7 +793,8 @@ class LivePlayerController(
             if (stopped) return@launch
             val minutes = settings.timeshiftMinutes.first()
             timeshiftMinutes = minutes
-            val session = if (minutes > 0 && !isHls(row.url)) startTimeshift(row, minutes) else null
+            val direct = row.url in directOnly
+            val session = if (minutes > 0 && !direct && !isHls(row.url)) startTimeshift(row, minutes) else null
             if (stopped) return@launch
             if (session != null) {
                 player.setMediaSource(timeshiftSource(session))
@@ -817,6 +907,38 @@ class LivePlayerController(
         }
     }
 
+    /**
+     * A live channel that says it's playing but shows no picture (a black screen): first try it
+     * without the pause/rewind recorder, then its other copies, then give up (and the backup player
+     * takes over). Radio-style channels with no video at all are left alone.
+     */
+    private fun watchForPicture() {
+        pictureJob?.cancel()
+        pictureJob = scope.launch {
+            delay(NO_PICTURE_MILLIS)
+            if (firstFrameSeen || vod != null || stopped) return@launch
+            val videoTracks = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+            if (player.currentTracks.groups.isNotEmpty() && videoTracks.isEmpty()) return@launch
+            val channel = current ?: return@launch
+            val row = playingRow
+            when {
+                timeshiftActive && row != null -> {
+                    directOnly += row.url
+                    playVariant(PlaybackStatus.Loading)
+                }
+                variantIndex + 1 < channel.variantIds.size -> {
+                    variantIndex++
+                    attempt = 0
+                    playVariant(PlaybackStatus.TryingBackup)
+                }
+                else -> {
+                    player.stop()
+                    status = PlaybackStatus.Failed
+                }
+            }
+        }
+    }
+
     private fun watchForStall() {
         stallJob?.cancel()
         stallJob = scope.launch {
@@ -881,6 +1003,7 @@ class LivePlayerController(
                     attempt = 0
                     status = PlaybackStatus.Playing
                     updateStreamInfo()
+                    if (vod == null && !firstFrameSeen) watchForPicture()
                     // A catch-up request from a whole minute: move to the exact point if the stream lets us.
                     catchupExact?.let { exact ->
                         catchupExact = null
@@ -931,20 +1054,27 @@ class LivePlayerController(
             updateStreamInfo()
         }
 
+        override fun onRenderedFirstFrame() {
+            firstFrameSeen = true
+            pictureJob?.cancel()
+        }
+
         override fun onVideoSizeChanged(videoSize: VideoSize) {
             updateStreamInfo()
         }
     }
 
     private companion object {
-        const val STALL_MILLIS = 20_000L
+        const val STALL_MILLIS = 15_000L
+        const val NO_PICTURE_MILLIS = 7_000L
+        val SLEEP_OPTIONS = listOf(0, 30, 60, 90, 120)
         const val GUIDE_REFRESH_MILLIS = 60_000L
         const val PROGRESS_SAVE_MILLIS = 10_000L
         const val MIN_RESUME_MILLIS = 30_000L
         const val END_MARGIN_MILLIS = 120_000L
         const val UP_NEXT_SECONDS = 10
         const val USER_AGENT = "Northlight/0.1 (Android TV)"
-        const val TIMESHIFT_START_MILLIS = 12_000L
+        const val TIMESHIFT_START_MILLIS = 8_000L
         /** How far behind the newest recorded slice "live" plays, so it never runs dry. */
         const val LIVE_OFFSET_MILLIS = 6_000L
     }

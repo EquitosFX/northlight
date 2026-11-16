@@ -24,6 +24,7 @@ class SettingsRepository(private val context: Context) {
     private val catchupOffsetKey = intPreferencesKey("catchup_offset_minutes")
     private val autoRefreshKey = intPreferencesKey("auto_refresh_hours")
     private val backupPlayerKey = androidx.datastore.preferences.core.booleanPreferencesKey("backup_player")
+    private val audioDelayKey = intPreferencesKey("audio_delay_ms")
     private val subtitleLanguageKey = stringPreferencesKey("subtitle_language")
     private val osKeyKey = stringPreferencesKey("opensubtitles_key")
     private val osUserKey = stringPreferencesKey("opensubtitles_user")
@@ -56,10 +57,6 @@ class SettingsRepository(private val context: Context) {
         context.settingsStore.edit { prefs -> prefs[timeshiftKey] = minutes }
     }
 
-    /**
-     * Minutes added to a programme's times when asking the provider for catch-up. Some providers' clocks
-     * are off by an hour or more, which plays the programme before (or after) the one chosen.
-     */
     /** Whether the backup player takes over when the normal one can't play a stream. */
     val backupPlayer: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[backupPlayerKey] ?: true }
 
@@ -74,6 +71,17 @@ class SettingsRepository(private val context: Context) {
         context.settingsStore.edit { prefs -> prefs[autoRefreshKey] = hours }
     }
 
+    /** Sound moved against the picture, in milliseconds: positive is later. */
+    val audioDelayMs: Flow<Int> = context.settingsStore.data.map { prefs -> prefs[audioDelayKey] ?: 0 }
+
+    suspend fun setAudioDelayMs(ms: Int) {
+        context.settingsStore.edit { prefs -> prefs[audioDelayKey] = ms.coerceIn(-MAX_AUDIO_DELAY_MS, MAX_AUDIO_DELAY_MS) }
+    }
+
+    /**
+     * Minutes added to a programme's times when asking the provider for catch-up. Some providers' clocks
+     * are off by an hour or more, which plays the programme before (or after) the one chosen.
+     */
     val catchupOffsetMinutes: Flow<Int> = context.settingsStore.data.map { prefs -> prefs[catchupOffsetKey] ?: 0 }
 
     suspend fun setCatchupOffsetMinutes(minutes: Int) {
@@ -134,6 +142,7 @@ class SettingsRepository(private val context: Context) {
     companion object {
         const val DEFAULT_TIMESHIFT_MINUTES = 30
         const val MAX_CATCHUP_OFFSET = 12 * 60
+        const val MAX_AUDIO_DELAY_MS = 1_000
     }
 }
 

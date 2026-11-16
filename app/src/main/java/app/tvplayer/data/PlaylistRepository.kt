@@ -209,7 +209,22 @@ class PlaylistRepository(
     }
 
     /** Fetches a series' seasons and episodes from its Xtream Codes server. */
-    suspend fun seriesDetails(series: VodRow): SeriesDetails = withContext(Dispatchers.IO) {
+    // A series' episode list, kept for half an hour so going back to a show doesn't ask the server again.
+    private val seriesCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, SeriesDetails>>()
+
+    /** The episode list fetched last time, if it's still fresh. */
+    fun cachedSeriesDetails(series: VodRow): SeriesDetails? =
+        seriesCache["${series.playlistId}|${series.remoteId}|${series.name}"]
+            ?.takeIf { System.currentTimeMillis() - it.first < 30 * 60_000L }?.second
+
+    suspend fun seriesDetails(series: VodRow, fresh: Boolean = false): SeriesDetails {
+        if (!fresh) cachedSeriesDetails(series)?.let { return it }
+        return loadSeriesDetails(series).also {
+            seriesCache["${series.playlistId}|${series.remoteId}|${series.name}"] = System.currentTimeMillis() to it
+        }
+    }
+
+    private suspend fun loadSeriesDetails(series: VodRow): SeriesDetails = withContext(Dispatchers.IO) {
         val playlist = db.playlists().getBlocking(series.playlistId) ?: throw IOException("That playlist no longer exists.")
         val seriesId = series.remoteId
         if (playlist.type != PlaylistEntity.TYPE_XTREAM || seriesId == null) {

@@ -96,6 +96,8 @@ class MovieNightState {
     var searching by mutableStateOf(false)
     var problem by mutableStateOf<String?>(null)
     var focusedPick by mutableIntStateOf(0)
+    /** Titles already offered for these answers, left out of "Show me others". */
+    val shown = HashSet<Long>()
 
     fun restart() {
         step = 0
@@ -131,14 +133,16 @@ fun MovieNightScreen(
     // Each step replaces the last one's buttons, so focus is parked while it changes.
     val holdFocus = LocalHoldFocus.current
 
-    fun search() {
+    fun search(reroll: Boolean = false) {
+        if (!reroll) state.shown.clear()
         state.searching = true
         state.problem = null
         scope.launch {
             try {
-                val found = metadata.movieNight(state.answers.toMap(), watched.recent.value)
+                val found = metadata.movieNight(state.answers.toMap(), watched.recent.value, exclude = state.shown.toSet())
                 when {
                     found == null -> state.problem = "Movie night uses TMDB to find films and series. Add your free TMDB key in Settings › Film info."
+                    found.isEmpty() && reroll -> state.problem = "That's everything in your playlists that fits those answers. Start again to try different ones."
                     found.isEmpty() -> state.problem = "Nothing in your playlists matched, even with looser choices. Try different answers."
                     else -> {
                         state.picks = found
@@ -247,10 +251,20 @@ fun MovieNightScreen(
                     state.restart()
                 }
                 Scene.Results -> picks?.let {
-                    Shortlist(state, it, onOpen = onOpen, onRestart = {
-                        holdFocus()
-                        state.restart()
-                    })
+                    Shortlist(
+                        state,
+                        it,
+                        onOpen = onOpen,
+                        onRestart = {
+                            holdFocus()
+                            state.restart()
+                        },
+                        onReroll = {
+                            holdFocus()
+                            state.shown += it.map { pick -> pick.row.id }
+                            search(reroll = true)
+                        },
+                    )
                 }
             }
         }
@@ -454,7 +468,14 @@ private fun Searching() {
 }
 
 @Composable
-private fun Shortlist(state: MovieNightState, picks: List<MoviePick>, onOpen: (VodRow) -> Unit, onRestart: () -> Unit) {
+private fun Shortlist(
+    state: MovieNightState,
+    picks: List<MoviePick>,
+    onOpen: (VodRow) -> Unit,
+    onRestart: () -> Unit,
+    /** A fresh shortlist for the same answers. */
+    onReroll: () -> Unit,
+) {
     val colors = AppTheme.colors
     val focused = picks.getOrNull(state.focusedPick) ?: picks.first()
     val firstPoster = remember { FocusRequester() }
@@ -469,9 +490,10 @@ private fun Shortlist(state: MovieNightState, picks: List<MoviePick>, onOpen: (V
             Label(text = "MOVIE NIGHT  ·  YOUR SHORTLIST", style = AppType.label.copy(letterSpacing = 2.sp), color = colors.accent)
         }
         // The highlighted pick's details change with a gentle fade.
-        Crossfade(targetState = focused, animationSpec = tween(280), label = "pick") { pick ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(720.dp)) {
-                Label(text = pick.title, style = AppType.display.copy(fontSize = 34.sp, lineHeight = 40.sp), maxLines = 1)
+        // Every line has a fixed height, so the posters below never move whatever the length of the description.
+        Crossfade(targetState = focused, animationSpec = tween(220), label = "pick") { pick ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(720.dp).height(DetailsHeight)) {
+                Label(text = pick.title, style = AppType.display.copy(fontSize = 34.sp, lineHeight = 40.sp), maxLines = 1, modifier = Modifier.height(40.dp))
                 val meta = listOfNotNull(
                     if (pick.isSeries) "Series" else "Film",
                     pick.year?.toString(),
@@ -484,8 +506,10 @@ private fun Shortlist(state: MovieNightState, picks: List<MoviePick>, onOpen: (V
                     pick.genres.take(3).joinToString(", ").takeIf { it.isNotEmpty() },
                 ).joinToString("  ·  ")
                 Label(text = meta, style = AppType.title.copy(fontSize = 16.sp), color = colors.accent, maxLines = 1)
-                Label(text = pick.overview ?: "No description available.", style = AppType.body.copy(fontSize = 15.sp, lineHeight = 21.sp), color = colors.textDim, maxLines = 3)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(modifier = Modifier.height(63.dp)) {
+                    Label(text = pick.overview ?: "No description available.", style = AppType.body.copy(fontSize = 15.sp, lineHeight = 21.sp), color = colors.textDim, maxLines = 3)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(30.dp)) {
                     pick.differences.forEach { note -> Chip(note) }
                 }
             }
@@ -514,7 +538,11 @@ private fun Shortlist(state: MovieNightState, picks: List<MoviePick>, onOpen: (V
                 )
             }
             item(key = "again") {
-                Box(modifier = Modifier.height(177.dp), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier.height(177.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                ) {
+                    BigButton("Show me others", onClick = onReroll)
                     BigButton("Start again", onClick = onRestart)
                 }
             }
@@ -633,3 +661,6 @@ private fun AutoFocusOnce(requester: FocusRequester) {
         if (autoFocus()) runCatching { requester.requestFocus() }
     }
 }
+
+/** The shortlist's details block: title, details line, three lines of description and the notes. */
+private val DetailsHeight = 40.dp + 22.dp + 63.dp + 30.dp + 3 * 8.dp

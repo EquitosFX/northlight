@@ -1,5 +1,6 @@
 package app.tvplayer
 
+import app.tvplayer.data.NewEpisodes
 import app.tvplayer.data.HomeScreenRows
 import app.tvplayer.data.ChannelCheckRepository
 import app.tvplayer.data.BackupRepository
@@ -78,6 +79,8 @@ class AppContainer(context: Context) {
     val watched: WatchedTitles by lazy { WatchedTitles(appContext) }
 
     val myList: MyListRepository by lazy { MyListRepository(appContext) }
+
+    val newEpisodes: NewEpisodes by lazy { NewEpisodes(appContext, channels, playlists) }
 
     val backup: BackupRepository by lazy { BackupRepository(appContext, database, settings, myList, playlists) }
 

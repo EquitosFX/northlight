@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.LocalWatched
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import app.tvplayer.core.mylist.WatchItem
@@ -140,6 +141,9 @@ internal fun FilmPane(
                 if (trailer != null) {
                     PageButton(text = "Trailer") { openTrailer(context, trailer) }
                 }
+                val watched = LocalWatched.current
+                val seen = film.url in watched
+                PageButton(text = if (seen) "✓ Watched" else "Mark as watched") { watched.mark(film.url, !seen) }
             }
             // Down from the buttons reaches the director and cast; selecting one shows their other titles.
             // The row runs to the screen edge and scrolls, so no name is cut short.

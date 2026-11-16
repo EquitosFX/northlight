@@ -1,5 +1,7 @@
 package app.tvplayer.demo
 
+import java.time.LocalDate
+import app.tvplayer.core.seasonal.Christmas
 import app.tvplayer.core.mylist.WatchItem
 import app.tvplayer.core.mylist.Reminder
 import org.junit.rules.TestName
@@ -163,6 +165,9 @@ class ScreenshotTest {
         if (!now.contains(text, ignoreCase = true)) problems += "$step: expected focus on \"$text\", but it was on \"$now\""
     }
 
+    private fun isShown(text: String) =
+        rule.onAllNodesWithText(text, substring = true, ignoreCase = true).fetchSemanticsNodes().isNotEmpty()
+
     private fun expectShown(text: String, step: String) {
         val found = rule.onAllNodesWithText(text, substring = true, ignoreCase = true).fetchSemanticsNodes()
         if (found.isEmpty()) problems += "$step: expected \"$text\" on screen"
@@ -240,6 +245,12 @@ class ScreenshotTest {
 
         press("down", "down")
         expectFocus("Ember Valley", "Down to Continue watching")
+        if (Christmas.inSeason(LocalDate.now())) {
+            press("down")
+            expectShown("Christmas films and series", "The seasonal row, from November")
+            expectFocus("Paper Moons", "Down to the Christmas row")
+            shot("03b-home-christmas")
+        }
         press("down")
         expectShown("Because you watched Ember Valley", "Suggestions from what's been watched")
         expectFocus("Signal Lost", "Down to the suggestions")
@@ -351,6 +362,13 @@ class ScreenshotTest {
         press("ok", "ok")
         expectShown("Atlas News", "Playing shows the channel")
         shot("09-playing-live")
+        // Up: another channel's programmes, without switching; Back stays on this one.
+        press("up")
+        expectShown("OK to watch", "Up shows another channel without switching")
+        shot("09a-browse-channels")
+        press("back")
+        expectHidden("OK to watch", "Back closes the browse banner")
+        expectPanel(open = false, step = "Back from browsing stays full screen")
         press("ok")
         expectShown("Subtitles", "OK shows the player controls")
         expectShown("Channels", "The controls offer the channel list")
@@ -427,10 +445,15 @@ class ScreenshotTest {
             Reminder("1|meridian one", "Meridian One", null, "Quiz at Nine", now + 3_600_000, now + 7_200_000),
         )
         app.container.myList.toggleWatch(WatchItem("movie", "Harbour of Glass", null, "http://demo.invalid/movie/demo/demo/2.mkv", now))
+        app.container.myList.toggleWatch(WatchItem("series", "Cobalt Street", null, "", now))
+        // Watched to the end: a tick; a series with episodes added since last time: a badge.
+        app.container.watched.mark("http://demo.invalid/movie/demo/demo/2.mkv", true)
+        app.getSharedPreferences("new_episodes", 0).edit().putStringSet("flagged", setOf("series|cobalt street")).commit()
         open(Dest.MY_LIST)
         press("right")
         expectShown("Quiz at Nine", "My list shows reminders")
         expectShown("Harbour of Glass", "My list shows the watchlist")
+        expectShown("NEW EPISODES", "A series with new episodes is flagged")
         shot("28-my-list")
     }
 
@@ -509,6 +532,14 @@ class ScreenshotTest {
         expectShown("YOUR SHORTLIST", "Back from the page returns to the shortlist")
         press("back")
         expectShown("QUESTION 10 OF 10", "Back from the shortlist goes to the last question")
+
+        // Same answers, different titles.
+        press("ok")
+        expectShown("YOUR SHORTLIST", "The shortlist again")
+        moveTo("Show me others", "right", max = 12, step = "Along to Show me others")
+        press("ok")
+        if (!isShown("YOUR SHORTLIST") && !isShown("That's everything")) problems += "Show me others gave neither titles nor a message"
+        shot("27b-movie-night-others")
     }
 
     private fun isCategory(text: String) = listOf(

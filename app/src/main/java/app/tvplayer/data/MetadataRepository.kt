@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.seasonal.Christmas
 import app.tvplayer.core.tmdb.TmdbEpisode
 import app.tvplayer.core.tmdb.TmdbCredit
 import app.tvplayer.core.movienight.PickFacts
@@ -190,7 +191,13 @@ class MetadataRepository(
      * playlists, and returns up to [count] with their details and what sets each apart. Looser
      * searches are tried when too few are found. Null without a TMDB key.
      */
-    suspend fun movieNight(answers: Map<String, String>, watched: List<WatchedTitle>, count: Int = 6): List<MoviePick>? =
+    suspend fun movieNight(
+        answers: Map<String, String>,
+        watched: List<WatchedTitle>,
+        count: Int = 6,
+        /** Titles (by id) already offered, for "Show me others". */
+        exclude: Set<Long> = emptySet(),
+    ): List<MoviePick>? =
         withContext(Dispatchers.IO) {
             val key = settings.tmdbKey.first().trim()
             if (key.isEmpty()) return@withContext null
@@ -214,6 +221,7 @@ class MetadataRepository(
                         results.forEachIndexed { order, item ->
                             val row = index.find(listOf(TmdbCredit(item.title, item.year, type, null))).firstOrNull() ?: return@forEachIndexed
                             val show = ChannelsRepository.asShow(row)
+                            if (show.id in exclude) return@forEachIndexed
                             val watchedKey = type + "|" + TitleCleaner.clean(show.name).first.lowercase().filter(Char::isLetterOrDigit)
                             if (watchedKey in seen) return@forEachIndexed
                             found += show to item
@@ -261,6 +269,46 @@ class MetadataRepository(
             picks.mapIndexed { i, pick -> pick.copy(differences = notes[i]) }
         }
 
+    private var christmasFound: Pair<String, List<VodRow>>? = null
+
+    /**
+     * Christmas films and series in the viewer's playlists, for the seasonal row on Home: TMDB's most
+     * popular Christmas titles (with a key), then any whose name says Christmas. Worked out once a day.
+     */
+    suspend fun christmas(count: Int = 24): List<VodRow> = withContext(Dispatchers.IO) {
+        val stamp = java.time.LocalDate.now().toString() + "|" + db.channels().vodCount()
+        christmasFound?.let { (day, rows) -> if (day == stamp) return@withContext rows }
+        val index = libraryIndex()
+        val found = LinkedHashMap<String, VodRow>()
+        fun add(row: VodRow) {
+            val show = ChannelsRepository.asShow(row)
+            if (found.size < count) found.putIfAbsent(show.kind + "|" + show.name.lowercase(), show)
+        }
+        val key = settings.tmdbKey.first().trim()
+        if (key.isNotEmpty()) {
+            // Films and series in turn, a page at a time, most popular first.
+            for (page in 1..CHRISTMAS_PAGES) {
+                var any = false
+                for (type in listOf("movie", "tv")) {
+                    val results = try {
+                        MovieNight.parseDiscover(get(Christmas.discoverUrl(type, page), key), type)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    any = any || results.isNotEmpty()
+                    index.find(results.map { TmdbCredit(it.title, it.year, type, null) }).forEach(::add)
+                }
+                if (!any || found.size >= count) break
+            }
+        }
+        if (found.size < count) {
+            db.channels().allVod().asSequence()
+                .filter { Christmas.looksFestive(ChannelsRepository.asShow(it).name) }
+                .forEach(::add)
+        }
+        found.values.toList().also { christmasFound = stamp to it }
+    }
+
     private suspend fun libraryIndex(): LibraryIndex<VodRow> {
         val count = db.channels().vodCount()
         index?.let { if (it.size == count) return it }
@@ -303,6 +351,9 @@ class MetadataRepository(
 
         /** Pages of TMDB results (20 a page) checked against the playlists per search. */
         const val MOVIE_NIGHT_PAGES = 6
+
+        /** Pages of TMDB's Christmas titles checked for the seasonal row. */
+        const val CHRISTMAS_PAGES = 5
     }
 }
 

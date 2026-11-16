@@ -76,6 +76,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Favourite channels (Right in the channel list) and a Favourites group | Built |
 | Custom groups, hide/rename/renumber, PIN-locked groups | Not started |
 | Channel up/down with wrap-around, last channel remembered | Built |
+| Browse other channels while watching (Up/Down shows their now and next; OK switches) | Built |
 | Now and next in the info banner and channel list | Built |
 | Number entry | Not started |
 | Catch-up: the guide goes back as far as the provider keeps programmes; OK on a past programme plays it from the start (Xtream Codes and M3U catch-up types) | Built |
@@ -93,14 +94,17 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Films and Series screens: groups, poster grid, series seasons and episodes | Built |
 | Playback with pause and 10-second skip, resume where left off | Built |
 | Film page with Play, Resume and Start over | Built |
-| Watched marks, sorting | Not started |
+| Watched ticks on films and episodes (and Mark as watched on a film page) | Built |
+| New episode alerts for series in My list (checked every 4 hours) | Built |
+| Christmas row on Home, 1 November to 6 January | Built |
+| Sorting | Not started |
 | Continue Watching rail on Home | Built |
 | Autoplay next episode with countdown, next/previous episode media keys | Built |
 | Watchlist (My list, Home rail) | Built |
 | Remembered audio/subtitle tracks, OpenSubtitles, subtitle styling | OpenSubtitles and styling built; remembering tracks not started |
 | Skip intro / Skip recap and an early Up next over the credits (TheIntroDB timings, needs a TMDB key) | Built |
 | "Because you watched…" suggestions on Home (TMDB recommendations matched to your playlists) | Built |
-| Movie night: ten questions, then a shortlist from your playlists with ratings, running times and how the picks differ (needs a TMDB key) | Built |
+| Movie night: ten questions, then a shortlist from your playlists with ratings, running times and how the picks differ, and Show me others for the same answers (needs a TMDB key) | Built |
 | Search results as poster, person and channel tiles | Built |
 | Progress bar you can move along with Left/Right (faster when held); 30-second and 5-minute skips; catch-up moves by whole minutes | Built |
 
@@ -111,9 +115,11 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | ExoPlayer playback (TS and HLS), per-channel User-Agent and referrer | Built |
 | VLC backup player (automatic), external player hand-off | Backup player built |
 | Frame-rate matching, HDR, audio passthrough | Built on the player's defaults; needs checking on a Shield |
-| Audio delay | Not started |
+| Audio delay (lip sync, 50 ms steps, in the player and Settings › Player) | Built |
 | Stream info, auto-reconnect, fall-through to backup copies, retry | Built |
-| Sleep timer, zoom modes, deinterlacing, buffer settings | Not started |
+| Sleep timer (30 min to 2 hours, warns a minute before) | Built |
+| Black-screen detection: no picture after 7 s tries without rewind, then other copies, then the backup player | Built |
+| Zoom modes, deinterlacing, buffer settings | Not started |
 
 ## Profiles, sport, voice, system
 

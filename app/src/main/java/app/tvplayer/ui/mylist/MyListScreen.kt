@@ -1,5 +1,6 @@
 package app.tvplayer.ui.mylist
 
+import app.tvplayer.ui.components.LocalNewEpisodes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,7 @@ fun MyListScreen(
 ) {
     val colors = AppTheme.colors
     val watchlist by myList.watchlist.collectAsStateWithLifecycle()
+    val newEpisodes = LocalNewEpisodes.current.keys
     val reminders by myList.reminders.collectAsStateWithLifecycle()
     val holdFocus = LocalHoldFocus.current
     val first = remember { FocusRequester() }
@@ -99,6 +101,7 @@ fun MyListScreen(
                                     onOpenTitle(item)
                                 },
                                 modifier = Modifier.width(118.dp).then(if (index == 0) Modifier.focusRequester(first) else Modifier),
+                                newEpisodes = item.key in newEpisodes,
                             )
                             Label(text = if (item.kind == "series") "Series" else "Film", style = AppType.caption, color = colors.textFaint)
                         }

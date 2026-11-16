@@ -41,6 +41,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     val language by settings.subtitleLanguage.collectAsStateWithLifecycle(initialValue = "en")
     val offset by settings.catchupOffsetMinutes.collectAsStateWithLifecycle(initialValue = 0)
     val backupPlayer by settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
+    val audioDelay by settings.audioDelayMs.collectAsStateWithLifecycle(initialValue = 0)
     val saved by settings.openSubtitles.collectAsStateWithLifecycle(initialValue = OpenSubtitlesAccount("", "", ""))
     var key by remember(saved) { mutableStateOf(saved.apiKey) }
     var user by remember(saved) { mutableStateOf(saved.username) }
@@ -79,6 +80,31 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(label = "Use when needed", selected = backupPlayer) { scope.launch { settings.setBackupPlayer(true) } }
             Chip(label = "Off", selected = !backupPlayer) { scope.launch { settings.setBackupPlayer(false) } }
+        }
+
+        Label(text = "Sound in sync", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
+        Label(
+            text = "If voices don't match lips (common with soundbars and some TVs), move the sound. " +
+                "Also in the player: OK › Audio.",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 2,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Chip(label = "Earlier", selected = false) { scope.launch { settings.setAudioDelayMs(audioDelay - 50) } }
+            androidx.compose.foundation.layout.Box(modifier = Modifier.width(150.dp), contentAlignment = Alignment.Center) {
+                Label(
+                    text = when {
+                        audioDelay == 0 -> "In step"
+                        audioDelay > 0 -> "$audioDelay ms later"
+                        else -> "${-audioDelay} ms earlier"
+                    },
+                    style = AppType.title,
+                    color = if (audioDelay == 0) colors.text else colors.accent,
+                )
+            }
+            Chip(label = "Later", selected = false) { scope.launch { settings.setAudioDelayMs(audioDelay + 50) } }
+            if (audioDelay != 0) Chip(label = "Reset", selected = false) { scope.launch { settings.setAudioDelayMs(0) } }
         }
 
         Label(text = "Catch-up timing", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))

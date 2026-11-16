@@ -95,7 +95,7 @@ private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(250.dp),
+            .height(270.dp),
     ) {
         val backdrop = hero.backdrop
         if (backdrop != null) {
@@ -132,13 +132,14 @@ private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
         Column(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .padding(start = SideMargin)
+                // Room above, so the first line isn't tight against the top of the TV; the artwork still runs to the top.
+                .padding(start = SideMargin, top = 26.dp)
                 .width(430.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Label(text = hero.overline, style = AppType.overline, color = colors.accent)
             Label(text = hero.title, style = AppType.display, maxLines = 2)
-            hero.tagline?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 3) }
+            hero.tagline?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 2) }
             hero.meta?.let { Label(text = it, style = AppType.label, color = colors.textFaint) }
 
             Row(

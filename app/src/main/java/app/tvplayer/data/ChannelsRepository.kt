@@ -32,6 +32,12 @@ class ChannelsRepository(private val db: AppDatabase) {
      * listed once with all of them.
      */
     suspend fun sport(now: Long = System.currentTimeMillis(), days: Int = 3): List<SportEvent> = withContext(Dispatchers.IO) {
+        checkStamp()
+        cachedSport()?.let { return@withContext it }
+        findSport(now, days).also { listCache["sport"] = now to it }
+    }
+
+    private suspend fun findSport(now: Long, days: Int): List<SportEvent> = withContext(Dispatchers.IO) {
         val channels = lineup().channels.filter { it.guideId != null }
         val byGuide = channels.groupBy { it.playlistId to it.guideId!! }
         val sportsGuideIds = channels.filter { SportFinder.isSportsChannel(it.name, it.group) }.mapNotNull { it.guideId }.distinct()
@@ -126,20 +132,69 @@ class ChannelsRepository(private val db: AppDatabase) {
         return programmes(channel, now, now + 12 * HOUR).take(2)
     }
 
-    suspend fun groups(kind: String): List<GroupCount> {
-        val groups = db.channels().groups(kind)
-        if (kind != ChannelEntity.KIND_SERIES) return groups
-        // Count shows, not the separate episodes an M3U playlist lists.
-        return groups.map { group -> group.copy(count = showsIn(db.channels().inGroup(kind, group.groupName)).size) }
+    // Films and series lists, and Sport, are kept in memory until a playlist changes, so the
+    // sections open straight away when you come back to them.
+    private val listCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+    @Volatile private var listStamp = Long.MIN_VALUE
+
+    /** Changes whenever a playlist is added, removed or refreshed. */
+    private suspend fun currentStamp(): Long = withContext(Dispatchers.IO) {
+        val playlists = db.playlists().getAllBlocking()
+        (playlists.sumOf { (it.refreshedAt ?: 0L) % 1_000_000_007L } * 31 + playlists.size) * 1_000_003L + db.channels().vodCount()
     }
 
-    suspend fun inGroup(kind: String, group: String?): List<VodRow> {
+    private suspend fun checkStamp() {
+        val stamp = currentStamp()
+        if (stamp != listStamp) {
+            listCache.clear()
+            listStamp = stamp
+        }
+    }
+
+    /** What [groups] returned last time, for showing at once while it's checked. */
+    @Suppress("UNCHECKED_CAST")
+    fun cachedGroups(kind: String): List<GroupCount>? = listCache["g|$kind"] as? List<GroupCount>
+
+    @Suppress("UNCHECKED_CAST")
+    fun cachedInGroup(kind: String, group: String?): List<VodRow>? = listCache["i|$kind|$group"] as? List<VodRow>
+
+    @Suppress("UNCHECKED_CAST")
+    suspend fun groups(kind: String): List<GroupCount> = withContext(Dispatchers.IO) {
+        checkStamp()
+        (listCache["g|$kind"] as? List<GroupCount>)?.let { return@withContext it }
+        val groups = db.channels().groups(kind)
+        val result = if (kind != ChannelEntity.KIND_SERIES) {
+            groups
+        } else {
+            // Count shows, not the separate episodes an M3U playlist lists.
+            groups.map { group -> group.copy(count = showsIn(db.channels().inGroup(kind, group.groupName)).size) }
+        }
+        listCache["g|$kind"] = result
+        result
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    suspend fun inGroup(kind: String, group: String?): List<VodRow> = withContext(Dispatchers.IO) {
+        checkStamp()
+        (listCache["i|$kind|$group"] as? List<VodRow>)?.let { return@withContext it }
         val rows = db.channels().inGroup(kind, group)
-        return if (kind == ChannelEntity.KIND_SERIES) showsIn(rows) else rows
+        val result = if (kind == ChannelEntity.KIND_SERIES) showsIn(rows) else rows
+        listCache["i|$kind|$group"] = result
+        result
+    }
+
+    /** Sport found last time, if it's less than 15 minutes old. */
+    @Suppress("UNCHECKED_CAST")
+    fun cachedSport(): List<SportEvent>? {
+        val (at, events) = (listCache["sport"] as? Pair<Long, List<SportEvent>>) ?: return null
+        val now = System.currentTimeMillis()
+        // Drop events that have finished since.
+        return if (now - at < SPORT_FRESH_MILLIS) events.filter { it.stop > now } else null
     }
 
     companion object {
         private const val HOUR = 3_600_000L
+        private const val SPORT_FRESH_MILLIS = 15 * 60_000L
 
         /**
          * One entry per show. M3U playlists list each episode separately ("Hollow Fen S01 E03"); those are

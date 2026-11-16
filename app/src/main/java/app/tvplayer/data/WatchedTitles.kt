@@ -32,13 +32,23 @@ class WatchedTitles(context: Context) {
         prefs.edit().putString(KEY, list.joinToString("\n") { (if (it.isSeries) "S" else "F") + "\t" + it.name.replace('\n', ' ') }).apply()
     }
 
+    private val finishedState = MutableStateFlow(prefs.getStringSet(FINISHED, emptySet()).orEmpty().toSet())
+
+    /** Films and episodes watched to the end (or marked as watched), by address: for the ticks on posters. */
+    val finishedUrls: StateFlow<Set<String>> = finishedState.asStateFlow()
+
     /** Notes that the film or episode at [url] was watched to the end. */
-    fun finished(url: String) {
-        val set = (prefs.getStringSet(FINISHED, emptySet()).orEmpty().toList().takeLast(MAX_FINISHED - 1) + url).toSet()
+    fun finished(url: String) = mark(url, true)
+
+    /** Ticks a film or episode as watched, or takes the tick off. */
+    fun mark(url: String, watched: Boolean) {
+        val current = finishedState.value
+        val set = if (watched) (current.toList().takeLast(MAX_FINISHED - 1) + url).toSet() else current - url
+        finishedState.value = set
         prefs.edit().putStringSet(FINISHED, set).apply()
     }
 
-    fun isFinished(url: String): Boolean = url in prefs.getStringSet(FINISHED, emptySet()).orEmpty()
+    fun isFinished(url: String): Boolean = url in finishedState.value
 
     /** The address of the episode of [show] played last, if any. */
     fun lastEpisode(show: String): String? = prefs.getString(LAST_EPISODE + show.trim().lowercase(), null)

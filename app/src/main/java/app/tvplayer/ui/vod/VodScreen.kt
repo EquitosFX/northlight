@@ -1,5 +1,8 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.NewEpisodesBadge
+import app.tvplayer.ui.components.WatchedTick
+import app.tvplayer.ui.components.LocalWatched
 import app.tvplayer.data.MyListRepository
 import app.tvplayer.data.WatchedTitles
 import app.tvplayer.ui.components.Dest
@@ -144,7 +147,7 @@ fun VodScreen(
         return
     }
 
-    val groups by produceState<List<GroupCount>?>(initialValue = null, kind) { value = channels.groups(kind) }
+    val groups by produceState(initialValue = channels.cachedGroups(kind), kind) { value = channels.groups(kind) }
     val list = groups
     val noun = if (kind == ChannelEntity.KIND_MOVIE) "films" else "series"
     if (list == null || list.isEmpty()) {
@@ -162,7 +165,7 @@ fun VodScreen(
         state.groupChosen = true
     }
 
-    val items by produceState<List<VodRow>?>(initialValue = null, kind, state.group) {
+    val items by produceState(initialValue = channels.cachedInGroup(kind, state.group), kind, state.group) {
         value = channels.inGroup(kind, state.group)
     }
     val groupFocus = remember { FocusRequester() }
@@ -317,8 +320,16 @@ private fun HighlightHeader(row: VodRow?, info: MetadataEntity?) {
 }
 
 @Composable
-internal fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = Modifier, onFocus: () -> Unit = {}) {
+internal fun PosterCard(
+    row: VodRow,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onFocus: () -> Unit = {},
+    /** Episodes have been added since the viewer last opened this series. */
+    newEpisodes: Boolean = false,
+) {
     val colors = AppTheme.colors
+    val watched = LocalWatched.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FocusSurface(
             onClick = onClick,
@@ -345,6 +356,8 @@ internal fun PosterCard(row: VodRow, onClick: () -> Unit, modifier: Modifier = M
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+            if (row.kind == ChannelEntity.KIND_MOVIE && row.url in watched) WatchedTick(Modifier.align(Alignment.TopEnd))
+            if (newEpisodes) NewEpisodesBadge(Modifier.align(Alignment.TopStart))
         }
         Label(text = row.name, style = AppType.caption, color = colors.textDim)
     }

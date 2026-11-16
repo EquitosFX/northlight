@@ -170,7 +170,14 @@ object DemoData {
             path.contains("/discover/") -> {
                 val page = url.queryParameter("page")?.toIntOrNull() ?: 1
                 val tv = path.endsWith("/tv")
-                val picks = if (page > 1) emptyList() else if (tv) series else films
+                val christmas = url.queryParameter("with_keywords") == "207317"
+                val picks = when {
+                    page > 1 -> emptyList()
+                    // The seasonal row: TMDB calls a few of the demo films Christmas ones.
+                    christmas -> if (tv) emptyList() else films.filter { it.title in setOf("The Long Thaw", "Paper Moons", "Kingfisher") }
+                    tv -> series
+                    else -> films
+                }
                 reply(200, picks.withIndex().joinToString(",", "{\"results\":[", "]}") { (i, f) ->
                     val dateKey = if (tv) "first_air_date" else "release_date"
                     val titleKey = if (tv) "name" else "title"

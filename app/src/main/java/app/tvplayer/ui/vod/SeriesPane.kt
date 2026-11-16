@@ -1,5 +1,8 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.LocalNewEpisodes
+import app.tvplayer.ui.components.WatchedTick
+import app.tvplayer.ui.components.LocalWatched
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import app.tvplayer.core.mylist.WatchItem
@@ -101,7 +104,7 @@ internal fun SeriesPane(
 ) {
     val colors = AppTheme.colors
     val context = LocalContext.current
-    var details by remember(series.id) { mutableStateOf<SeriesDetails?>(null) }
+    var details by remember(series.id) { mutableStateOf(playlists.cachedSeriesDetails(series)) }
     var problem by remember(series.id) { mutableStateOf<String?>(null) }
     val info by produceState<MetadataEntity?>(initialValue = null, series.id) {
         value = metadata.lookup(series.name, ChannelEntity.KIND_SERIES)
@@ -113,6 +116,8 @@ internal fun SeriesPane(
     val watchKey = "series|${series.name.trim().lowercase()}"
     val watchlist by (myList?.watchlist ?: kotlinx.coroutines.flow.MutableStateFlow(emptyList())).collectAsStateWithLifecycle()
     val saved = watchlist.any { it.key == watchKey }
+    val newEpisodeMarks = LocalNewEpisodes.current
+    LaunchedEffect(watchKey) { newEpisodeMarks.seen(watchKey) }
     LaunchedEffect(series.id) {
         try {
             details = playlists.seriesDetails(series)
@@ -449,6 +454,7 @@ private fun EpisodeCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
+    val watched = episode.url in LocalWatched.current
     Column(modifier = Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         FocusSurface(
             onClick = onClick,
@@ -478,7 +484,8 @@ private fun EpisodeCard(
                         .background(Color.Black.copy(alpha = 0.55f)),
                 ) { PlayGlyph(Color.White, Modifier.align(Alignment.Center).size(16.dp)) }
             }
-            if (fraction > 0f) {
+            if (watched) WatchedTick(Modifier.align(Alignment.TopEnd))
+            if (fraction > 0f && !watched) {
                 Box(
                     Modifier
                         .align(Alignment.BottomStart)

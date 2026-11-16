@@ -108,7 +108,19 @@ fun PlayerHost(
         controller.releaseForBackup()
         backup = stream
     }
-    Box(modifier = modifier.background(Color.Black)) {
+    Box(
+        modifier = modifier
+            .background(Color.Black)
+            // In the sleep timer's last minute, any button keeps watching.
+            .onPreviewKeyEvent { event ->
+                if (controller.sleepWarning && event.type == KeyEventType.KeyDown) {
+                    controller.cancelSleep()
+                    true
+                } else {
+                    false
+                }
+            },
+    ) {
         AndroidView(
             factory = { context ->
                 PlayerView(context).apply {
@@ -149,6 +161,9 @@ fun PlayerHost(
         } else {
             MiniLayer(onExpand = onExpand)
         }
+        if (controller.sleepWarning && mode == PlayerMode.FULL) {
+            SleepWarning(modifier = Modifier.align(Alignment.TopEnd).padding(28.dp))
+        }
         backup?.takeIf { mode == PlayerMode.FULL }?.let { stream ->
             BackupPlayerLayer(
                 stream = stream,
@@ -177,9 +192,22 @@ private fun FullScreenLayer(
     var listOpen by remember { mutableStateOf(false) }
     var controlsOpen by remember { mutableStateOf(false) }
     val surfaceFocus = remember { FocusRequester() }
+    // Up and Down show what's on other channels while this one keeps playing; OK switches.
+    var browsing by remember { mutableStateOf<LineupChannel?>(null) }
+    var browseToken by remember { mutableIntStateOf(0) }
+    LaunchedEffect(browsing?.key, browseToken) {
+        if (browsing == null) return@LaunchedEffect
+        delay(BROWSE_MILLIS)
+        browsing = null
+    }
+    fun browse(delta: Int) {
+        browsing = controller.neighbour(browsing, delta)?.takeIf { it.key != controller.current?.key || browsing != null }
+        browseToken++
+    }
 
     // Back from full screen shrinks the picture; with nothing playing it just closes.
     BackHandler { if (controller.current == null) onClose() else onMinimise() }
+    BackHandler(enabled = browsing != null) { browsing = null }
 
     LaunchedEffect(listOpen, controlsOpen) {
         if (!listOpen && !controlsOpen) runCatching { surfaceFocus.requestFocus() }
@@ -192,12 +220,35 @@ private fun FullScreenLayer(
             .onKeyEvent { event ->
                 // While the channel list or the controls are open, they handle the keys.
                 if (listOpen || controlsOpen || event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val browsed = browsing
+                if (browsed != null) {
+                    when (event.key) {
+                        Key.DirectionUp -> browse(+1)
+                        Key.DirectionDown -> browse(-1)
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            browsing = null
+                            if (browsed.key != controller.current?.key) controller.tune(browsed)
+                        }
+                        Key.DirectionLeft, Key.DirectionRight -> browsing = null
+                        else -> return@onKeyEvent false
+                    }
+                    return@onKeyEvent true
+                }
                 when (event.key) {
-                    Key.DirectionUp, Key.ChannelUp -> {
+                    Key.DirectionUp -> {
+                        browse(+1)
+                        true
+                    }
+                    Key.DirectionDown -> {
+                        browse(-1)
+                        true
+                    }
+                    // The remote's channel buttons (where it has them) still switch straight away.
+                    Key.ChannelUp -> {
                         controller.zap(+1)
                         true
                     }
-                    Key.DirectionDown, Key.ChannelDown -> {
+                    Key.ChannelDown -> {
                         controller.zap(-1)
                         true
                     }
@@ -233,7 +284,12 @@ private fun FullScreenLayer(
             .focusProperties { canFocus = !listOpen && !controlsOpen }
             .focusable(),
     ) {
-        if (!controlsOpen) InfoBanner(controller = controller, modifier = Modifier.align(Alignment.BottomCenter))
+        val browsed = browsing
+        if (browsed != null) {
+            BrowseBanner(controller = controller, channel = browsed, modifier = Modifier.align(Alignment.BottomCenter))
+        } else if (!controlsOpen) {
+            InfoBanner(controller = controller, modifier = Modifier.align(Alignment.BottomCenter))
+        }
         StatusMessage(status = controller.status, modifier = Modifier.align(Alignment.Center))
 
         val channel = controller.current
@@ -530,6 +586,54 @@ private fun InfoBanner(controller: LivePlayerController, modifier: Modifier = Mo
 }
 
 @Composable
+private fun SleepWarning(modifier: Modifier = Modifier) {
+    val colors = AppTheme.colors
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.scrim)
+            .border(1.dp, colors.accent, RoundedCornerShape(10.dp))
+            .padding(horizontal = 22.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Label(text = "Sleep timer: stopping in a minute", style = AppType.title, color = colors.accent)
+        Label(text = "Press any button to keep watching", style = AppType.body, color = colors.textDim)
+    }
+}
+
+/** Another channel's now and next, shown while the current one keeps playing. */
+@Composable
+private fun BrowseBanner(controller: LivePlayerController, channel: LineupChannel, modifier: Modifier = Modifier) {
+    val colors = AppTheme.colors
+    val programmes by produceState(emptyList<ProgrammeEntity>(), channel.key) { value = controller.nowAndNextFor(channel) }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, colors.scrim)))
+            .padding(start = 48.dp, end = 48.dp, top = 48.dp, bottom = 28.dp),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Logo(url = channel.logo, modifier = Modifier.size(56.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
+                Label(text = "${channel.number}  ${channel.name}", style = AppType.headline)
+                if (programmes.isEmpty()) {
+                    Label(text = "No guide information", style = AppType.body, color = colors.textDim)
+                } else {
+                    NowNextLines(programmes)
+                }
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Label(text = "OK to watch", style = AppType.title, color = colors.accent)
+                Label(text = "Up / Down for more · Back to stay", style = AppType.caption, color = colors.textDim)
+            }
+        }
+    }
+}
+
+@Composable
 private fun NowNextLines(programmes: List<ProgrammeEntity>) {
     val colors = AppTheme.colors
     val now = System.currentTimeMillis()
@@ -568,7 +672,7 @@ private fun StatusMessage(status: PlaybackStatus, modifier: Modifier = Modifier)
         PlaybackStatus.Loading -> if (showLoading) "Tuning…" else null
         is PlaybackStatus.Reconnecting -> "Reconnecting… (${status.attempt} of ${Reconnect.MAX_ATTEMPTS})"
         PlaybackStatus.TryingBackup -> "Trying another copy of this channel…"
-        PlaybackStatus.Failed -> "This channel isn't playing right now.\nOK to try again · Up or Down for another channel"
+        PlaybackStatus.Failed -> "This channel isn't playing right now.\nOK to try again · Up or Down to find another channel"
         PlaybackStatus.NoChannels -> "No live channels yet.\nAdd a playlist in Settings › Playlists."
         PlaybackStatus.Finished -> "Finished · Back to return"
         is PlaybackStatus.UpNext -> "Next: ${status.title} in ${status.seconds} s\nOK to play now · Back to stop"
@@ -799,6 +903,9 @@ private fun groupLabel(name: String?): String = when (name) {
 }
 
 private const val BANNER_MILLIS = 5_000L
+
+/** How long the browse banner stays up after the last press. */
+private const val BROWSE_MILLIS = 8_000L
 private const val LOADING_DELAY_MILLIS = 600L
 private const val SKIP_MILLIS = 10_000L
 

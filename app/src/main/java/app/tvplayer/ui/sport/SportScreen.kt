@@ -61,7 +61,7 @@ fun SportScreen(
     onRemind: (SportEvent, LineupChannel) -> Unit,
 ) {
     val colors = AppTheme.colors
-    val events by produceState<List<SportEvent>?>(initialValue = null) { value = channels.sport() }
+    val events by produceState(initialValue = channels.cachedSport()) { value = channels.sport() }
     var filter by remember { mutableStateOf<SportKind?>(null) }
     val first = remember { FocusRequester() }
     EntryPoint(first)
