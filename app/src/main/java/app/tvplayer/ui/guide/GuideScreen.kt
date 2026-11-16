@@ -183,7 +183,7 @@ fun GuideScreen(
             slideTick.floatValue = from
             sliding = true
             slideJob = slideScope.launch {
-                androidx.compose.animation.core.animate(from, 0f, tween(SLIDE_MILLIS, easing = FastOutSlowInEasing)) { value, _ ->
+                androidx.compose.animation.core.animate(from, 0f, animationSpec = tween<Float>(SLIDE_MILLIS, easing = FastOutSlowInEasing)) { value, _ ->
                     slideMillis[0] = value
                     slideTick.floatValue = value
                 }
