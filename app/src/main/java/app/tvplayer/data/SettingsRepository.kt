@@ -27,6 +27,7 @@ class SettingsRepository(private val context: Context) {
     private val audioDelayKey = intPreferencesKey("audio_delay_ms")
     private val matchFrameRateKey = androidx.datastore.preferences.core.booleanPreferencesKey("match_frame_rate")
     private val subtitleLanguageKey = stringPreferencesKey("subtitle_language")
+    private val subtitleLookKey = stringPreferencesKey("subtitle_look")
     private val osKeyKey = stringPreferencesKey("opensubtitles_key")
     private val osUserKey = stringPreferencesKey("opensubtitles_user")
     private val osPasswordKey = stringPreferencesKey("opensubtitles_password")
@@ -128,6 +129,13 @@ class SettingsRepository(private val context: Context) {
     }
 
     /** The language subtitles are searched for in, as an OpenSubtitles code. */
+    /** How subtitles look: the box behind them (or a Netflix-style shadow), size, typeface and colour. */
+    val subtitleLook: Flow<SubtitleLook> = context.settingsStore.data.map { prefs -> SubtitleLook.decode(prefs[subtitleLookKey]) }
+
+    suspend fun setSubtitleLook(look: SubtitleLook) {
+        context.settingsStore.edit { prefs -> prefs[subtitleLookKey] = look.encode() }
+    }
+
     val subtitleLanguage: Flow<String> = context.settingsStore.data.map { prefs -> prefs[subtitleLanguageKey] ?: "en" }
 
     suspend fun setSubtitleLanguage(code: String) {
@@ -151,6 +159,30 @@ class SettingsRepository(private val context: Context) {
         const val DEFAULT_TIMESHIFT_MINUTES = 30
         const val MAX_CATCHUP_OFFSET = 12 * 60
         const val MAX_AUDIO_DELAY_MS = 1_000
+    }
+}
+
+/** How subtitles look on screen. */
+data class SubtitleLook(
+    /** "box": white on a dark box; "shadow": no box, a soft shadow (as Netflix); "outline": no box, a dark outline. */
+    val style: String = "box",
+    /** Percent of the standard size. */
+    val size: Int = 100,
+    /** "standard", "bold" or "serif". */
+    val font: String = "standard",
+    /** "white" or "yellow". */
+    val colour: String = "white",
+) {
+    fun encode() = listOf(style, size.toString(), font, colour).joinToString("|")
+
+    companion object {
+        val NETFLIX = SubtitleLook(style = "shadow", size = 100, font = "standard", colour = "white")
+
+        fun decode(text: String?): SubtitleLook {
+            val parts = text?.split('|') ?: return SubtitleLook()
+            if (parts.size != 4) return SubtitleLook()
+            return SubtitleLook(parts[0], parts[1].toIntOrNull()?.coerceIn(60, 200) ?: 100, parts[2], parts[3])
+        }
     }
 }
 

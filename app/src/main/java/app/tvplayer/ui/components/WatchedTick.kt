@@ -27,6 +27,12 @@ class WatchedMarks(val urls: Set<String>, val mark: (url: String, watched: Boole
 
 val LocalWatched = compositionLocalOf { WatchedMarks(emptySet()) { _, _ -> } }
 
+/**
+ * TMDB's poster for a film or series, for posters whose playlist picture is missing or won't load
+ * (the playlist's own picture is always tried first).
+ */
+val LocalPosterLookup = compositionLocalOf<suspend (app.tvplayer.data.db.VodRow) -> String?> { { null } }
+
 /** Series in My list with new episodes (by My list key), and a way to say one has been looked at. */
 class NewEpisodeMarks(val keys: Set<String>, val seen: (key: String) -> Unit)
 

@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.LocalPosterLookup
 import app.tvplayer.ui.components.NewEpisodesBadge
 import app.tvplayer.ui.components.WatchedTick
 import app.tvplayer.ui.components.LocalWatched
@@ -166,6 +167,8 @@ fun VodScreen(
     }
 
     val items by produceState(initialValue = channels.cachedInGroup(kind, state.group), kind, state.group) {
+        // Straight from memory when it's been opened before, so nothing flashes.
+        channels.cachedInGroup(kind, state.group)?.let { value = it }
         value = channels.inGroup(kind, state.group)
     }
     val groupFocus = remember { FocusRequester() }
@@ -177,7 +180,7 @@ fun VodScreen(
     // Until a poster is highlighted, the header shows the group's first title.
     var highlighted by remember(kind, state.group) { mutableStateOf<VodRow?>(null) }
     val shown = highlighted ?: items?.firstOrNull()
-    val highlightInfo by produceState<MetadataEntity?>(initialValue = null, shown?.id) {
+    val highlightInfo by produceState(initialValue = shown?.let { metadata.peek(it.name, it.kind) }, shown?.id) {
         val row = shown ?: return@produceState
         if (highlighted != null) delay(350)
         value = metadata.lookup(row.name, row.kind)
@@ -348,11 +351,19 @@ internal fun PosterCard(
                 maxLines = 4,
                 modifier = Modifier.padding(8.dp),
             )
-            if (!row.logo.isNullOrBlank()) {
+            // The playlist's picture; if it's missing or won't load, TMDB's poster instead.
+            val lookup = LocalPosterLookup.current
+            var ownFailed by remember(row.logo) { mutableStateOf(row.logo.isNullOrBlank()) }
+            val fallback by produceState<String?>(initialValue = null, ownFailed, row.id) {
+                if (ownFailed) value = runCatching { lookup(row) }.getOrNull()
+            }
+            val picture = if (ownFailed) fallback else row.logo
+            if (!picture.isNullOrBlank()) {
                 AsyncImage(
-                    model = row.logo,
+                    model = picture,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    onError = { if (!ownFailed) ownFailed = true },
                     modifier = Modifier.fillMaxSize(),
                 )
             }

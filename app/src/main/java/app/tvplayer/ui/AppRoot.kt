@@ -2,6 +2,11 @@
 
 package app.tvplayer.ui
 
+import app.tvplayer.data.SubtitleLook
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.key
+import app.tvplayer.ui.components.LocalPosterLookup
 import app.tvplayer.core.seasonal.Christmas
 import app.tvplayer.ui.components.NewEpisodeMarks
 import app.tvplayer.ui.components.LocalNewEpisodes
@@ -199,6 +204,7 @@ fun AppRoot(
     val deadChannels by container.channelCheck.dead.collectAsStateWithLifecycle()
     val backupPlayerOn by container.settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
     val matchFrameRateOn by container.settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = true)
+    val subtitleLook by container.settings.subtitleLook.collectAsStateWithLifecycle(initialValue = SubtitleLook())
     fun setReminder(reminder: Reminder) {
         val set = container.myList.toggleReminder(reminder)
         notice = if (set) {
@@ -491,6 +497,9 @@ fun AppRoot(
             )
         }
     }
+    val posterLookup: suspend (VodRow) -> String? = remember {
+        { row -> container.metadata.lookup(ChannelsRepository.asShow(row).name, row.kind)?.poster }
+    }
     // Ticks on films and episodes watched to the end.
     val finishedUrls by container.watched.finishedUrls.collectAsStateWithLifecycle()
     val watchedMarks = remember(finishedUrls) { WatchedMarks(finishedUrls) { url, on -> container.watched.mark(url, on) } }
@@ -613,12 +622,18 @@ fun AppRoot(
                 )
                 CompositionLocalProvider(
                     LocalWatched provides watchedMarks,
+                    LocalPosterLookup provides posterLookup,
                     LocalNewEpisodes provides newEpisodeMarks,
                     LocalAutoFocus provides autoFocusAllowed,
                     LocalHoldFocus provides { holdFocus() },
                     LocalEntryFocus provides entryFocus,
                 ) {
+                // Each screen fades in as it opens, so it never flashes up half-drawn while its contents load.
                 val shownPerson = person
+                key(dest, shownPerson) {
+                val appear = remember { Animatable(0f) }
+                LaunchedEffect(Unit) { appear.animateTo(1f, tween(durationMillis = 200, easing = FastOutSlowInEasing)) }
+                Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = appear.value }) {
                 if (shownPerson != null) {
                     TopInset { PersonScreen(person = shownPerson, metadata = container.metadata, onOpen = { row -> openTitle(row) }) }
                 } else when (dest) {
@@ -706,6 +721,7 @@ fun AppRoot(
                             state = movieNightState,
                             metadata = container.metadata,
                             watched = container.watched,
+                            onHome = { goTo(Dest.HOME) },
                             onOpen = { row ->
                                 holdFocus()
                                 if (row.kind == ChannelEntity.KIND_SERIES) {
@@ -782,6 +798,8 @@ fun AppRoot(
                     else -> TopInset { ComingLater(dest) }
                 }
                 }
+                }
+                }
             }
             Sidebar(
                 selected = dest,
@@ -850,6 +868,7 @@ fun AppRoot(
                 intros = container.intros,
                 backupPlayer = backupPlayerOn,
                 matchFrameRate = matchFrameRateOn,
+                subtitleLook = subtitleLook,
                 mode = mode,
                 onMinimise = { mode = PlayerMode.MINI },
                 onExpand = { mode = PlayerMode.FULL },
@@ -862,7 +881,9 @@ fun AppRoot(
                 } else {
                     // Sits in the picture space of the side panel and slides with it.
                     Modifier
-                        .offset { IntOffset((panelSlide.value + SidebarPictureSide).roundToPx(), SidebarPictureTop.roundToPx()) }
+                        // Moves once to where the panel is going rather than with every frame of its slide:
+                        // a video surface dragged along frame by frame flickers and can flash black on some TV boxes.
+                        .offset { IntOffset((panelTarget + SidebarPictureSide).roundToPx(), SidebarPictureTop.roundToPx()) }
                         .size(width = SidebarPictureWidth, height = SidebarPictureHeight)
                         .border(width = 1.dp, color = colors.glassBorder)
                         .onFocusChanged { pictureFocused = it.hasFocus }

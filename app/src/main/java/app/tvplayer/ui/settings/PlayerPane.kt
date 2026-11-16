@@ -1,5 +1,19 @@
 package app.tvplayer.ui.settings
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.graphics.Color
+import app.tvplayer.data.SubtitleLook
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,6 +57,10 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     val backupPlayer by settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
     val audioDelay by settings.audioDelayMs.collectAsStateWithLifecycle(initialValue = 0)
     val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = true)
+    val look by settings.subtitleLook.collectAsStateWithLifecycle(initialValue = SubtitleLook())
+    fun setLook(change: SubtitleLook) {
+        scope.launch { settings.setSubtitleLook(change) }
+    }
     val saved by settings.openSubtitles.collectAsStateWithLifecycle(initialValue = OpenSubtitlesAccount("", "", ""))
     var key by remember(saved) { mutableStateOf(saved.apiKey) }
     var user by remember(saved) { mutableStateOf(saved.username) }
@@ -147,6 +165,28 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
             color = colors.textDim,
             maxLines = 4,
         )
+        SubtitlePreview(look)
+        Label(text = "Style", style = AppType.caption, color = colors.textDim)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(label = "Netflix style", selected = look == SubtitleLook.NETFLIX) { setLook(SubtitleLook.NETFLIX) }
+            Chip(label = "Dark box", selected = look.style == "box") { setLook(look.copy(style = "box")) }
+            Chip(label = "Shadow, no box", selected = look.style == "shadow") { setLook(look.copy(style = "shadow")) }
+            Chip(label = "Outline, no box", selected = look.style == "outline") { setLook(look.copy(style = "outline")) }
+        }
+        Label(text = "Size", style = AppType.caption, color = colors.textDim)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(80 to "Small", 100 to "Medium", 125 to "Large", 150 to "Extra large").forEach { (size, label) ->
+                Chip(label = label, selected = look.size == size) { setLook(look.copy(size = size)) }
+            }
+        }
+        Label(text = "Font and colour", style = AppType.caption, color = colors.textDim)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(label = "Standard", selected = look.font == "standard") { setLook(look.copy(font = "standard")) }
+            Chip(label = "Bold", selected = look.font == "bold") { setLook(look.copy(font = "bold")) }
+            Chip(label = "Serif", selected = look.font == "serif") { setLook(look.copy(font = "serif")) }
+            Chip(label = "White", selected = look.colour == "white") { setLook(look.copy(colour = "white")) }
+            Chip(label = "Yellow", selected = look.colour == "yellow") { setLook(look.copy(colour = "yellow")) }
+        }
         Label(text = "Language", style = AppType.caption, color = colors.textDim)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(OpenSubtitles.LANGUAGES) { (code, name) ->
@@ -221,4 +261,39 @@ private fun offsetText(minutes: Int): String {
     val m = kotlin.math.abs(minutes)
     val text = listOfNotNull((m / 60).takeIf { it > 0 }?.let { "$it h" }, (m % 60).takeIf { it > 0 }?.let { "$it min" }).joinToString(" ")
     return if (minutes > 0) "$text later" else "$text earlier"
+}
+
+/** A sample line in the chosen subtitle look, over a stand-in for the picture. */
+@Composable
+private fun SubtitlePreview(look: SubtitleLook) {
+    val text = if (look.colour == "yellow") Color(0xFFFFE650) else Color.White
+    val family = if (look.font == "serif") FontFamily.Serif else FontFamily.SansSerif
+    val weight = if (look.font == "bold") FontWeight.Bold else FontWeight.Medium
+    val shadow = when (look.style) {
+        "shadow" -> Shadow(Color.Black, Offset(2f, 3f), 8f)
+        "outline" -> Shadow(Color.Black, Offset.Zero, 4f)
+        else -> null
+    }
+    Box(
+        modifier = Modifier
+            .width(520.dp)
+            .height(92.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF6A7F9A), Color(0xFF2B3446)))),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        BasicText(
+            text = "I'll be home before the snow comes in.",
+            style = TextStyle(
+                color = text,
+                fontSize = (17f * look.size / 100f).sp,
+                fontFamily = family,
+                fontWeight = weight,
+                shadow = shadow,
+            ),
+            modifier = Modifier
+                .padding(bottom = 10.dp)
+                .then(if (look.style == "box") Modifier.background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 2.dp) else Modifier),
+        )
+    }
 }

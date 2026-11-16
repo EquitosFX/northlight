@@ -37,7 +37,16 @@ class MetadataRepository(
     /** The playlist's films and series, indexed by cleaned title; rebuilt when the number of titles changes. */
     @Volatile private var index: LibraryIndex<VodRow>? = null
 
-    suspend fun lookup(name: String, kind: String): MetadataEntity? = withContext(Dispatchers.IO) {
+    // Details looked up this session, for showing straight away when a screen opens again.
+    private val recent = android.util.LruCache<String, MetadataEntity>(600)
+
+    /** The details found last time for this title, without waiting; null if not looked up yet. */
+    fun peek(name: String, kind: String): MetadataEntity? = recent.get("$kind|$name")
+
+    suspend fun lookup(name: String, kind: String): MetadataEntity? =
+        lookupStored(name, kind)?.also { recent.put("$kind|$name", it) }
+
+    private suspend fun lookupStored(name: String, kind: String): MetadataEntity? = withContext(Dispatchers.IO) {
         val key = settings.tmdbKey.first().trim()
         if (key.isEmpty()) return@withContext null
         val type = if (kind == ChannelEntity.KIND_SERIES) "tv" else "movie"

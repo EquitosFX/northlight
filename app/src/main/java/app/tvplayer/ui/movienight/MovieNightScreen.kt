@@ -127,11 +127,20 @@ fun MovieNightScreen(
     metadata: MetadataRepository,
     watched: WatchedTitles,
     onOpen: (VodRow) -> Unit,
+    /** Leaves Movie night for Home. */
+    onHome: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val questions = MovieNight.questions
     // Each step replaces the last one's buttons, so focus is parked while it changes.
     val holdFocus = LocalHoldFocus.current
+    // Quitting part-way, or Home from the shortlist: next time starts from the welcome screen.
+    fun leave() {
+        holdFocus()
+        state.restart()
+        state.step = -1
+        onHome()
+    }
 
     fun search(reroll: Boolean = false) {
         if (!reroll) state.shown.clear()
@@ -239,6 +248,7 @@ fun MovieNightScreen(
                         choices = question.choices.map { it.id to it.label },
                         selected = state.answers[question.id],
                         key = question.id,
+                        onQuit = ::leave,
                     ) { choice ->
                         state.answers[question.id] = choice
                         holdFocus()
@@ -259,6 +269,7 @@ fun MovieNightScreen(
                             holdFocus()
                             state.restart()
                         },
+                        onHome = ::leave,
                         onReroll = {
                             holdFocus()
                             state.shown += it.map { pick -> pick.row.id }
@@ -360,6 +371,8 @@ private fun QuestionCard(
     choices: List<Pair<String, String>>,
     selected: String?,
     key: String,
+    /** Leaves the quiz part-way. */
+    onQuit: () -> Unit,
     onChoose: (String) -> Unit,
 ) {
     val colors = AppTheme.colors
@@ -429,11 +442,33 @@ private fun QuestionCard(
                 }
             }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
+        QuitButton(onQuit)
+        Spacer(Modifier.height(12.dp))
         Label(
             text = if (number > 1) "Back for the previous question" else "Back to leave Movie night",
             style = AppType.caption.copy(fontSize = 12.sp),
             color = colors.textFaint,
+        )
+    }
+}
+
+/** A small, quiet button under the answers, so it's never chosen by accident. */
+@Composable
+private fun QuitButton(onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier.height(34.dp),
+        shape = RoundedCornerShape(17.dp),
+        container = Color.Transparent,
+        focusedContainer = colors.glassStrong,
+    ) { focused ->
+        Label(
+            text = "Quit quiz",
+            style = AppType.label,
+            color = if (focused) colors.text else colors.textDim,
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 18.dp),
         )
     }
 }
@@ -475,6 +510,7 @@ private fun Shortlist(
     onRestart: () -> Unit,
     /** A fresh shortlist for the same answers. */
     onReroll: () -> Unit,
+    onHome: () -> Unit,
 ) {
     val colors = AppTheme.colors
     val focused = picks.getOrNull(state.focusedPick) ?: picks.first()
@@ -540,10 +576,11 @@ private fun Shortlist(
             item(key = "again") {
                 Column(
                     modifier = Modifier.height(177.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                    verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
                 ) {
                     BigButton("Show me others", onClick = onReroll)
                     BigButton("Start again", onClick = onRestart)
+                    BigButton("Home", onClick = onHome)
                 }
             }
         }

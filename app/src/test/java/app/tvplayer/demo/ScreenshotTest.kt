@@ -553,6 +553,28 @@ class ScreenshotTest {
         press("ok")
         if (!isShown("YOUR SHORTLIST") && !isShown("That's everything")) problems += "Show me others gave neither titles nor a message"
         shot("27b-movie-night-others")
+
+        // Home from the shortlist.
+        if (isShown("YOUR SHORTLIST")) {
+            moveTo("Show me others", "right", max = 12, step = "Back along to Show me others")
+            moveTo("Home", "down", max = 3, step = "Down to Home")
+            press("ok")
+            expectHidden("YOUR SHORTLIST", "Home leaves Movie night")
+            expectShown("CARRY ON WATCHING", "Home from the shortlist goes Home")
+        }
+    }
+
+    /** Quit part-way through the questions. */
+    @Test fun movieNightQuit() {
+        open(Dest.MOVIE_NIGHT)
+        press("right", "ok")
+        press("ok", "ok")
+        expectShown("QUESTION 3 OF 10", "Part-way through the quiz")
+        moveTo("Quit quiz", "down", max = 6, step = "Down to Quit quiz")
+        shot("26b-movie-night-quit")
+        press("ok")
+        expectHidden("QUESTION", "Quit leaves the quiz")
+        expectShown("CARRY ON WATCHING", "Quit goes Home")
     }
 
     private fun isCategory(text: String) = listOf(
@@ -716,6 +738,8 @@ class ScreenshotTest {
         expectShown("Catch-up timing", "Player pane has the catch-up timing")
         expectShown("No change", "Catch-up timing starts unchanged")
         expectShown("Backup player", "Player pane has the backup player setting")
+        expectShown("Netflix style", "Player pane has the subtitle look")
+        expectShown("Match frame rate", "Player pane has frame-rate matching")
         press("down", "ok")
         expectShown("Keep playlists up to date", "Refresh and check pane")
         expectShown("Check channels", "Refresh and check pane offers the channel check")
