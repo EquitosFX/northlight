@@ -68,6 +68,23 @@ data class VodRow(
 
 data class GroupCount(val groupName: String?, val count: Int)
 
+/** A film or series with its group, for reading a whole section in one go. */
+data class GroupedVodRow(
+    val id: Long,
+    val playlistId: Long,
+    val kind: String,
+    val name: String,
+    val variantKey: String,
+    val logo: String?,
+    val url: String,
+    val remoteId: Long?,
+    val userAgent: String?,
+    val referrer: String?,
+    val groupName: String?,
+) {
+    fun toRow() = VodRow(id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer)
+}
+
 /** One live channel (all its quality copies together), for matching against a guide. */
 data class MatchRow(val variantKey: String, val name: String, val guideId: String?)
 
@@ -108,6 +125,13 @@ interface ChannelDao {
             "WHERE kind = :kind AND groupName IS :group ORDER BY playlistId, position",
     )
     suspend fun inGroup(kind: String, group: String?): List<VodRow>
+
+    /** Every film or series of [kind] with its group, in one read rather than one per group. */
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer, groupName FROM channels " +
+            "WHERE kind = :kind ORDER BY playlistId, position",
+    )
+    suspend fun allInSection(kind: String): List<GroupedVodRow>
 
     /** Names containing the search text: live channels first, then films, then series; shorter names first. */
     @Query(

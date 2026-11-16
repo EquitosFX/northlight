@@ -1,5 +1,8 @@
 package app.tvplayer.ui.guide
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
 import kotlinx.coroutines.delay
@@ -90,6 +93,9 @@ private const val FAVOURITES = "\u0000favourites"
 
 /** The programme the viewer is on, for the header. A null programme means the channel has no guide data. */
 private data class Focused(val channel: LineupChannel, val programme: ProgrammeEntity?)
+
+/** Up or Down in the grid: the row to move to, and the time whose programme to land on there. */
+private data class Jump(val row: Int, val time: Long)
 
 /**
  * The TV guide: an information header for the focused programme, then channels down the side and
@@ -189,6 +195,14 @@ fun GuideScreen(
     // Holding Up or Down (or pressing very fast) moves at a pace the TV box can keep up with,
     // instead of piling up moves until it freezes.
     val lastMove = remember { longArrayOf(0L) }
+    // Up and Down keep to one moment in time: what's on now (or, after moving along a row, the start
+    // of the programme moved to), so a short programme never pulls the highlight later and later.
+    val anchor = remember { longArrayOf(0L) }
+    val focusedRow = remember { intArrayOf(-1) }
+    val movingVertically = remember { booleanArrayOf(false) }
+    val jumpState = remember { mutableStateOf<Jump?>(null) }
+    val rowsList = remember(group) { LazyListState() }
+    val gridScope = rememberCoroutineScope()
 
     Row(
         modifier = Modifier
@@ -258,8 +272,21 @@ fun GuideScreen(
                     val gap = if (event.nativeKeyEvent.repeatCount > 0) HELD_MOVE_MILLIS else QUICK_MOVE_MILLIS
                     if (time - lastMove[0] < gap) return@onPreviewKeyEvent true
                     lastMove[0] = time
-                    false
+                    val from = focusedRow[0]
+                    val to = from + if (event.key == Key.DirectionDown) 1 else -1
+                    // Off the top: the day bar above, as usual.
+                    if (from < 0 || to !in rows.indices) return@onPreviewKeyEvent false
+                    movingVertically[0] = true
+                    jumpState.value = Jump(to, anchor[0])
+                    // A row just off screen is scrolled in first; on screen, landing on it brings it fully into view.
+                    if (rowsList.layoutInfo.visibleItemsInfo.none { it.index == to }) {
+                        gridScope.launch {
+                            if (to > from) rowsList.scrollToItem(rowsList.firstVisibleItemIndex + 1) else rowsList.scrollToItem(to)
+                        }
+                    }
+                    true
                 },
+            state = rowsList,
         ) {
             itemsIndexed(rows, key = { _, channel -> channel.key }) { index, channel ->
                 GuideRow(
@@ -272,7 +299,22 @@ fun GuideScreen(
                     focusRequester = null,
                     entry = if (index == 0) entryFocus else null,
                     onFocusPlaced = { placedFocus = true },
-                    onFocus = { programme -> focusedState.value = Focused(channel, programme) },
+                    onFocus = { programme ->
+                        focusedState.value = Focused(channel, programme)
+                        focusedRow[0] = index
+                        // Moving along a row (not up or down) sets the moment Up and Down keep to.
+                        if (!movingVertically[0]) {
+                            val now2 = System.currentTimeMillis()
+                            anchor[0] = when {
+                                programme == null -> maxOf(windowStart, minOf(now2, windowStart + WINDOW - MINUTE))
+                                now2 in programme.start until programme.stop -> now2
+                                else -> maxOf(programme.start, windowStart)
+                            }
+                        }
+                        movingVertically[0] = false
+                    },
+                    jumpState = jumpState,
+                    index = index,
                     onShift = ::shift,
                     refocus = refocus,
                     onRefocused = { refocus = null },
@@ -477,9 +519,14 @@ private fun GuideRow(
     reminders: Set<String>,
     onRemind: (ProgrammeEntity) -> Unit,
     notWorking: Boolean = false,
+    jumpState: androidx.compose.runtime.MutableState<Jump?>? = null,
+    index: Int = -1,
 ) {
     val colors = AppTheme.colors
     val windowEnd = windowStart + WINDOW
+    // Only the row being moved to notices the move.
+    val jumpTime by remember(jumpState, index) { derivedStateOf { jumpState?.value?.takeIf { it.row == index }?.time } }
+    val onJumped: () -> Unit = { if (jumpState?.value?.row == index) jumpState.value = null }
     // Keeps showing the previous programmes while new ones load, so the grid doesn't flash.
     var programmes by remember { mutableStateOf<List<ProgrammeEntity>?>(null) }
     var loadedFor by remember { mutableLongStateOf(-1L) }
@@ -550,6 +597,8 @@ private fun GuideRow(
                     catchup = false,
                     onFocus = { onFocus(null) },
                     onClick = onPlay,
+                    refocus = jumpTime != null,
+                    onRefocused = onJumped,
                     modifier = edgeKeys(windowStart, windowEnd)
                         .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                         .then(if (entry != null) Modifier.focusRequester(entry) else Modifier),
@@ -559,6 +608,12 @@ private fun GuideRow(
             }
 
             val focusTarget = list.firstOrNull { now in it.start until it.stop } ?: list.first()
+            // Up or Down landing here: the programme on at the moment being kept to, or the nearest after it.
+            val jumpId = jumpTime?.let { time ->
+                (list.firstOrNull { time >= it.start && time < it.stop && it.stop > windowStart && it.start < windowEnd }
+                    ?: list.firstOrNull { it.stop > time && it.start < windowEnd }
+                    ?: list.last()).id
+            }
             for (programme in list) {
                 val from = maxOf(programme.start, windowStart)
                 val to = minOf(programme.stop, windowEnd)
@@ -575,8 +630,8 @@ private fun GuideRow(
                         catchup = catchup,
                         reminder = "${channel.key}|${programme.start}" in reminders,
                         onFocus = { onFocus(programme) },
-                        refocus = programme.id == refocus && loadedFor == windowStart,
-                        onRefocused = onRefocused,
+                        refocus = (programme.id == refocus && loadedFor == windowStart) || (jumpId != null && programme.id == jumpId && loadedFor == windowStart),
+                        onRefocused = if (jumpId != null && programme.id == jumpId) onJumped else onRefocused,
                         onClick = {
                             when {
                                 live -> onPlay()

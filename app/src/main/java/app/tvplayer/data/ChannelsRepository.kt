@@ -166,8 +166,14 @@ class ChannelsRepository(private val db: AppDatabase) {
         val result = if (kind != ChannelEntity.KIND_SERIES) {
             groups
         } else {
-            // Count shows, not the separate episodes an M3U playlist lists.
-            groups.map { group -> group.copy(count = showsIn(db.channels().inGroup(kind, group.groupName)).size) }
+            // Count shows, not the separate episodes an M3U playlist lists. The whole section is read
+            // once (a read per group took many seconds with big playlists), and every group's shows kept.
+            val byGroup = db.channels().allInSection(kind).groupBy({ it.groupName }, { it.toRow() })
+            groups.map { group ->
+                val shows = showsIn(byGroup[group.groupName].orEmpty())
+                listCache["i|$kind|${group.groupName}"] = shows
+                group.copy(count = shows.size)
+            }
         }
         listCache["g|$kind"] = result
         result
