@@ -700,4 +700,12 @@ class ScreenshotTest {
         open(Dest.HOME, ThemeId.MIDNIGHT)
         shot("25-theme-midnight")
     }
+
+    @Test fun christmas() {
+        open(Dest.HOME, ThemeId.CHRISTMAS)
+        shot("25c-theme-christmas")
+        press("right")
+        expectFocus("Resume", "The Christmas theme works like any other")
+        shot("25d-theme-christmas-browsing")
+    }
 }

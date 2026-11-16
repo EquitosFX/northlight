@@ -21,7 +21,8 @@ enum class ThemeId(val key: String, val label: String, val description: String) 
     SKYFALL("skyfall", "Skyfall", "Navy and ice"),
     LAGOON("lagoon", "Lagoon", "Teal and amber"),
     ORCHID("orchid", "Orchid", "Plum and lime"),
-    MIDNIGHT("midnight", "Midnight", "Navy and mint");
+    MIDNIGHT("midnight", "Midnight", "Navy and mint"),
+    CHRISTMAS("christmas", "Christmas", "Red, green and snow");
 
     companion object {
         fun fromKey(key: String?): ThemeId = entries.firstOrNull { it.key == key } ?: SKYFALL
@@ -48,8 +49,19 @@ data class AppColors(
     val ground: Brush get() = Brush.linearGradient(listOf(groundTop, groundMid, groundBottom))
 }
 
+/** True for themes with falling snow behind the screens. */
+val ThemeId.snows: Boolean get() = this == ThemeId.CHRISTMAS
+
 fun paletteFor(id: ThemeId): AppColors = when (id) {
     // From the Skyfall brand: midnight navy, electric blue, ice blue and white.
+    // Deep emerald fading into crimson, with gold for highlights, like a Christmas promo.
+    ThemeId.CHRISTMAS -> AppColors(
+        groundTop = Color(0xFF0E3A2A),
+        groundMid = Color(0xFF4C0A1A),
+        groundBottom = Color(0xFF1E040B),
+        accent = Color(0xFFF2C14E),
+        onAccent = Color(0xFF2A1A02),
+    )
     ThemeId.SKYFALL -> AppColors(
         groundTop = Color(0xFF0C2560),
         groundMid = Color(0xFF061338),

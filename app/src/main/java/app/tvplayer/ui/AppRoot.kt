@@ -2,6 +2,8 @@
 
 package app.tvplayer.ui
 
+import app.tvplayer.ui.theme.snows
+import app.tvplayer.ui.theme.Snowfall
 import app.tvplayer.ui.components.clockTime
 import app.tvplayer.data.db.ProgrammeEntity
 import app.tvplayer.ui.sport.SportScreen
@@ -539,6 +541,8 @@ fun AppRoot(
                 }
             },
     ) {
+        // The Christmas theme's snow, behind everything (and paused while a video fills the screen).
+        if (themeId.snows && mode != PlayerMode.FULL) Snowfall(Modifier.fillMaxSize())
         // The side panel slides in and out. Only the drawing moves during the slide: the screens are
         // laid out once at their new width, so nothing has to be measured again on every frame.
         val panelTarget = if (sidebarOpen) 0.dp else -(SidebarWidth - SidebarPeek)

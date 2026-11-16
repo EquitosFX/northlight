@@ -1,5 +1,6 @@
 package app.tvplayer.ui.settings
 
+import app.tvplayer.ui.theme.snows
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,6 +82,7 @@ private fun ThemeTile(id: ThemeId, inUse: Boolean, onClick: () -> Unit, modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(preview.ground),
             ) {
+                if (id.snows) app.tvplayer.ui.theme.Snowfall(Modifier.matchParentSize(), count = 18)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
