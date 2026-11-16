@@ -387,7 +387,14 @@ class ScreenshotTest {
         if (!focusedText().contains("Pause") && !focusedText().contains("Play")) {
             problems += "OK on Play/Pause moved focus to \"${focusedText()}\""
         }
-        moveTo("Subtitles", "right", step = "Along the controls to Subtitles")
+        // The last button, Sleep, is on screen and can be reached.
+        moveTo("Sleep", "right", max = 12, step = "Along the controls to Sleep")
+        press("ok")
+        expectShown("Sleep 30m", "Sleep sets 30 minutes")
+        shot("09b3-sleep-timer")
+        press("ok", "ok", "ok", "ok")
+        expectFocus("Sleep", "Sleep goes back to off")
+        moveTo("Subtitles", "left", step = "Back along the controls to Subtitles")
         press("ok")
         expectShown("Off", "The subtitles menu")
         expectShown("isn't sending any subtitles", "The subtitles menu explains there are none")

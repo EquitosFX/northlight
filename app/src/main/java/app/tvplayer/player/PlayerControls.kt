@@ -1,5 +1,7 @@
 package app.tvplayer.player
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.offset
@@ -158,7 +160,12 @@ fun PlayerControls(
                 focusRequester = timelineFocus,
                 onSeek = { controller.seekToMedia(it) },
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Scrolls sideways if the buttons don't all fit, so none is ever off the edge.
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Box(
                     modifier = Modifier
                         .size(1.dp)
@@ -211,7 +218,7 @@ fun PlayerControls(
                         controller.goLive()
                     }
                 }
-                Spacer(Modifier.width(18.dp))
+                Spacer(Modifier.width(12.dp))
                 ControlButton(ControlIcon.SUBTITLES, "Subtitles") { panel = Panel.SUBTITLES }
                 ControlButton(ControlIcon.AUDIO, "Audio") { panel = Panel.AUDIO }
                 if (onChannels != null) ControlButton(ControlIcon.CHANNELS, "Channels") { onChannels() }
@@ -428,7 +435,7 @@ private fun ControlButton(
             else -> colors.textFaint.copy(alpha = 0.45f)
         }
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp).align(Alignment.Center),
+            modifier = Modifier.padding(horizontal = 12.dp).align(Alignment.Center),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -570,11 +577,11 @@ private fun AudioSyncRows(controller: LivePlayerController) {
 }
 
 private fun sleepLabel(minutes: Int) = when (minutes) {
-    0 -> "Sleep: off"
-    60 -> "Sleep: 1 hr"
-    90 -> "Sleep: 1½ hrs"
-    120 -> "Sleep: 2 hrs"
-    else -> "Sleep: $minutes min"
+    0 -> "Sleep"
+    60 -> "Sleep 1h"
+    90 -> "Sleep 1½h"
+    120 -> "Sleep 2h"
+    else -> "Sleep ${minutes}m"
 }
 
 @Composable
