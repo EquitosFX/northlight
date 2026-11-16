@@ -269,8 +269,9 @@ fun GuideScreen(
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if (event.key != Key.DirectionUp && event.key != Key.DirectionDown) return@onPreviewKeyEvent false
                     val time = android.os.SystemClock.uptimeMillis()
-                    val gap = if (event.nativeKeyEvent.repeatCount > 0) HELD_MOVE_MILLIS else QUICK_MOVE_MILLIS
-                    if (time - lastMove[0] < gap) return@onPreviewKeyEvent true
+                    // Held down: a steady pace. Pressed quickly: one move at a time, each landing before the next.
+                    if (event.nativeKeyEvent.repeatCount > 0 && time - lastMove[0] < HELD_MOVE_MILLIS) return@onPreviewKeyEvent true
+                    if (jumpState.value != null && time - lastMove[0] < JUMP_TIMEOUT_MILLIS) return@onPreviewKeyEvent true
                     lastMove[0] = time
                     val from = focusedRow[0]
                     val to = from + if (event.key == Key.DirectionDown) 1 else -1
@@ -846,6 +847,8 @@ private fun DayBar(earliest: Long, now: Long, windowStart: Long, onDay: (Long) -
     }
 }
 
-/** The quickest the guide moves between channels: pressing repeatedly, and holding the button down. */
-private const val QUICK_MOVE_MILLIS = 70L
+/** The quickest the guide moves between channels with the button held down. */
 private const val HELD_MOVE_MILLIS = 120L
+
+/** How long a move up or down may take to land before another press is taken anyway. */
+private const val JUMP_TIMEOUT_MILLIS = 600L

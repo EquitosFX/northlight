@@ -330,6 +330,13 @@ class ScreenshotTest {
         press("ok")
         expectHidden("Favourites", "The categories step aside in the listings")
         if (isCategory(focusedText())) problems += "OK on a category: focus stayed on the categories"
+        // Down keeps to what's on now, whatever the lengths of the programmes above.
+        press("down")
+        expectFocus("Quiz at Nine", "Down lands on what's on now")
+        press("down")
+        expectFocus("News at One", "Down again lands on what's on now")
+        press("up", "up")
+        expectFocus("Home Truths", "Up returns along the same moment")
         press("down", "down")
         shot("07-guide-listings")
 
