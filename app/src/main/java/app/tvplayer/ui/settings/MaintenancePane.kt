@@ -83,7 +83,7 @@ fun MaintenancePane(settings: SettingsRepository, channels: ChannelsRepository, 
             Box(Modifier.width(420.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.15f))) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).background(colors.accent))
             }
-            PaneButton("Stop") { check.stop() }
+            ActionButton("Stop") { check.stop() }
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val favouriteChannels = all.filter { it.key in favourites }
@@ -110,7 +110,7 @@ fun MaintenancePane(settings: SettingsRepository, channels: ChannelsRepository, 
         if (dead.isNotEmpty() && !progress.running) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Label(text = "${dead.size} channels marked as not working.", style = AppType.body, color = colors.textDim)
-                PaneButton("Clear the marks") { check.clearMarks() }
+                ActionButton("Clear the marks") { check.clearMarks() }
             }
         }
     }

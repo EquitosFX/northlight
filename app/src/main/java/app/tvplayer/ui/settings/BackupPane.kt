@@ -60,7 +60,7 @@ fun BackupPane(backup: BackupRepository) {
             maxLines = 2,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PaneButton("Save a backup now", accent = true) {
+            ActionButton("Save a backup now", accent = true) {
                 status = "Saving…"
                 scope.launch {
                     status = try {
@@ -74,7 +74,7 @@ fun BackupPane(backup: BackupRepository) {
             }
             val at = savedAt
             if (at != null) {
-                PaneButton("Restore the backup from ${dateText(at)}") {
+                ActionButton("Restore the backup from ${dateText(at)}") {
                     status = "Restoring…"
                     scope.launch {
                         status = try {
@@ -107,7 +107,7 @@ fun BackupPane(backup: BackupRepository) {
 }
 
 @Composable
-internal fun PaneButton(text: String, accent: Boolean = false, onClick: () -> Unit) {
+internal fun ActionButton(text: String, accent: Boolean = false, onClick: () -> Unit) {
     val colors = AppTheme.colors
     FocusSurface(
         onClick = onClick,
