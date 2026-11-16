@@ -188,7 +188,6 @@ fun GuideScreen(
                     slideTick.floatValue = value
                 }
                 sliding = false
-                println("DEBUGGUIDE slide done")
             }
         } else {
             slideMillis[0] = 0f
@@ -203,9 +202,9 @@ fun GuideScreen(
     fun shift(by: Long) {
         val target = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
         if (target == windowStart) return
+        // The highlighted programme stays drawn (and highlighted) through the slide, so focus just stays
+        // on it; it's put back on it afterwards in case it was moved.
         refocus = focusedState.value?.programme?.id
-        println("DEBUGGUIDE shift by=$by refocus=$refocus target=$target")
-        if (refocus != null) holdFocus()
         moveWindow(target)
     }
 
@@ -754,8 +753,7 @@ private fun GuideCell(
     if (refocus) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
-            val result = runCatching { requester.requestFocus() }
-            println("DEBUGGUIDE refocus $title result=$result")
+            runCatching { requester.requestFocus() }
             onRefocused()
         }
     }
