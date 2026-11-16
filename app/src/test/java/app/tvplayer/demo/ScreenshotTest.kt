@@ -567,9 +567,11 @@ class ScreenshotTest {
         shot("17c-skip-intro")
         press("ok")
         expectHidden("Skip intro", "OK skips the intro")
-        // Back on the page, the button still offers that episode (it was only just started).
+        // Back on the page, the button offers to resume it (skipping the intro moved it to 1:30).
         press("back")
-        expectFocus("Play S1 E1", "Back from an episode returns to the series page")
+        expectFocus("Resume S1 E1", "Back from an episode offers to resume it")
+        expectShown("Start over", "A part-watched episode can be started over")
+        shot("17e-series-resume")
     }
 
     @Test fun search() {
