@@ -201,6 +201,19 @@ class LivePlayerController(
 
     private val audioDelay = AudioDelay()
 
+    /** The video's frame rate, once known, so the TV can switch to a refresh rate that suits it. */
+    var frameRate by mutableStateOf<Float?>(null)
+        private set
+    private val frameProbe = FrameProbe { fps ->
+        frameRate = fps
+        updateStreamInfo()
+    }
+
+    private fun newStream() {
+        frameRate = null
+        frameProbe.reset()
+    }
+
     /** Sound moved against the picture, in milliseconds (positive: later), for lip sync. Kept in settings. */
     var audioDelayMs by mutableIntStateOf(0)
         private set
@@ -277,6 +290,7 @@ class LivePlayerController(
             }
             exo.playWhenReady = true
             exo.addListener(Listener())
+            exo.setVideoFrameMetadataListener(frameProbe)
         }
 
     init {
@@ -576,6 +590,7 @@ class LivePlayerController(
     }
 
     private fun startVod(item: VodItem, from: Long) {
+        newStream()
         if (stopped) return
         if (item.catchupPlan != null) {
             // Catch-up restarts are requests from a new time, not seeks.
@@ -782,6 +797,7 @@ class LivePlayerController(
         tuneJob?.cancel()
         pictureJob?.cancel()
         firstFrameSeen = false
+        newStream()
         stopTimeshift()
         status = showing
         tuneJob = scope.launch {
@@ -977,9 +993,11 @@ class LivePlayerController(
         val parts = ArrayList<String>()
         player.videoFormat?.let { video ->
             if (video.height > 0) parts.add(resolutionLabel(video.height))
-            if (video.frameRate > 0f) parts.add("${video.frameRate.roundToInt()}fps")
+            val fps = video.frameRate.takeIf { it > 0f } ?: frameRate
+            if (fps != null) parts.add("${fps.roundToInt()}fps")
         }
         player.audioFormat?.let { audio ->
+            audioName(audio.sampleMimeType)?.let(parts::add)
             when {
                 audio.channelCount >= 8 -> parts.add("7.1")
                 audio.channelCount >= 6 -> parts.add("5.1")
@@ -987,7 +1005,24 @@ class LivePlayerController(
                 audio.channelCount == 1 -> parts.add("Mono")
             }
         }
+        // Sound the box can't play at all: say so, rather than leave the viewer wondering.
+        val audioGroups = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (audioGroups.isNotEmpty() && audioGroups.none { it.isSupported }) {
+            val mime = audioGroups.first().mediaTrackGroup.getFormat(0).sampleMimeType
+            parts.add("No sound: ${audioName(mime) ?: "this sound format"} isn't supported on this device")
+        }
         streamInfo = parts.joinToString(" · ").ifEmpty { null }
+    }
+
+    private fun audioName(mime: String?): String? = when (mime) {
+        androidx.media3.common.MimeTypes.AUDIO_AC3 -> "Dolby Digital"
+        androidx.media3.common.MimeTypes.AUDIO_E_AC3, androidx.media3.common.MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Digital Plus"
+        androidx.media3.common.MimeTypes.AUDIO_AAC -> "AAC"
+        androidx.media3.common.MimeTypes.AUDIO_MPEG_L2 -> "MP2"
+        androidx.media3.common.MimeTypes.AUDIO_MPEG -> "MP3"
+        androidx.media3.common.MimeTypes.AUDIO_DTS, androidx.media3.common.MimeTypes.AUDIO_DTS_HD -> "DTS"
+        androidx.media3.common.MimeTypes.AUDIO_AC4 -> "AC-4"
+        else -> null
     }
 
     private fun resolutionLabel(height: Int): String = when {

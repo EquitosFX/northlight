@@ -198,6 +198,7 @@ fun AppRoot(
     val reminderIds = remember(reminders) { reminders.map { it.id }.toSet() }
     val deadChannels by container.channelCheck.dead.collectAsStateWithLifecycle()
     val backupPlayerOn by container.settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
+    val matchFrameRateOn by container.settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = true)
     fun setReminder(reminder: Reminder) {
         val set = container.myList.toggleReminder(reminder)
         notice = if (set) {
@@ -582,7 +583,7 @@ fun AppRoot(
             },
     ) {
         // The Christmas theme's snow, behind everything (and paused while a video fills the screen).
-        if (themeId.snows && mode != PlayerMode.FULL) Snowfall(Modifier.fillMaxSize())
+        if (themeId.snows && mode != PlayerMode.FULL) Snowfall(Modifier.fillMaxSize(), animate = !container.lowPower)
         // The side panel slides in and out. Only the drawing moves during the slide: the screens are
         // laid out once at their new width, so nothing has to be measured again on every frame.
         val panelTarget = if (sidebarOpen) 0.dp else -(SidebarWidth - SidebarPeek)
@@ -848,6 +849,7 @@ fun AppRoot(
                 metadata = container.metadata,
                 intros = container.intros,
                 backupPlayer = backupPlayerOn,
+                matchFrameRate = matchFrameRateOn,
                 mode = mode,
                 onMinimise = { mode = PlayerMode.MINI },
                 onExpand = { mode = PlayerMode.FULL },

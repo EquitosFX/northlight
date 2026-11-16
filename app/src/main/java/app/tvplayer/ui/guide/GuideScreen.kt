@@ -120,7 +120,8 @@ fun GuideScreen(
         from - from % HALF_HOUR
     }
     var windowStart by remember { mutableLongStateOf(liveStart) }
-    var focused by remember { mutableStateOf<Focused?>(null) }
+    // Read only by the header (and when sliding the grid), so moving around the grid doesn't redraw every row.
+    val focusedState = remember { mutableStateOf<Focused?>(null) }
     val firstFocus = remember { FocusRequester() }
     val entryFocus = remember { FocusRequester() }
     var placedFocus by remember { mutableStateOf(false) }
@@ -155,7 +156,7 @@ fun GuideScreen(
     fun shift(by: Long) {
         val target = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
         if (target == windowStart) return
-        refocus = focused?.programme?.id
+        refocus = focusedState.value?.programme?.id
         if (refocus != null) holdFocus()
         windowStart = target
     }
@@ -178,11 +179,16 @@ fun GuideScreen(
         backToCategories = false
     }
 
-    val rows = when (group) {
-        null -> current.channels
-        FAVOURITES -> current.channels.filter { it.key in favourites }
-        else -> current.inGroup(group)
+    val rows = remember(current, group, favourites) {
+        when (group) {
+            null -> current.channels
+            FAVOURITES -> current.channels.filter { it.key in favourites }
+            else -> current.inGroup(group)
+        }
     }
+    // Holding Up or Down (or pressing very fast) moves at a pace the TV box can keep up with,
+    // instead of piling up moves until it freezes.
+    val lastMove = remember { longArrayOf(0L) }
 
     Row(
         modifier = Modifier
@@ -213,7 +219,7 @@ fun GuideScreen(
             .fillMaxHeight()
             .onFocusChanged { if (it.hasFocus) listings = true },
     ) {
-        Header(focused = focused, reminders = reminders, modifier = Modifier.padding(horizontal = SideMargin))
+        Header(focusedState = focusedState, reminders = reminders, modifier = Modifier.padding(horizontal = SideMargin))
         DayBar(
             earliest = earliest,
             now = now,
@@ -243,7 +249,17 @@ fun GuideScreen(
         LazyColumn(
             contentPadding = PaddingValues(start = SideMargin, end = 40.dp, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (event.key != Key.DirectionUp && event.key != Key.DirectionDown) return@onPreviewKeyEvent false
+                    val time = android.os.SystemClock.uptimeMillis()
+                    val gap = if (event.nativeKeyEvent.repeatCount > 0) HELD_MOVE_MILLIS else QUICK_MOVE_MILLIS
+                    if (time - lastMove[0] < gap) return@onPreviewKeyEvent true
+                    lastMove[0] = time
+                    false
+                },
         ) {
             itemsIndexed(rows, key = { _, channel -> channel.key }) { index, channel ->
                 GuideRow(
@@ -256,7 +272,7 @@ fun GuideScreen(
                     focusRequester = null,
                     entry = if (index == 0) entryFocus else null,
                     onFocusPlaced = { placedFocus = true },
-                    onFocus = { programme -> focused = Focused(channel, programme) },
+                    onFocus = { programme -> focusedState.value = Focused(channel, programme) },
                     onShift = ::shift,
                     refocus = refocus,
                     onRefocused = { refocus = null },
@@ -347,8 +363,9 @@ private fun Categories(
 }
 
 @Composable
-private fun Header(focused: Focused?, reminders: Set<String>, modifier: Modifier = Modifier) {
+private fun Header(focusedState: androidx.compose.runtime.State<Focused?>, reminders: Set<String>, modifier: Modifier = Modifier) {
     val colors = AppTheme.colors
+    val focused = focusedState.value
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -773,3 +790,7 @@ private fun DayBar(earliest: Long, now: Long, windowStart: Long, onDay: (Long) -
         }
     }
 }
+
+/** The quickest the guide moves between channels: pressing repeatedly, and holding the button down. */
+private const val QUICK_MOVE_MILLIS = 70L
+private const val HELD_MOVE_MILLIS = 120L

@@ -114,7 +114,10 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | --- | --- |
 | ExoPlayer playback (TS and HLS), per-channel User-Agent and referrer | Built |
 | VLC backup player (automatic), external player hand-off | Backup player built |
-| Frame-rate matching, HDR, audio passthrough | Built on the player's defaults; needs checking on a Shield |
+| Frame-rate matching (50 Hz for UK channels, 24 Hz for films; measured from the stream when it doesn't say) | Built |
+| Sound formats the box can't decode itself (Dolby Digital, DTS, MP2) through a built-in FFmpeg decoder | Built |
+| HDR, audio passthrough | Built on the player's defaults; needs checking on a Shield |
+| Lighter running on less powerful boxes (Chromecast with Google TV): still snow, paced guide scrolling | Built |
 | Audio delay (lip sync, 50 ms steps, in the player and Settings › Player) | Built |
 | Stream info, auto-reconnect, fall-through to backup copies, retry | Built |
 | Sleep timer (30 min to 2 hours, warns a minute before) | Built |

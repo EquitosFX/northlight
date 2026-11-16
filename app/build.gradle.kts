@@ -98,6 +98,8 @@ dependencies {
     implementation(libs.media3.extractor)
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.media3.ui)
+    // Sound formats some TV boxes can't decode themselves (Dolby Digital, DTS, MPEG layer 2): Google TV.
+    implementation(libs.media3.ffmpeg.decoder)
     implementation(libs.coil.compose)
 
     implementation(platform(libs.compose.bom))

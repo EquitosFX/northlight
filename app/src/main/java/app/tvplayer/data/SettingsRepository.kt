@@ -25,6 +25,7 @@ class SettingsRepository(private val context: Context) {
     private val autoRefreshKey = intPreferencesKey("auto_refresh_hours")
     private val backupPlayerKey = androidx.datastore.preferences.core.booleanPreferencesKey("backup_player")
     private val audioDelayKey = intPreferencesKey("audio_delay_ms")
+    private val matchFrameRateKey = androidx.datastore.preferences.core.booleanPreferencesKey("match_frame_rate")
     private val subtitleLanguageKey = stringPreferencesKey("subtitle_language")
     private val osKeyKey = stringPreferencesKey("opensubtitles_key")
     private val osUserKey = stringPreferencesKey("opensubtitles_user")
@@ -69,6 +70,13 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAutoRefreshHours(hours: Int) {
         context.settingsStore.edit { prefs -> prefs[autoRefreshKey] = hours }
+    }
+
+    /** Whether the TV switches to a refresh rate that suits the video (50 Hz for UK channels). */
+    val matchFrameRate: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[matchFrameRateKey] ?: true }
+
+    suspend fun setMatchFrameRate(on: Boolean) {
+        context.settingsStore.edit { prefs -> prefs[matchFrameRateKey] = on }
     }
 
     /** Sound moved against the picture, in milliseconds: positive is later. */

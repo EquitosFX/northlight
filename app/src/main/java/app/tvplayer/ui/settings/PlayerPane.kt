@@ -42,6 +42,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     val offset by settings.catchupOffsetMinutes.collectAsStateWithLifecycle(initialValue = 0)
     val backupPlayer by settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
     val audioDelay by settings.audioDelayMs.collectAsStateWithLifecycle(initialValue = 0)
+    val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = true)
     val saved by settings.openSubtitles.collectAsStateWithLifecycle(initialValue = OpenSubtitlesAccount("", "", ""))
     var key by remember(saved) { mutableStateOf(saved.apiKey) }
     var user by remember(saved) { mutableStateOf(saved.username) }
@@ -80,6 +81,19 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(label = "Use when needed", selected = backupPlayer) { scope.launch { settings.setBackupPlayer(true) } }
             Chip(label = "Off", selected = !backupPlayer) { scope.launch { settings.setBackupPlayer(false) } }
+        }
+
+        Label(text = "Match frame rate", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
+        Label(
+            text = "Switches the TV to 50 Hz for UK channels (and 24 Hz for films) while watching, for smooth movement. " +
+                "Most noticeable on Google TV, which runs at 60 Hz. The screen may go dark for a second as it switches.",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 3,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(label = "On", selected = matchFrameRate) { scope.launch { settings.setMatchFrameRate(true) } }
+            Chip(label = "Off", selected = !matchFrameRate) { scope.launch { settings.setMatchFrameRate(false) } }
         }
 
         Label(text = "Sound in sync", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))

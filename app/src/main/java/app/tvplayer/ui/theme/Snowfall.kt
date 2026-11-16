@@ -37,7 +37,12 @@ private class Flake(
  * the screens themselves aren't redrawn.
  */
 @Composable
-fun Snowfall(modifier: Modifier = Modifier, count: Int = 70) {
+fun Snowfall(
+    modifier: Modifier = Modifier,
+    count: Int = 70,
+    /** False on less powerful boxes: the snow stays still, as redrawing the screen every frame slows everything else. */
+    animate: Boolean = true,
+) {
     val flakes = remember(count) {
         val random = Random(25)
         List(count) {
@@ -56,13 +61,17 @@ fun Snowfall(modifier: Modifier = Modifier, count: Int = 70) {
         }
     }
     // An endless clock in seconds (it starts again every hour; flakes just carry on from a new place).
-    val clock = rememberInfiniteTransition(label = "snow")
-    val seconds by clock.animateFloat(
-        initialValue = 0f,
-        targetValue = 3_600f,
-        animationSpec = infiniteRepeatable(tween(3_600_000, easing = LinearEasing), RepeatMode.Restart),
-        label = "seconds",
-    )
+    // Read only while drawing, so each frame redraws the snow without rebuilding anything else.
+    val seconds: androidx.compose.runtime.State<Float>? = if (animate) {
+        rememberInfiniteTransition(label = "snow").animateFloat(
+            initialValue = 0f,
+            targetValue = 3_600f,
+            animationSpec = infiniteRepeatable(tween(3_600_000, easing = LinearEasing), RepeatMode.Restart),
+            label = "seconds",
+        )
+    } else {
+        null
+    }
     Canvas(modifier) {
         val w = size.width
         val h = size.height
@@ -77,7 +86,7 @@ fun Snowfall(modifier: Modifier = Modifier, count: Int = 70) {
             radius = h * 0.8f,
             center = Offset(w * 0.3f, h * 0.05f),
         )
-        val t = seconds
+        val t = seconds?.value ?: 0f
         val scale = density
         for (f in flakes) {
             val y = ((f.y + f.speed * t) % 1f) * (h + 20f) - 10f

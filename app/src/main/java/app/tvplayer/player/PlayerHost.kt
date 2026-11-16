@@ -1,5 +1,8 @@
 package app.tvplayer.player
 
+import app.tvplayer.core.display.FrameRateMatch
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.foundation.border
 import androidx.compose.runtime.mutableIntStateOf
 import app.tvplayer.core.intro.IntroSegments
@@ -95,7 +98,10 @@ fun PlayerHost(
     modifier: Modifier = Modifier,
     /** Switch to the backup player by itself when the normal one can't play a stream. */
     backupPlayer: Boolean = true,
+    /** Switch the TV to a refresh rate that suits the video. */
+    matchFrameRate: Boolean = true,
 ) {
+    MatchRefreshRate(fps = controller.frameRate, on = matchFrameRate && mode == PlayerMode.FULL)
     // The backup player takes over when the normal player gives up, once per channel or film.
     var backup by remember { mutableStateOf<BackupStream?>(null) }
     val triedBackup = remember { HashSet<String>() }
@@ -599,6 +605,38 @@ private fun SleepWarning(modifier: Modifier = Modifier) {
         Label(text = "Sleep timer: stopping in a minute", style = AppType.title, color = colors.accent)
         Label(text = "Press any button to keep watching", style = AppType.body, color = colors.textDim)
     }
+}
+
+/**
+ * Asks the TV for a refresh rate that suits the video (50 Hz for 25 or 50 fps channels, 24 Hz for
+ * films), as long as the player is open, and back to normal when it closes. The TV may go blank for
+ * a moment as it switches.
+ */
+@Composable
+private fun MatchRefreshRate(fps: Float?, on: Boolean) {
+    val view = LocalView.current
+    val window = remember(view) { view.context.findActivity()?.window }
+    LaunchedEffect(fps, on) {
+        if (!on || fps == null || window == null) return@LaunchedEffect
+        val display = view.display ?: return@LaunchedEffect
+        val current = display.mode
+        val modes = display.supportedModes.filter {
+            it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight
+        }
+        val index = FrameRateMatch.pick(modes.map { it.refreshRate }, current.refreshRate, fps) ?: return@LaunchedEffect
+        window.attributes = window.attributes.also { it.preferredDisplayModeId = modes[index].modeId }
+    }
+    DisposableEffect(window) {
+        onDispose {
+            window?.let { w -> if (w.attributes.preferredDisplayModeId != 0) w.attributes = w.attributes.also { it.preferredDisplayModeId = 0 } }
+        }
+    }
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 /** Another channel's now and next, shown while the current one keeps playing. */
