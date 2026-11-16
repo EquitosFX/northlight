@@ -540,6 +540,7 @@ class ScreenshotTest {
         moveTo("Season 2", "down", step = "Down the season list")
         press("ok")
         expectShown("Season 2 · 3 episodes", "Choosing a season shows its episodes")
+        expectFocus("Season 2", "Choosing a season returns to the picker")
         // Down to the episode cards.
         press("down")
         expectShown("S2 E1", "Highlighting an episode describes it")

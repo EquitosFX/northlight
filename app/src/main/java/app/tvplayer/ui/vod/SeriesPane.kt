@@ -69,6 +69,7 @@ import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.FocusSurface
 import app.tvplayer.ui.components.Label
 import app.tvplayer.ui.components.LocalAutoFocus
+import app.tvplayer.ui.components.LocalHoldFocus
 import app.tvplayer.ui.person.PeopleRow
 import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
@@ -166,6 +167,15 @@ internal fun SeriesPane(
     val episodeRowFocus = remember { FocusRequester() }
     var seasonsOpen by remember(series.id) { mutableStateOf(false) }
     val currentSeasonFocus = remember { FocusRequester() }
+    val seasonPicker = remember { FocusRequester() }
+    // Closing the season list removes the highlighted button, so focus is parked and put back on the picker.
+    val holdFocus = LocalHoldFocus.current
+    var backToPicker by remember { mutableStateOf(false) }
+    fun closeSeasons() {
+        holdFocus()
+        seasonsOpen = false
+        backToPicker = true
+    }
     EntryPoint(primary)
     val autoFocus = LocalAutoFocus.current
     LaunchedEffect(nextUp != null) {
@@ -173,13 +183,16 @@ internal fun SeriesPane(
         if (autoFocus()) runCatching { primary.requestFocus() }
     }
     LaunchedEffect(seasonsOpen) {
+        withFrameNanos { }
         if (seasonsOpen) {
-            withFrameNanos { }
             runCatching { currentSeasonFocus.requestFocus() }
+        } else if (backToPicker) {
+            backToPicker = false
+            runCatching { seasonPicker.requestFocus() }
         }
     }
     BackHandler {
-        if (seasonsOpen) seasonsOpen = false else onBack()
+        if (seasonsOpen) closeSeasons() else onBack()
     }
 
     Box(modifier = Modifier.fillMaxSize().background(colors.groundBottom)) {
@@ -294,7 +307,9 @@ internal fun SeriesPane(
                         }
                         WideButton("Episodes") { runCatching { episodeRowFocus.requestFocus() } }
                         if (seasons.size > 1 || seasonsOpen) {
-                            WideButton("Season $shownSeason", chevron = true) { seasonsOpen = !seasonsOpen }
+                            WideButton("Season $shownSeason", chevron = true, modifier = Modifier.focusRequester(seasonPicker)) {
+                                if (seasonsOpen) closeSeasons() else seasonsOpen = true
+                            }
                             if (seasonsOpen) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     seasons.forEach { number ->
@@ -305,7 +320,7 @@ internal fun SeriesPane(
                                         ) {
                                             season = number
                                             highlighted = null
-                                            seasonsOpen = false
+                                            closeSeasons()
                                         }
                                     }
                                 }
