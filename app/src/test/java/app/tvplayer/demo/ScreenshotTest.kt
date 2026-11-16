@@ -1,5 +1,7 @@
 package app.tvplayer.demo
 
+import app.tvplayer.core.mylist.WatchItem
+import app.tvplayer.core.mylist.Reminder
 import org.junit.rules.TestName
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -421,9 +423,9 @@ class ScreenshotTest {
     @Test fun myList() {
         val now = System.currentTimeMillis()
         app.container.myList.toggleReminder(
-            app.tvplayer.core.mylist.Reminder("1|meridian one", "Meridian One", null, "Quiz at Nine", now + 3_600_000, now + 7_200_000),
+            Reminder("1|meridian one", "Meridian One", null, "Quiz at Nine", now + 3_600_000, now + 7_200_000),
         )
-        app.container.myList.toggleWatch(app.tvplayer.core.mylist.WatchItem("movie", "Harbour of Glass", null, "http://demo.invalid/movie/demo/demo/2.mkv", now))
+        app.container.myList.toggleWatch(WatchItem("movie", "Harbour of Glass", null, "http://demo.invalid/movie/demo/demo/2.mkv", now))
         open(Dest.MY_LIST)
         press("right")
         expectShown("Quiz at Nine", "My list shows reminders")
@@ -434,7 +436,7 @@ class ScreenshotTest {
     @Test fun reminderPopup() {
         val now = System.currentTimeMillis()
         app.container.myList.toggleReminder(
-            app.tvplayer.core.mylist.Reminder("1|meridian one", "Meridian One", null, "Quiz at Nine", now + 30_000, now + 3_600_000, "Tonight's quiz."),
+            Reminder("1|meridian one", "Meridian One", null, "Quiz at Nine", now + 30_000, now + 3_600_000, "Tonight's quiz."),
         )
         open(Dest.HOME)
         expectShown("Watch now", "A reminder pops up as its programme starts")
