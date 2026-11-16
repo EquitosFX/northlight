@@ -1,5 +1,6 @@
 package app.tvplayer.ui.home
 
+import androidx.compose.foundation.layout.heightIn
 import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.compose.foundation.background
@@ -39,6 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 
 private val SideMargin = 48.dp
+private val HeroTopRoom = 40.dp
 
 /** Home: a hero for the channel last watched (or a welcome), then rails of the viewer's own content and shortcuts. */
 @Composable
@@ -92,48 +94,58 @@ fun RecentsScreen(rails: List<HomeRail>, onTile: (Tile) -> Unit) {
 private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
     EntryPoint(primaryFocus)
     val colors = AppTheme.colors
+    // The hero grows to fit a long title instead of spilling off the top of the screen.
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(270.dp),
+            .heightIn(min = 270.dp),
     ) {
         val backdrop = hero.backdrop
-        if (backdrop != null) {
-            // Full-bleed artwork to the right, fading into the background behind the text and at the bottom.
-            AsyncImage(
-                model = backdrop,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.78f)
-                    .fadeIntoBackground(solidFrom = 0.5f, solidUntil = 0.55f),
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.55f)
-                    .background(Brush.horizontalGradient(listOf(Color.Transparent, colors.glassStrong))),
-            )
-        }
-        if (hero.logo != null && backdrop == null) {
-            Logo(
-                url = hero.logo,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 96.dp)
-                    .size(width = 220.dp, height = 130.dp),
-            )
+        // The artwork fills the hero, however tall the text makes it.
+        Box(Modifier.matchParentSize()) {
+            if (backdrop != null) {
+                // Full-bleed artwork to the right, fading into the background behind the text and at the bottom.
+                AsyncImage(
+                    model = backdrop,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.78f)
+                        .fadeIntoBackground(solidFrom = 0.5f, solidUntil = 0.55f),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.55f)
+                        .background(Brush.horizontalGradient(listOf(Color.Transparent, colors.glassStrong))),
+                )
+            }
+            if (hero.logo != null && backdrop == null) {
+                Logo(
+                    url = hero.logo,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 96.dp)
+                        .size(width = 220.dp, height = 130.dp),
+                )
+            }
         }
 
+        // Always at least this much room above the first line, so it's clear of the top of the TV
+        // (many TVs crop the edges a little); short text sits in the middle as before.
+        Box(
+            modifier = Modifier
+                .heightIn(min = 270.dp)
+                .padding(top = HeroTopRoom, bottom = 6.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
         Column(
             modifier = Modifier
-                .align(Alignment.CenterStart)
-                // Room above, so the first line isn't tight against the top of the TV; the artwork still runs to the top.
-                .padding(start = SideMargin, top = 26.dp)
+                .padding(start = SideMargin)
                 .width(430.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -170,6 +182,7 @@ private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {
                     }
                 }
             }
+        }
         }
     }
 }

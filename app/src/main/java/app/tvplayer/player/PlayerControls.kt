@@ -103,6 +103,7 @@ fun PlayerControls(
     val restFocus = remember { FocusRequester() }
     val timelineFocus = remember { FocusRequester() }
     var resting by remember { mutableStateOf(true) }
+    var okPressed by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         runCatching { restFocus.requestFocus() }
@@ -172,6 +173,18 @@ fun PlayerControls(
                         .size(1.dp)
                         .focusRequester(restFocus)
                         .onPreviewKeyEvent { event ->
+                            val ok = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+                            // OK pauses when it's let go, not pressed: Pause/Play is highlighted then, and
+                            // highlighting it on the press made the release click it too, playing straight away again.
+                            // (Only a press that started here: letting go of the OK that opened the controls doesn't count.)
+                            if (ok && event.type == KeyEventType.KeyUp && okPressed) {
+                                okPressed = false
+                                resting = false
+                                controller.togglePause()
+                                playing = !playing
+                                runCatching { playFocus.requestFocus() }
+                                return@onPreviewKeyEvent true
+                            }
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
                                 // Up goes straight to the progress bar, to move along it; the others to Pause.
@@ -187,12 +200,9 @@ fun PlayerControls(
                                     runCatching { playFocus.requestFocus() }
                                     true
                                 }
-                                // OK again pauses (and again plays), with Pause/Play highlighted from then on.
+                                // OK again pauses (above, when the button is let go).
                                 Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                                    resting = false
-                                    controller.togglePause()
-                                    playing = !playing
-                                    runCatching { playFocus.requestFocus() }
+                                    okPressed = true
                                     true
                                 }
                                 else -> false

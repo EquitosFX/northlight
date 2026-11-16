@@ -381,7 +381,9 @@ class LivePlayerController(
     }
 
     fun togglePause() {
-        if (player.isPlaying) player.pause() else player.play()
+        // By what it's meant to be doing, not whether a picture is moving this instant, so a press
+        // while it's loading still pauses.
+        if (player.playWhenReady) player.pause() else player.play()
         controlsToken++
     }
 
