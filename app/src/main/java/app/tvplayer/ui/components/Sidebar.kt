@@ -55,7 +55,9 @@ val SidebarPictureWidth = 208.dp
 val SidebarPictureHeight = 117.dp
 
 /** The sections in the side menu, top to bottom. */
-val SidebarSections = listOf(Dest.HOME, Dest.GUIDE, Dest.RECENTS, Dest.FILMS, Dest.SERIES, Dest.SEARCH, Dest.MOVIE_NIGHT, Dest.SETTINGS)
+val SidebarSections = listOf(
+    Dest.HOME, Dest.GUIDE, Dest.RECENTS, Dest.FILMS, Dest.SERIES, Dest.SPORT, Dest.SEARCH, Dest.MY_LIST, Dest.MOVIE_NIGHT, Dest.SETTINGS,
+)
 
 /**
  * The side panel: the time, the live picture (drawn over [SidebarPictureTop] by the player when something
@@ -133,7 +135,7 @@ fun Sidebar(
                         }
                         false
                     },
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 for (dest in SidebarSections) {
                     if (dest == selected) EntryPoint(itemFocus.getValue(dest), menuEntry)
@@ -174,7 +176,7 @@ private fun MenuItem(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(32.dp)
             .focusRequester(focusRequester),
         shape = RoundedCornerShape(3.dp),
         container = Color.Transparent,

@@ -17,6 +17,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val container = (application as NorthlightApp).container
         val settings = container.settings
+        intent?.data?.let { container.openLink.value = it }
 
         setContent {
             val themeId by settings.theme.collectAsStateWithLifecycle(initialValue = ThemeId.SKYFALL)
@@ -30,5 +31,10 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        intent.data?.let { (application as NorthlightApp).container.openLink.value = it }
     }
 }

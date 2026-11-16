@@ -18,6 +18,11 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
+        // The Shield (and other Android TV boxes) are ARM; leaving out other processors keeps the
+        // backup player's built-in VLC engine from making the app much bigger.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -94,6 +99,8 @@ dependencies {
     implementation(libs.compose.animation)
     implementation(libs.compose.material.icons.core)
     implementation(libs.tv.material)
+    implementation(libs.androidx.tvprovider)
+    implementation(libs.libvlc)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

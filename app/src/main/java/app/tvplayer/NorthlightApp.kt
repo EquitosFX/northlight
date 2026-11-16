@@ -1,5 +1,9 @@
 package app.tvplayer
 
+import app.tvplayer.data.HomeScreenRows
+import app.tvplayer.data.ChannelCheckRepository
+import app.tvplayer.data.BackupRepository
+import app.tvplayer.data.MyListRepository
 import app.tvplayer.data.WatchedTitles
 import app.tvplayer.data.IntroRepository
 import app.tvplayer.data.SubtitlesRepository
@@ -72,4 +76,15 @@ class AppContainer(context: Context) {
     val intros: IntroRepository by lazy { IntroRepository(http, metadata) }
 
     val watched: WatchedTitles by lazy { WatchedTitles(appContext) }
+
+    val myList: MyListRepository by lazy { MyListRepository(appContext) }
+
+    val backup: BackupRepository by lazy { BackupRepository(appContext, database, settings, myList, playlists) }
+
+    val channelCheck: ChannelCheckRepository by lazy { ChannelCheckRepository(appContext, database, http, scope) }
+
+    val homeRows: HomeScreenRows by lazy { HomeScreenRows(appContext) }
+
+    /** A link from the Shield's home screen waiting to be opened ("skyfall://resume/…", "skyfall://channel/…"). */
+    val openLink = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
 }

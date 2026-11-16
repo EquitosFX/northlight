@@ -123,6 +123,20 @@ interface ChannelDao {
     )
     suspend fun allVod(): List<VodRow>
 
+    /** A film or series by its stream address (to find a saved title again). */
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
+            "WHERE url = :url LIMIT 1",
+    )
+    suspend fun vodByUrl(url: String): VodRow?
+
+    /** A film or series by kind and name. */
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
+            "WHERE kind = :kind AND name = :name LIMIT 1",
+    )
+    suspend fun vodByName(kind: String, name: String): VodRow?
+
     /** Every series entry in a playlist; M3U playlists list one per episode. */
     @Query(
         "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
@@ -154,6 +168,18 @@ interface ProgrammeDao {
             "AND stop > :from AND start < :to ORDER BY start",
     )
     suspend fun inRange(playlistId: Long, guideId: String, from: Long, to: Long): List<ProgrammeEntity>
+
+    /** Programmes that may be sport: a sport genre, two sides ("v"), or marked live. */
+    @Query(
+        "SELECT * FROM programmes WHERE stop > :from AND start < :to AND (category LIKE '%sport%' " +
+            "OR title LIKE '% v %' OR title LIKE '% vs %' OR title LIKE 'live %' OR title LIKE 'live:%' OR title LIKE '%: live %') " +
+            "ORDER BY start LIMIT 6000",
+    )
+    suspend fun sportCandidates(from: Long, to: Long): List<ProgrammeEntity>
+
+    /** Everything on some guide channels in a time range. */
+    @Query("SELECT * FROM programmes WHERE channelGuideId IN (:guideIds) AND stop > :from AND start < :to ORDER BY start LIMIT 6000")
+    suspend fun onChannels(guideIds: List<String>, from: Long, to: Long): List<ProgrammeEntity>
 }
 
 @Dao
@@ -178,6 +204,9 @@ interface ProgressDao {
 interface FavouriteDao {
     @Query("SELECT key FROM favourites ORDER BY addedAt")
     fun observeKeys(): Flow<List<String>>
+
+    @Query("SELECT key FROM favourites ORDER BY addedAt")
+    suspend fun allKeys(): List<String>
 
     @Query("SELECT COUNT(*) FROM favourites WHERE key = :key")
     suspend fun count(key: String): Int

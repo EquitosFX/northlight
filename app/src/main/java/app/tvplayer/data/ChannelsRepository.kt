@@ -1,5 +1,7 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.sport.SportKind
+import app.tvplayer.core.sport.SportFinder
 import app.tvplayer.core.vod.EpisodeNames
 import app.tvplayer.core.live.Lineup
 import app.tvplayer.core.live.LineupChannel
@@ -24,6 +26,43 @@ class ChannelsRepository(private val db: AppDatabase) {
     @Volatile private var cached: Pair<LiveStamp, Lineup>? = null
 
     /** Every live channel across all playlists, quality copies merged. Built once and reused until the channels change. */
+    /**
+     * Live and upcoming sport from the TV guide over the next [days]: programmes in a sport genre,
+     * matches ("A v B"), and live events on sports channels. The same event on several channels is
+     * listed once with all of them.
+     */
+    suspend fun sport(now: Long = System.currentTimeMillis(), days: Int = 3): List<SportEvent> = withContext(Dispatchers.IO) {
+        val channels = lineup().channels.filter { it.guideId != null }
+        val byGuide = channels.groupBy { it.playlistId to it.guideId!! }
+        val sportsGuideIds = channels.filter { SportFinder.isSportsChannel(it.name, it.group) }.mapNotNull { it.guideId }.distinct()
+        val until = now + days * 24 * HOUR
+        val found = LinkedHashMap<Long, ProgrammeEntity>()
+        db.programmes().sportCandidates(now, until).forEach { found[it.id] = it }
+        sportsGuideIds.chunked(400).forEach { ids -> db.programmes().onChannels(ids, now, until).forEach { found[it.id] = it } }
+        val events = LinkedHashMap<Pair<String, Long>, SportEvent>()
+        for (p in found.values.sortedBy { it.start }) {
+            val showing = byGuide[p.playlistId to p.channelGuideId] ?: continue
+            val onSports = showing.any { SportFinder.isSportsChannel(it.name, it.group) }
+            val kind = SportFinder.classify(p.title, p.category, onSports) ?: continue
+            val title = SportFinder.cleanTitle(p.title)
+            val key = title.lowercase() to p.start
+            val existing = events[key]
+            events[key] = if (existing == null) {
+                SportEvent(kind, title, p.start, p.stop, SportFinder.isLive(p.title), p.description, showing)
+            } else {
+                existing.copy(channels = (existing.channels + showing).distinctBy { it.key }, live = existing.live || SportFinder.isLive(p.title))
+            }
+        }
+        events.values.toList()
+    }
+
+    /** A saved film or series, found again by its address or else its name; series open as their show. */
+    suspend fun findTitle(kind: String, name: String, url: String): VodRow? = withContext(Dispatchers.IO) {
+        val row = (if (url.isNotEmpty()) db.channels().vodByUrl(url) else null)
+            ?: db.channels().vodByName(if (kind == "series") ChannelEntity.KIND_SERIES else ChannelEntity.KIND_MOVIE, name)
+        row?.let { if (it.kind == ChannelEntity.KIND_SERIES) asShow(it) else it }
+    }
+
     suspend fun lineup(): Lineup = withContext(Dispatchers.IO) {
         val stamp = db.channels().liveStampBlocking()
         cached?.let { (seen, lineup) -> if (seen == stamp) return@withContext lineup }
@@ -157,3 +196,15 @@ class ChannelsRepository(private val db: AppDatabase) {
     }
 
 }
+
+/** One sporting event in the guide, with every channel showing it. */
+data class SportEvent(
+    val kind: SportKind,
+    val title: String,
+    val start: Long,
+    val stop: Long,
+    /** Marked live in the guide (rather than a replay or highlights). */
+    val live: Boolean,
+    val description: String?,
+    val channels: List<LineupChannel>,
+)

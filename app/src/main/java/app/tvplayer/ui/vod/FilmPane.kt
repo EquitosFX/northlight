@@ -1,5 +1,9 @@
 package app.tvplayer.ui.vod
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
+import app.tvplayer.core.mylist.WatchItem
+import app.tvplayer.data.MyListRepository
 import app.tvplayer.ui.components.EntryPoint
 import app.tvplayer.ui.components.fadeIntoBackground
 import androidx.activity.compose.BackHandler
@@ -53,9 +57,15 @@ internal fun FilmPane(
     onPlay: (VodItem, List<VodItem>) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
     onBack: () -> Unit,
+    myList: MyListRepository? = null,
 ) {
     val colors = AppTheme.colors
+    val context = LocalContext.current
     val info by produceState<MetadataEntity?>(initialValue = null, film.id) { value = metadata.lookup(film.name, film.kind) }
+    val trailer = rememberTrailer(metadata, info, isSeries = false)
+    val watchKey = "movie|${film.name.trim().lowercase()}"
+    val watchlist by (myList?.watchlist ?: kotlinx.coroutines.flow.MutableStateFlow(emptyList())).collectAsStateWithLifecycle()
+    val saved = watchlist.any { it.key == watchKey }
     val progress by produceState<ProgressEntity?>(initialValue = null, film.url) { value = channels.progressFor(film.url) }
     val firstButton = remember { FocusRequester() }
     EntryPoint(firstButton)
@@ -121,6 +131,14 @@ internal fun FilmPane(
                 ) { onPlay(item, listOf(item)) }
                 if (resumeMinutes != null) {
                     PageButton(text = "Start over") { onPlay(item.copy(fromStart = true), listOf(item)) }
+                }
+                if (myList != null) {
+                    PageButton(text = if (saved) "✓ In My list" else "+ My list") {
+                        myList.toggleWatch(WatchItem("movie", film.name, info?.poster ?: film.logo, film.url, System.currentTimeMillis()))
+                    }
+                }
+                if (trailer != null) {
+                    PageButton(text = "Trailer") { openTrailer(context, trailer) }
                 }
             }
             // Down from the buttons reaches the director and cast; selecting one shows their other titles.

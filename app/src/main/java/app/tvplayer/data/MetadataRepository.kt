@@ -124,6 +124,18 @@ class MetadataRepository(
         logo
     }
 
+    private val trailers = HashMap<Pair<Long, Boolean>, String?>()
+
+    /** The YouTube id of a film's or series' trailer, or null. Needs a TMDB key. */
+    suspend fun trailer(tmdbId: Long, isSeries: Boolean): String? = withContext(Dispatchers.IO) {
+        if (trailers.containsKey(tmdbId to isSeries)) return@withContext trailers[tmdbId to isSeries]
+        val key = settings.tmdbKey.first().trim()
+        if (key.isEmpty()) return@withContext null
+        val found = runCatching { TmdbParser.parseTrailer(get(TmdbUrls.videos(if (isSeries) "tv" else "movie", tmdbId), key)) }.getOrNull()
+        trailers[tmdbId to isSeries] = found
+        found
+    }
+
     /** TMDB's episodes for one season (titles, descriptions, stills), or empty. Needs a TMDB key. */
     suspend fun season(tmdbId: Long, season: Int): List<TmdbEpisode> = withContext(Dispatchers.IO) {
         seasons[tmdbId to season]?.let { return@withContext it }

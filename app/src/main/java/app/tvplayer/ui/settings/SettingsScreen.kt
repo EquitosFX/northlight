@@ -1,5 +1,8 @@
 package app.tvplayer.ui.settings
 
+import app.tvplayer.data.ChannelCheckRepository
+import app.tvplayer.data.ChannelsRepository
+import app.tvplayer.data.BackupRepository
 import app.tvplayer.data.SubtitlesRepository
 import app.tvplayer.data.UpdateRepository
 import app.tvplayer.ui.components.EntryPoint
@@ -41,6 +44,8 @@ enum class SettingsSection(val label: String) {
     FILM_INFO("Film info (TMDB)"),
     APPEARANCE("Appearance"),
     PLAYER("Player"),
+    MAINTENANCE("Refresh and check"),
+    BACKUP("Backup and restore"),
     UPDATES("Updates"),
 }
 
@@ -54,6 +59,9 @@ fun SettingsScreen(
     metadata: MetadataRepository,
     updates: UpdateRepository,
     subtitles: SubtitlesRepository,
+    backup: BackupRepository? = null,
+    channels: ChannelsRepository? = null,
+    check: ChannelCheckRepository? = null,
 ) {
     val colors = AppTheme.colors
     var section by rememberSaveable { mutableStateOf(SettingsSection.PLAYLISTS) }
@@ -107,6 +115,8 @@ fun SettingsScreen(
                 SettingsSection.FILM_INFO -> TmdbPane(settings = settings, metadata = metadata)
                 SettingsSection.APPEARANCE -> AppearancePane(themeId = themeId, onThemeChange = onThemeChange)
                 SettingsSection.PLAYER -> PlayerPane(settings = settings, subtitles = subtitles)
+                SettingsSection.MAINTENANCE -> if (channels != null && check != null) MaintenancePane(settings, channels, check)
+                SettingsSection.BACKUP -> backup?.let { BackupPane(it) }
                 SettingsSection.UPDATES -> UpdatesPane(updates = updates)
             }
         }

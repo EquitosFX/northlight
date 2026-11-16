@@ -38,7 +38,7 @@ object DemoData {
     private val programmes = mapOf(
         "Entertainment" to listOf("The Saturday Kitchen Table", "Village Green", "Quiz at Nine", "Home Truths", "The Late Lounge", "Garden Rescue Live"),
         "News" to listOf("News at One", "World Desk", "Business Today", "The Briefing", "Evening Headlines"),
-        "Sport" to listOf("Premier Football Live", "Rugby Union Highlights", "Cricket: Second Test", "Boxing Night", "Golf: Final Round"),
+        "Sport" to listOf("Live Premier League: Harbour City v Kestrel United", "Six Nations Rugby: Wales v Scotland", "Cricket: Second Test", "Live Boxing: Fight Night", "Golf: Final Round"),
         "Movies" to listOf("Northbound", "Copper Sky", "Saltmarsh", "Paper Moons"),
         "Kids" to listOf("Puddle Patrol", "Robo Rangers", "The Treehouse Club", "Fox and Friends"),
         "Documentaries" to listOf("Wild Coastlines", "Engineering Giants", "Rail Journeys North", "The Deep Blue"),

@@ -319,6 +319,25 @@ class LivePlayerController(
     val liveSeekable: Boolean
         get() = vod == null && (timeshiftActive || (player.isCurrentMediaItemSeekable && player.duration > 60_000))
 
+    /** What the backup player should open for what's playing (or failed to play). */
+    suspend fun backupStream(): BackupStream? {
+        vod?.let { item ->
+            val plan = item.catchupPlan
+            val url = if (plan != null) runCatching { plan.urlFrom(catchupOffset) }.getOrNull() ?: item.url else item.url
+            return BackupStream(url, item.title, item.userAgent, item.referrer, live = false, startMs = if (plan != null) 0 else mediaPosition())
+        }
+        val channel = current ?: return null
+        val row = channels.row(channel.variantIds.first()) ?: return null
+        return BackupStream(row.url, "${channel.number}  ${channel.name}", row.userAgent, row.referrer, live = true)
+    }
+
+    /** Lets go of the stream (most providers allow one connection) while the backup player has it. */
+    fun releaseForBackup() {
+        tuneJob?.cancel()
+        stopTimeshift()
+        player.stop()
+    }
+
     /** Called when a film or episode has been watched to the end. */
     var onFinished: ((VodItem) -> Unit)? = null
 

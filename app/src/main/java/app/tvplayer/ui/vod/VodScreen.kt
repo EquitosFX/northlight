@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.data.MyListRepository
 import app.tvplayer.data.WatchedTitles
 import app.tvplayer.ui.components.Dest
 import app.tvplayer.ui.components.entersAt
@@ -97,6 +98,7 @@ fun VodScreen(
     onPerson: (TmdbPerson) -> Unit,
     onReturn: (Dest) -> Unit = {},
     watched: WatchedTitles? = null,
+    myList: MyListRepository? = null,
 ) {
     val colors = AppTheme.colors
     val holdFocus = LocalHoldFocus.current
@@ -113,6 +115,7 @@ fun VodScreen(
             playlists = playlists,
             metadata = metadata,
             watched = watched,
+            myList = myList,
             onPlay = onPlay,
             onPerson = onPerson,
             onBack = {
@@ -136,6 +139,7 @@ fun VodScreen(
                 state.film = null
                 leave()
             },
+            myList = myList,
         )
         return
     }

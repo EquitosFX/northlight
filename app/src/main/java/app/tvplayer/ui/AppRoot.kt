@@ -2,6 +2,12 @@
 
 package app.tvplayer.ui
 
+import app.tvplayer.ui.components.clockTime
+import app.tvplayer.data.db.ProgrammeEntity
+import app.tvplayer.ui.sport.SportScreen
+import app.tvplayer.ui.mylist.MyListScreen
+import app.tvplayer.core.mylist.Reminders
+import app.tvplayer.core.mylist.Reminder
 import kotlinx.coroutines.flow.first
 import app.tvplayer.ui.movienight.MovieNightState
 import app.tvplayer.ui.movienight.MovieNightScreen
@@ -144,6 +150,14 @@ fun AppRoot(
 
     // Bring TV guides up to date in the background when the app opens.
     LaunchedEffect(Unit) { container.playlists.refreshStaleGuides() }
+    // Playlists refresh by themselves as often as Settings › Refresh and check says (checked hourly).
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(90_000)
+            container.playlists.refreshStale(container.settings.autoRefreshHours.first())
+            delay(3_600_000)
+        }
+    }
 
     var dest by rememberSaveable { mutableStateOf(startAt) }
     var mode by remember { mutableStateOf(PlayerMode.NONE) }
@@ -167,6 +181,37 @@ fun AppRoot(
         if (notice != null) {
             delay(5_000)
             notice = null
+        }
+    }
+
+    // Reminders: set from the guide and Sport, listed in My list, popping up as the programme starts.
+    val reminders by container.myList.reminders.collectAsStateWithLifecycle()
+    val reminderIds = remember(reminders) { reminders.map { it.id }.toSet() }
+    val deadChannels by container.channelCheck.dead.collectAsStateWithLifecycle()
+    val backupPlayerOn by container.settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
+    fun setReminder(reminder: Reminder) {
+        val set = container.myList.toggleReminder(reminder)
+        notice = if (set) {
+            "Reminder set: ${reminder.title}, ${clockTime(reminder.start)} on ${reminder.channelName}"
+        } else {
+            "Reminder cancelled: ${reminder.title}"
+        }
+    }
+    fun toggleReminder(channel: LineupChannel, programme: ProgrammeEntity) = setReminder(
+        Reminder(channel.key, channel.name, channel.logo, programme.title, programme.start, programme.stop, programme.description),
+    )
+    var dueReminder by remember { mutableStateOf<Reminder?>(null) }
+    val announced = remember { HashSet<String>() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (dueReminder == null) {
+                val due = Reminders.due(container.myList.reminders.value, System.currentTimeMillis()).firstOrNull { it.id !in announced }
+                if (due != null) {
+                    announced += due.id
+                    dueReminder = due
+                }
+            }
+            delay(10_000)
         }
     }
 
@@ -423,8 +468,39 @@ fun AppRoot(
             )
         }
     }
+    // My list on Home: the saved films and series, found in the playlists.
+    val watchlist by container.myList.watchlist.collectAsStateWithLifecycle()
+    val savedRail by produceState(initialValue = emptyList<Tile>(), watchlist, playlistList) {
+        value = watchlist.mapNotNull { item ->
+            val row = container.channels.findTitle(item.kind, item.name, item.url) ?: return@mapNotNull null
+            Tile(
+                title = item.name,
+                caption = if (item.kind == "series") "Series" else "Film",
+                color = tileColor(item.url),
+                logo = item.poster ?: row.logo,
+                open = row,
+            )
+        }
+    }
+    // Keep the Shield's home screen rows in step with Continue watching and recent channels.
+    LaunchedEffect(progress, history) { container.homeRows.update(progress, history) }
+    // Open what was picked on the Shield's home screen.
+    val link by container.openLink.collectAsStateWithLifecycle()
+    LaunchedEffect(link) {
+        val uri = link ?: return@LaunchedEffect
+        container.openLink.value = null
+        when (uri.host) {
+            "channel" -> uri.lastPathSegment?.let { playKey(it) }
+            "resume" -> {
+                val url = uri.lastPathSegment?.let { container.homeRows.addressFor(it) } ?: return@LaunchedEffect
+                val saved = container.channels.progressFor(url)
+                playVod(VodItem(url, saved?.title ?: "", saved?.poster, saved?.userAgent, saved?.referrer))
+            }
+        }
+    }
     val homeRails = listOf(
         HomeRail("Continue watching", continueWatching),
+        HomeRail("My list", savedRail),
     ) + suggestions + listOf(
         HomeRail("Recent channels", recentTiles),
         HomeRail(if (hasFavourites) "Favourites" else "Channels", shownChannels),
@@ -533,6 +609,7 @@ fun AppRoot(
                         },
                         onReturn = { back -> goTo(back) },
                         watched = container.watched,
+                        myList = container.myList,
                     )
                     Dest.SERIES -> VodScreen(
                         kind = ChannelEntity.KIND_SERIES,
@@ -547,7 +624,36 @@ fun AppRoot(
                         },
                         onReturn = { back -> goTo(back) },
                         watched = container.watched,
+                        myList = container.myList,
                     )
+                    Dest.MY_LIST -> TopInset {
+                        MyListScreen(
+                            myList = container.myList,
+                            onOpenTitle = { item ->
+                                scope.launch {
+                                    val row = container.channels.findTitle(item.kind, item.name, item.url)
+                                    if (row == null) {
+                                        notice = "${item.name} isn't in your playlists any more."
+                                    } else {
+                                        openTitle(row)
+                                        filmsState.returnTo = Dest.MY_LIST
+                                        seriesState.returnTo = Dest.MY_LIST
+                                    }
+                                }
+                            },
+                            onWatchChannel = { key -> playKey(key) },
+                        )
+                    }
+                    Dest.SPORT -> TopInset {
+                        SportScreen(
+                            channels = container.channels,
+                            reminders = reminderIds,
+                            onWatch = { channel -> play(channel.variantIds.first()) },
+                            onRemind = { event, channel ->
+                                setReminder(Reminder(channel.key, channel.name, channel.logo, event.title, event.start, event.stop, event.description))
+                            },
+                        )
+                    }
                     Dest.MOVIE_NIGHT -> TopInset {
                         MovieNightScreen(
                             state = movieNightState,
@@ -595,6 +701,9 @@ fun AppRoot(
                         GuideScreen(
                             channels = container.channels,
                             onPlay = { channel -> play(channel.variantIds.first()) },
+                            reminders = reminderIds,
+                            onRemind = { channel, programme -> toggleReminder(channel, programme) },
+                            notWorking = deadChannels,
                             onCatchup = { channel, programme ->
                                 scope.launch {
                                     try {
@@ -618,6 +727,9 @@ fun AppRoot(
                             metadata = container.metadata,
                             updates = container.updates,
                             subtitles = container.subtitles,
+                            backup = container.backup,
+                            channels = container.channels,
+                            check = container.channelCheck,
                         )
                     }
                     else -> TopInset { ComingLater(dest) }
@@ -645,6 +757,17 @@ fun AppRoot(
 
         // If Skyfall closed unexpectedly last time, say why, so it can be reported and fixed.
         var crash by remember { mutableStateOf(app.tvplayer.CrashLog.read(context)) }
+        dueReminder?.let { reminder ->
+            ReminderPopup(
+                reminder = reminder,
+                onWatch = {
+                    dueReminder = null
+                    playKey(reminder.channelKey)
+                },
+                onDismiss = { dueReminder = null },
+            )
+        }
+
         crash?.let { text ->
             CrashReport(text = text, onDismiss = {
                 app.tvplayer.CrashLog.clear(context)
@@ -672,6 +795,7 @@ fun AppRoot(
                 subtitles = container.subtitles,
                 metadata = container.metadata,
                 intros = container.intros,
+                backupPlayer = backupPlayerOn,
                 mode = mode,
                 onMinimise = { mode = PlayerMode.MINI },
                 onExpand = { mode = PlayerMode.FULL },
@@ -740,6 +864,62 @@ private fun CrashReport(text: String, onDismiss: () -> Unit) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
             runCatching { okFocus.requestFocus() }
+        }
+    }
+}
+
+/** "Starting now": a reminder's programme is about to start. */
+@Composable
+private fun ReminderPopup(reminder: Reminder, onWatch: () -> Unit, onDismiss: () -> Unit) {
+    val colors = AppTheme.colors
+    val watch = remember { FocusRequester() }
+    val now = System.currentTimeMillis()
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .width(560.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(colors.groundMid)
+                .padding(24.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+        ) {
+            Label(
+                text = if (now >= reminder.start) "REMINDER · STARTED AT ${clockTime(reminder.start)}" else "REMINDER · STARTS AT ${clockTime(reminder.start)}",
+                style = AppType.label,
+                color = colors.accent,
+            )
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                app.tvplayer.ui.components.Logo(url = reminder.channelLogo, modifier = Modifier.size(width = 72.dp, height = 48.dp))
+                androidx.compose.foundation.layout.Column {
+                    Label(text = reminder.title, style = AppType.headline, maxLines = 2)
+                    Label(text = reminder.channelName, style = AppType.title, color = colors.textDim)
+                }
+            }
+            reminder.description?.let { Label(text = it, style = AppType.body, color = colors.textDim, maxLines = 2) }
+            androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                app.tvplayer.ui.components.FocusSurface(
+                    onClick = onWatch,
+                    modifier = Modifier.height(42.dp).focusRequester(watch),
+                    focusedContainer = colors.accent,
+                ) { focused ->
+                    Label(
+                        text = "Watch now",
+                        style = AppType.title,
+                        color = if (focused) colors.onAccent else colors.text,
+                        modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp),
+                    )
+                }
+                app.tvplayer.ui.components.FocusSurface(onClick = onDismiss, modifier = Modifier.height(42.dp)) {
+                    Label(text = "Dismiss", style = AppType.title, modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp))
+                }
+            }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            runCatching { watch.requestFocus() }
         }
     }
 }

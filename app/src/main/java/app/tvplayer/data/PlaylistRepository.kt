@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.backup.PlaylistBackup
 import app.tvplayer.player.CatchupPlan
 import java.time.ZoneOffset
 import java.time.ZoneId
@@ -132,6 +133,57 @@ class PlaylistRepository(
     }
 
     fun refresh(playlistId: Long) = runJob { importInto(playlistId, isNew = false) }
+
+    /**
+     * Adds playlists from a backup (any already here are kept as they are) and loads them one after
+     * another. [onDone] gets each backup playlist's id here, in the same order.
+     */
+    fun restore(backups: List<PlaylistBackup>, onDone: (List<Long>) -> Unit) = runJob {
+        val existing = db.playlists().getAllBlocking()
+        val ids = backups.map { backup ->
+            existing.firstOrNull { it.address == backup.address && it.username == backup.username }?.id
+                ?: db.playlists().insertBlocking(
+                    PlaylistEntity(
+                        name = backup.name,
+                        type = backup.type,
+                        address = backup.address,
+                        username = backup.username,
+                        password = backup.password,
+                        guideUrls = backup.guideUrls,
+                        addedAt = System.currentTimeMillis(),
+                    ),
+                )
+        }
+        onDone(ids)
+        var failed: Exception? = null
+        for ((index, id) in ids.withIndex()) {
+            if (existing.any { it.id == id && it.refreshedAt != null }) continue
+            try {
+                importInto(id, isNew = true)
+            } catch (e: Exception) {
+                failed = failed ?: IOException("${backups[index].name}: ${explain(e)}")
+            }
+        }
+        failed?.let { throw it }
+    }
+
+    /**
+     * Refreshes playlists not refreshed in the last [maxAgeHours], quietly, one after another.
+     * Called when the app starts and every hour while it runs.
+     */
+    fun refreshStale(maxAgeHours: Int) {
+        if (maxAgeHours <= 0 || state.value is ImportState.Working) return
+        scope.launch(Dispatchers.IO) {
+            val cutoff = System.currentTimeMillis() - maxAgeHours * 3_600_000L
+            val stale = db.playlists().getAllBlocking().filter { (it.refreshedAt ?: 0L) < cutoff && it.refreshedAt != null }
+            for (playlist in stale) {
+                if (state.value is ImportState.Working) return@launch
+                state.value = ImportState.Working(playlist.name, "Refreshing", 0)
+                runCatching { importInto(playlist.id, isNew = false) }
+                state.value = ImportState.Idle
+            }
+        }
+    }
 
     fun remove(playlistId: Long) {
         scope.launch(Dispatchers.IO) { db.playlists().deleteBlocking(playlistId) }

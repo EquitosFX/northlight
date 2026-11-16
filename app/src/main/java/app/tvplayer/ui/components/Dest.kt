@@ -9,6 +9,7 @@ enum class Dest(val label: String) {
     SERIES("Series"),
     SEARCH("Search"),
     MOVIE_NIGHT("Movie night"),
+    MY_LIST("My list"),
     SETTINGS("Settings"),
     LIBRARY("Library"),
     SPORT("Sport"),

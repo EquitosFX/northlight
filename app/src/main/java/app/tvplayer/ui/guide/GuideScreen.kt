@@ -102,6 +102,12 @@ fun GuideScreen(
     onPlay: (LineupChannel) -> Unit,
     /** Plays a past programme again, on a channel whose provider keeps catch-up. */
     onCatchup: (LineupChannel, ProgrammeEntity) -> Unit,
+    /** Ids ("channelKey|start") of programmes with a reminder set. */
+    reminders: Set<String> = emptySet(),
+    /** Sets or cancels a reminder for a programme still to come. */
+    onRemind: (LineupChannel, ProgrammeEntity) -> Unit = { _, _ -> },
+    /** Channels that failed the last channel check (Settings › Refresh and check). */
+    notWorking: Set<String> = emptySet(),
 ) {
     val colors = AppTheme.colors
     val lineup by produceState<Lineup?>(initialValue = null) { value = channels.lineup() }
@@ -207,7 +213,23 @@ fun GuideScreen(
             .fillMaxHeight()
             .onFocusChanged { if (it.hasFocus) listings = true },
     ) {
-        Header(focused = focused, modifier = Modifier.padding(horizontal = SideMargin))
+        Header(focused = focused, reminders = reminders, modifier = Modifier.padding(horizontal = SideMargin))
+        DayBar(
+            earliest = earliest,
+            now = now,
+            windowStart = windowStart,
+            onDay = { dayStart ->
+                // Same time of day on the chosen day (now, for today), within what the guide holds.
+                val zone = java.time.ZoneId.systemDefault()
+                val timeOfDay = java.time.Instant.ofEpochMilli(liveStart).atZone(zone).toLocalTime()
+                val target = if (sameDay(dayStart, now)) {
+                    liveStart
+                } else {
+                    java.time.Instant.ofEpochMilli(dayStart).atZone(zone).toLocalDate().atTime(timeOfDay).atZone(zone).toInstant().toEpochMilli()
+                }
+                windowStart = target.coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
+            },
+        )
         TimeRuler(windowStart = windowStart, now = now)
         if (rows.isEmpty()) {
             Label(
@@ -240,6 +262,9 @@ fun GuideScreen(
                     onRefocused = { refocus = null },
                     onPlay = { onPlay(channel) },
                     onCatchup = { programme -> onCatchup(channel, programme) },
+                    reminders = reminders,
+                    onRemind = { programme -> onRemind(channel, programme) },
+                    notWorking = channel.key in notWorking,
                 )
             }
         }
@@ -322,7 +347,7 @@ private fun Categories(
 }
 
 @Composable
-private fun Header(focused: Focused?, modifier: Modifier = Modifier) {
+private fun Header(focused: Focused?, reminders: Set<String>, modifier: Modifier = Modifier) {
     val colors = AppTheme.colors
     Column(
         modifier = modifier
@@ -362,7 +387,8 @@ private fun Header(focused: Focused?, modifier: Modifier = Modifier) {
             programme.stop <= now && Catchup.available(channel.catchupDays, programme.start, programme.stop, now) ->
                 "Catch-up · OK to watch from the start"
             programme.stop <= now -> "Catch-up isn't available on this channel"
-            else -> null
+            "${channel.key}|${programme.start}" in reminders -> "Reminder set · OK to cancel"
+            else -> "OK to set a reminder"
         }
         Label(text = listOfNotNull(meta, hint).joinToString("  ·  "), style = GuideMetaText, color = colors.accent, maxLines = 1)
         val description = programme.description
@@ -431,6 +457,9 @@ private fun GuideRow(
     onRefocused: () -> Unit,
     onPlay: () -> Unit,
     onCatchup: (ProgrammeEntity) -> Unit,
+    reminders: Set<String>,
+    onRemind: (ProgrammeEntity) -> Unit,
+    notWorking: Boolean = false,
 ) {
     val colors = AppTheme.colors
     val windowEnd = windowStart + WINDOW
@@ -466,6 +495,8 @@ private fun GuideRow(
             )
             Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 28.dp))
             Label(text = channel.name, style = GuideChannelText)
+            // Didn't respond in the last channel check.
+            if (notWorking) Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFFFF5A5F)))
         }
 
         BoxWithConstraints(
@@ -525,6 +556,7 @@ private fun GuideRow(
                         past = programme.stop <= now,
                         live = live,
                         catchup = catchup,
+                        reminder = "${channel.key}|${programme.start}" in reminders,
                         onFocus = { onFocus(programme) },
                         refocus = programme.id == refocus && loadedFor == windowStart,
                         onRefocused = onRefocused,
@@ -532,6 +564,7 @@ private fun GuideRow(
                             when {
                                 live -> onPlay()
                                 catchup -> onCatchup(programme)
+                                programme.start > now -> onRemind(programme)
                             }
                         },
                         modifier = edgeKeys(programme.start, programme.stop).then(
@@ -560,6 +593,7 @@ private fun GuideCell(
     past: Boolean,
     live: Boolean,
     catchup: Boolean,
+    reminder: Boolean = false,
     onFocus: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -603,6 +637,7 @@ private fun GuideCell(
         ) {
             // Past programmes that can be watched again carry a replay mark.
             if (catchup) ReplayMark(tint = if (focused) colors.onAccent else colors.accent, modifier = Modifier.size(13.dp))
+            if (reminder) BellMark(tint = if (focused) colors.onAccent else colors.accent, modifier = Modifier.size(13.dp))
             Label(text = title, style = GuideCellText, color = tint)
         }
     }
@@ -653,3 +688,83 @@ private fun dayLabel(millis: Long): String =
     java.time.Instant.ofEpochMilli(millis)
         .atZone(java.time.ZoneId.systemDefault())
         .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM"))
+
+/** A small bell: a reminder is set. */
+@Composable
+private fun BellMark(tint: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val bell = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.5f, h * 0.08f)
+            cubicTo(w * 0.82f, h * 0.08f, w * 0.82f, h * 0.45f, w * 0.84f, h * 0.62f)
+            lineTo(w * 0.96f, h * 0.78f)
+            lineTo(w * 0.04f, h * 0.78f)
+            lineTo(w * 0.16f, h * 0.62f)
+            cubicTo(w * 0.18f, h * 0.45f, w * 0.18f, h * 0.08f, w * 0.5f, h * 0.08f)
+            close()
+        }
+        drawPath(bell, tint)
+        drawCircle(tint, radius = w * 0.11f, center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.88f))
+    }
+}
+
+/**
+ * The days the guide covers, from the earliest catch-up day to a week ahead: OK on one jumps there.
+ * Up from the top channel reaches it.
+ */
+@Composable
+private fun DayBar(earliest: Long, now: Long, windowStart: Long, onDay: (Long) -> Unit) {
+    val colors = AppTheme.colors
+    val zone = java.time.ZoneId.systemDefault()
+    val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    val first = java.time.Instant.ofEpochMilli(earliest).atZone(zone).toLocalDate()
+    val days = generateSequence(first) { it.plusDays(1) }.takeWhile { !it.isAfter(today.plusDays(6)) }.toList()
+    val shown = java.time.Instant.ofEpochMilli(windowStart).atZone(zone).toLocalDate()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(days.size) {
+        val index = days.indexOf(today)
+        if (index > 2) listState.scrollToItem(index - 2)
+    }
+    androidx.compose.foundation.lazy.LazyRow(
+        state = listState,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(horizontal = SideMargin),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(34.dp)
+            .padding(vertical = 3.dp),
+    ) {
+        items(days.size) { i ->
+            val day = days[i]
+            val label = when (day) {
+                today -> "Today"
+                today.minusDays(1) -> "Yesterday"
+                today.plusDays(1) -> "Tomorrow"
+                else -> day.format(java.time.format.DateTimeFormatter.ofPattern("EEE d", java.util.Locale.UK))
+            }
+            val selected = day == shown
+            FocusSurface(
+                onClick = { onDay(day.atStartOfDay(zone).toInstant().toEpochMilli()) },
+                modifier = Modifier.fillMaxHeight(),
+                shape = RoundedCornerShape(14.dp),
+                container = if (selected) colors.glassStrong else Color.Transparent,
+                focusedContainer = colors.accent,
+                outlined = false,
+            ) { focused ->
+                Label(
+                    text = label,
+                    style = AppType.label.copy(fontSize = 13.sp),
+                    color = when {
+                        focused -> colors.onAccent
+                        selected -> colors.text
+                        else -> colors.textDim
+                    },
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 12.dp),
+                )
+            }
+        }
+    }
+}

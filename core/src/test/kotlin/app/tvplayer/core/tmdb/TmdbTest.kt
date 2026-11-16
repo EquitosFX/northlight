@@ -181,4 +181,15 @@ class TmdbTest {
             episodes[0],
         )
     }
+
+    @Test
+    fun picksTheOfficialTrailer() {
+        val text = """{"results":[{"site":"YouTube","key":"teaser1","type":"Teaser","official":true},
+            {"site":"Vimeo","key":"v1","type":"Trailer","official":true},
+            {"site":"YouTube","key":"fan","type":"Trailer","official":false},
+            {"site":"YouTube","key":"real","type":"Trailer","official":true},
+            {"site":"YouTube","key":"bts","type":"Behind the Scenes","official":true}]}"""
+        assertEquals("real", TmdbParser.parseTrailer(text))
+        assertEquals(null, TmdbParser.parseTrailer("""{"results":[{"site":"YouTube","key":"b","type":"Featurette"}]}"""))
+    }
 }

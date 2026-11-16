@@ -1,5 +1,9 @@
 package app.tvplayer.ui.vod
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
+import app.tvplayer.core.mylist.WatchItem
+import app.tvplayer.data.MyListRepository
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -93,8 +97,10 @@ internal fun SeriesPane(
     onPlay: (VodItem, List<VodItem>) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
     onBack: () -> Unit,
+    myList: MyListRepository? = null,
 ) {
     val colors = AppTheme.colors
+    val context = LocalContext.current
     var details by remember(series.id) { mutableStateOf<SeriesDetails?>(null) }
     var problem by remember(series.id) { mutableStateOf<String?>(null) }
     val info by produceState<MetadataEntity?>(initialValue = null, series.id) {
@@ -103,6 +109,10 @@ internal fun SeriesPane(
     val logo by produceState<String?>(initialValue = null, info?.tmdbId) {
         value = info?.tmdbId?.let { metadata.titleLogo(it, isSeries = true) }
     }
+    val trailer = rememberTrailer(metadata, info, isSeries = true)
+    val watchKey = "series|${series.name.trim().lowercase()}"
+    val watchlist by (myList?.watchlist ?: kotlinx.coroutines.flow.MutableStateFlow(emptyList())).collectAsStateWithLifecycle()
+    val saved = watchlist.any { it.key == watchKey }
     LaunchedEffect(series.id) {
         try {
             details = playlists.seriesDetails(series)
@@ -264,9 +274,21 @@ internal fun SeriesPane(
                     // Buttons.
                     Column(modifier = Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         val up = nextUp
-                        if (up != null && up.resume) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Small round buttons above Play, as on the big streaming apps.
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            if (up != null && up.resume) {
                                 RoundIconButton(icon = { tint -> RestartGlyph(tint) }, label = "Start over") { play(up.episode, fromStart = true) }
+                            }
+                            if (myList != null) {
+                                RoundIconButton(
+                                    icon = { tint -> if (saved) TickGlyph(tint) else PlusGlyph(tint) },
+                                    label = if (saved) "In My list" else "My list",
+                                ) {
+                                    myList.toggleWatch(WatchItem("series", series.name, info?.poster ?: series.logo, series.url, System.currentTimeMillis()))
+                                }
+                            }
+                            if (trailer != null) {
+                                RoundIconButton(icon = { tint -> PlayGlyph(tint, Modifier.fillMaxSize()) }, label = "Trailer") { openTrailer(context, trailer) }
                             }
                         }
                         val label = when {
@@ -579,5 +601,23 @@ private fun RestartGlyph(tint: Color) {
             close()
         }
         drawPath(head, tint)
+    }
+}
+
+@Composable
+private fun PlusGlyph(tint: Color) {
+    Canvas(Modifier.fillMaxSize()) {
+        val stroke = size.width * 0.14f
+        drawLine(tint, Offset(size.width / 2, size.height * 0.1f), Offset(size.width / 2, size.height * 0.9f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(size.width * 0.1f, size.height / 2), Offset(size.width * 0.9f, size.height / 2), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+private fun TickGlyph(tint: Color) {
+    Canvas(Modifier.fillMaxSize()) {
+        val stroke = size.width * 0.14f
+        drawLine(tint, Offset(size.width * 0.1f, size.height * 0.55f), Offset(size.width * 0.4f, size.height * 0.82f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(size.width * 0.4f, size.height * 0.82f), Offset(size.width * 0.92f, size.height * 0.2f), strokeWidth = stroke, cap = StrokeCap.Round)
     }
 }

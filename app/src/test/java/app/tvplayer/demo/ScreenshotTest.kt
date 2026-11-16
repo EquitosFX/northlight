@@ -401,6 +401,57 @@ class ScreenshotTest {
         press("down", "right", "ok", "back", "back")
     }
 
+    @Test fun reminders() {
+        open(Dest.GUIDE)
+        press("right", "ok")
+        // Right moves to the next programme, still to come.
+        press("right")
+        expectShown("OK to set a reminder", "A programme still to come offers a reminder")
+        press("ok")
+        expectShown("Reminder set", "OK sets the reminder")
+        shot("07f-guide-reminder")
+        // Up from the top channel reaches the days.
+        press("up", "up")
+        expectShown("Tomorrow", "The guide shows its days")
+        moveTo("Tomorrow", "right", step = "Along the days to Tomorrow")
+        press("ok")
+        shot("07g-guide-tomorrow")
+    }
+
+    @Test fun myList() {
+        val now = System.currentTimeMillis()
+        app.container.myList.toggleReminder(
+            app.tvplayer.core.mylist.Reminder("1|meridian one", "Meridian One", null, "Quiz at Nine", now + 3_600_000, now + 7_200_000),
+        )
+        app.container.myList.toggleWatch(app.tvplayer.core.mylist.WatchItem("movie", "Harbour of Glass", null, "http://demo.invalid/movie/demo/demo/2.mkv", now))
+        open(Dest.MY_LIST)
+        press("right")
+        expectShown("Quiz at Nine", "My list shows reminders")
+        expectShown("Harbour of Glass", "My list shows the watchlist")
+        shot("28-my-list")
+    }
+
+    @Test fun reminderPopup() {
+        val now = System.currentTimeMillis()
+        app.container.myList.toggleReminder(
+            app.tvplayer.core.mylist.Reminder("1|meridian one", "Meridian One", null, "Quiz at Nine", now + 30_000, now + 3_600_000, "Tonight's quiz."),
+        )
+        open(Dest.HOME)
+        expectShown("Watch now", "A reminder pops up as its programme starts")
+        expectShown("Quiz at Nine", "The pop-up names the programme")
+        shot("29-reminder-popup")
+        press("ok")
+        expectHidden("Watch now", "Watch now closes the pop-up")
+    }
+
+    @Test fun sport() {
+        open(Dest.SPORT)
+        press("right")
+        expectShown("Harbour City v Kestrel United", "Sport finds matches in the guide")
+        expectShown("Football", "Sport sorts events by sport")
+        shot("30-sport")
+    }
+
     @Test fun catchup() {
         open(Dest.GUIDE)
         press("right", "ok")
@@ -488,6 +539,14 @@ class ScreenshotTest {
 
         press("back")
         expectFocus("Play", "Back from the person page")
+
+        // Save it to My list.
+        press("right")
+        expectFocus("+ My list", "Next to Play, + My list")
+        press("ok")
+        expectShown("In My list", "The film is on My list")
+        press("left")
+        expectFocus("Play", "Back to Play")
 
         // Play the film and open its controls; subtitles offer OpenSubtitles.
         press("ok")
@@ -607,6 +666,14 @@ class ScreenshotTest {
         expectShown("OpenSubtitles API key", "Player pane has the subtitles key")
         expectShown("Catch-up timing", "Player pane has the catch-up timing")
         expectShown("No change", "Catch-up timing starts unchanged")
+        expectShown("Backup player", "Player pane has the backup player setting")
+        press("down", "ok")
+        expectShown("Keep playlists up to date", "Refresh and check pane")
+        expectShown("Check channels", "Refresh and check pane offers the channel check")
+        shot("22c-settings-refresh-check")
+        press("down", "ok")
+        expectShown("Save a backup now", "Backup pane")
+        shot("22d-settings-backup")
         shot("22a-settings-player")
         press("down", "ok")
         expectShown("Build 999 is ready", "Updates pane finds the newer build")

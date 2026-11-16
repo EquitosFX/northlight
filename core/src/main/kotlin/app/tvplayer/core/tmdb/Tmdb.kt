@@ -1,5 +1,6 @@
 package app.tvplayer.core.tmdb
 
+import kotlinx.serialization.json.contentOrNull
 import java.net.URLEncoder
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -101,6 +102,9 @@ object TmdbUrls {
     /** A series' or film's artwork, including its title logo. */
     fun images(type: String, id: Long): String = "$BASE/$type/$id/images?include_image_language=en,null"
 
+    /** Trailers and clips for a film or series. */
+    fun videos(type: String, id: Long): String = "$BASE/$type/$id/videos?language=en-GB&include_video_language=en,null"
+
     /** One season of a series: its episodes with titles, descriptions and stills. */
     fun season(id: Long, season: Int): String = "$BASE/tv/$id/season/$season?language=en-GB"
 
@@ -172,6 +176,26 @@ object TmdbParser {
             directors = directors,
             seasons = item.num("number_of_seasons")?.toInt(),
         )
+    }
+
+    /**
+     * The YouTube id of the best trailer: an official trailer first, then any trailer, then a teaser.
+     * Null if there's none on YouTube.
+     */
+    fun parseTrailer(text: String): String? {
+        val videos = (root(text)["results"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+            .filter { it.str("site").equals("YouTube", ignoreCase = true) && it.str("key") != null }
+        val rank = { v: JsonObject ->
+            val type = v.str("type")
+            val official = (v["official"] as? JsonPrimitive)?.contentOrNull == "true"
+            when {
+                type == "Trailer" && official -> 0
+                type == "Trailer" -> 1
+                type == "Teaser" -> 2
+                else -> 3
+            }
+        }
+        return videos.filter { rank(it) < 3 }.minByOrNull(rank)?.str("key")
     }
 
     /** The title logo (the show's name as artwork), English first, or null if TMDB has none. */

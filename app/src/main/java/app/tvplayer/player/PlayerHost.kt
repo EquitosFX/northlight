@@ -93,7 +93,21 @@ fun PlayerHost(
     onExpand: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Switch to the backup player by itself when the normal one can't play a stream. */
+    backupPlayer: Boolean = true,
 ) {
+    // The backup player takes over when the normal player gives up, once per channel or film.
+    var backup by remember { mutableStateOf<BackupStream?>(null) }
+    val triedBackup = remember { HashSet<String>() }
+    val playingKey = controller.vod?.url ?: controller.current?.key
+    LaunchedEffect(controller.status, playingKey, mode) {
+        if (!backupPlayer || mode != PlayerMode.FULL || backup != null) return@LaunchedEffect
+        if (controller.status != PlaybackStatus.Failed || playingKey == null || playingKey in triedBackup) return@LaunchedEffect
+        triedBackup += playingKey
+        val stream = controller.backupStream() ?: return@LaunchedEffect
+        controller.releaseForBackup()
+        backup = stream
+    }
     Box(modifier = modifier.background(Color.Black)) {
         AndroidView(
             factory = { context ->
@@ -134,6 +148,21 @@ fun PlayerHost(
             FullScreenLayer(controller = controller, subtitles = subtitles, onMinimise = onMinimise, onClose = onClose)
         } else {
             MiniLayer(onExpand = onExpand)
+        }
+        backup?.takeIf { mode == PlayerMode.FULL }?.let { stream ->
+            BackupPlayerLayer(
+                stream = stream,
+                onZap = if (stream.live) { delta: Int ->
+                    backup = null
+                    controller.zap(delta)
+                } else {
+                    null
+                },
+                onClose = {
+                    backup = null
+                    onClose()
+                },
+            )
         }
     }
 }

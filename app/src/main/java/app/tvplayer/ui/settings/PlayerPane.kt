@@ -40,6 +40,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     val minutes by settings.timeshiftMinutes.collectAsStateWithLifecycle(initialValue = SettingsRepository.DEFAULT_TIMESHIFT_MINUTES)
     val language by settings.subtitleLanguage.collectAsStateWithLifecycle(initialValue = "en")
     val offset by settings.catchupOffsetMinutes.collectAsStateWithLifecycle(initialValue = 0)
+    val backupPlayer by settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
     val saved by settings.openSubtitles.collectAsStateWithLifecycle(initialValue = OpenSubtitlesAccount("", "", ""))
     var key by remember(saved) { mutableStateOf(saved.apiKey) }
     var user by remember(saved) { mutableStateOf(saved.username) }
@@ -65,6 +66,19 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
             listOf(0 to "Off", 15 to "15 min", 30 to "30 min", 60 to "1 hour", 120 to "2 hours").forEach { (value, label) ->
                 Chip(label = label, selected = minutes == value) { scope.launch { settings.setTimeshiftMinutes(value) } }
             }
+        }
+
+        Label(text = "Backup player", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
+        Label(
+            text = "When a channel or film won't play, Skyfall tries it again with a second player (VLC's engine), " +
+                "which copes with more unusual streams.",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 2,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(label = "Use when needed", selected = backupPlayer) { scope.launch { settings.setBackupPlayer(true) } }
+            Chip(label = "Off", selected = !backupPlayer) { scope.launch { settings.setBackupPlayer(false) } }
         }
 
         Label(text = "Catch-up timing", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))

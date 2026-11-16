@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Voice search through the remote's microphone. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Rows on the Shield's home screen. -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <uses-feature
@@ -30,10 +32,18 @@
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="true"
+            android:launchMode="singleTask"
             android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <!-- Opened from the Shield's home screen rows. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="skyfall" />
             </intent-filter>
         </activity>
 
