@@ -162,8 +162,9 @@ fun PlayerControls(
             )
             // Scrolls sideways if the buttons don't all fit, so none is ever off the edge.
             Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // Room at each end for the highlighted button, which grows a little.
+                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -224,7 +225,7 @@ fun PlayerControls(
                 if (onChannels != null) ControlButton(ControlIcon.CHANNELS, "Channels") { onChannels() }
                 // Each press moves on: off, 30 min, 1 hour, 1½ hours, 2 hours, off.
                 // A fixed width, so the button doesn't grow off the edge as the time is added.
-                ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes), modifier = Modifier.width(118.dp)) {
+                ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes), modifier = Modifier.width(112.dp)) {
                     controller.cycleSleep()
                 }
                 if (!live && controller.hasNextEpisode) ControlButton(ControlIcon.NEXT, "Next episode") { controller.skipEpisode(+1) }
@@ -440,7 +441,7 @@ private fun ControlButton(
         Row(
             modifier = Modifier.padding(horizontal = 10.dp).align(Alignment.Center),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             IconGlyph(icon, tint, Modifier.size(18.dp))
             Label(text = label, style = AppType.label, color = tint)
