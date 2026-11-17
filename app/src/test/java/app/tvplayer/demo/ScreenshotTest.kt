@@ -567,7 +567,7 @@ class ScreenshotTest {
 
     /** The start-up screen (Android draws it from the window background, so it's drawn here directly). */
     @Test fun startScreen() {
-        val splash = androidx.core.content.ContextCompat.getDrawable(app, app.tvplayer.R.drawable.splash) ?: return fail("No start-up screen")
+        val splash = androidx.core.content.ContextCompat.getDrawable(app, SplashRes) ?: return fail("No start-up screen")
         val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
         splash.setBounds(0, 0, 1920, 1080)
         splash.draw(Canvas(bitmap))
@@ -1002,3 +1002,6 @@ class ScreenshotTest {
         shot("25d-theme-christmas-browsing")
     }
 }
+
+/** The start-up screen picture (named here, where "app" isn't the test's own app property). */
+private val SplashRes = app.tvplayer.R.drawable.splash
