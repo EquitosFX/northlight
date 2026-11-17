@@ -5,6 +5,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.Key
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Row
 import app.tvplayer.R
@@ -123,35 +124,15 @@ fun Sidebar(
             Spacer(Modifier.weight(1f))
             // Coming back to the menu from a screen lands on the open section, not the nearest item.
             val menuEntry = remember { EntryFocus() }
-            // When Up or Down was last pressed in the menu: only that changes the section. (A time, not a
-            // flag cleared by the first item reached: holding the button moves several items before each
-            // one notices it has focus, and the last one used to think focus had arrived by itself and
-            // jumped back a place when the button was let go.)
-            val lastKeyMove = remember { longArrayOf(Long.MIN_VALUE / 2) }
-            val holding = remember { booleanArrayOf(false) }
+            // Set when Up or Down is pressed in the menu: only that changes the section.
+            val movedByKey = remember { AtomicBoolean(false) }
             val focusedItem = remember { arrayOfNulls<Dest>(1) }
-            // Held down, the sections aren't each opened on the way past: only where it stops.
-            var pending by remember { mutableStateOf<Dest?>(null) }
-            LaunchedEffect(pending) {
-                val dest = pending ?: return@LaunchedEffect
-                // (Up to a couple of seconds, in case the letting go was never seen.)
-                var waited = 0
-                while (holding[0] && waited < 2_000) {
-                    delay(40)
-                    waited += 40
-                }
-                onSelect(dest)
-                pending = null
-            }
             Column(
                 modifier = Modifier
                     .entersAt(menuEntry)
                     .onPreviewKeyEvent { event ->
-                        val upDown = event.key == Key.DirectionUp || event.key == Key.DirectionDown
-                        if (upDown && event.type == KeyEventType.KeyUp) holding[0] = false
-                        if (event.type == KeyEventType.KeyDown && upDown) {
-                            lastKeyMove[0] = android.os.SystemClock.uptimeMillis()
-                            holding[0] = event.nativeKeyEvent.repeatCount > 0
+                        if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
+                            movedByKey.set(true)
                             // The list wraps round: Up from the top to Settings, Down from Settings to the top
                             // (unless the picture is above, which Up from the top goes to).
                             val wrapTo = when {
@@ -179,10 +160,7 @@ fun Sidebar(
                             focusedItem[0] = dest
                             when {
                                 // Moving up and down the menu shows each section.
-                                android.os.SystemClock.uptimeMillis() - lastKeyMove[0] < KEY_MOVE_MILLIS -> {
-                                    if (holding[0]) pending = dest else onSelect(dest)
-                                }
-                                pending != null -> Unit
+                                movedByKey.getAndSet(false) -> onSelect(dest)
                                 dest == selected -> Unit
                                 // Focus landed here by itself (say, a button that was pressed disappeared):
                                 // stay on the open section rather than switching.
@@ -256,6 +234,3 @@ private fun rememberClock(): String {
     }
     return text
 }
-
-/** How soon after Up or Down an item gaining focus counts as moved to with the remote. */
-private const val KEY_MOVE_MILLIS = 700L

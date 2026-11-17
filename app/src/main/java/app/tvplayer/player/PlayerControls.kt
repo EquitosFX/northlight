@@ -1,6 +1,5 @@
 package app.tvplayer.player
 
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.rememberScrollState
@@ -71,9 +70,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The icons on the player buttons, drawn rather than taken from a font so they're crisp at any size. */
-/** How far the row of buttons reaches past the words above it, at each end. */
-private val ButtonRowOverhang = 24.dp
-
 enum class ControlIcon { REWIND, PLAY, PAUSE, FORWARD, LIVE, SUBTITLES, AUDIO, CHANNELS, NEXT, SLEEP, STAR, STAR_FILLED }
 
 private enum class Panel { NONE, SUBTITLES, AUDIO, FIND }
@@ -102,7 +98,6 @@ fun PlayerControls(
     var seekable by remember { mutableStateOf(false) }
     var panel by remember { mutableStateOf(Panel.NONE) }
     var touched by remember { mutableIntStateOf(0) }
-    var starFocused by remember { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
     // When the controls open, focus waits on an invisible spot with Pause shown highlighted: OK pauses
@@ -171,17 +166,8 @@ fun PlayerControls(
             )
             // Scrolls sideways if the buttons don't all fit, so none is ever off the edge.
             Row(
-                modifier = Modifier
-                    // The buttons use a little more of the screen's width than the words above, so they all fit.
-                    .layout { measurable, constraints ->
-                        val extra = ButtonRowOverhang.roundToPx()
-                        val wider = if (constraints.hasBoundedWidth) constraints.copy(maxWidth = constraints.maxWidth + 2 * extra) else constraints
-                        val placeable = measurable.measure(wider)
-                        layout((placeable.width - 2 * extra).coerceIn(constraints.minWidth, constraints.maxWidth), placeable.height) { placeable.place(-extra, 0) }
-                    }
-                    .horizontalScroll(rememberScrollState())
-                    // Room at each end for the highlighted button, which grows a little.
-                    .padding(horizontal = 6.dp),
+                // Room at each end for the highlighted button, which grows a little.
+                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -267,7 +253,6 @@ fun PlayerControls(
                         if (favourite) ControlIcon.STAR_FILLED else ControlIcon.STAR,
                         if (favourite) "In Favourites" else "Add to Favourites",
                         compact = true,
-                        modifier = Modifier.onFocusChanged { starFocused = it.hasFocus },
                     ) { controller.toggleFavourite(channel) }
                 }
                 // Each press moves on: off, 30 min, 1 hour, 1½ hours, 2 hours, off.
@@ -277,15 +262,7 @@ fun PlayerControls(
                 }
                 if (!live && controller.hasNextEpisode) ControlButton(ControlIcon.NEXT, "Next episode") { controller.skipEpisode(+1) }
             }
-            val starChannel = controller.current
-            if (live && starFocused && starChannel != null) {
-                // What the star does, said underneath (the button itself is just the star, so the row fits).
-                Label(
-                    text = if (starChannel.key in controller.favourites) "★ ${starChannel.name} is in Favourites · OK to take it off" else "OK to add ${starChannel.name} to Favourites",
-                    style = AppType.caption,
-                    color = colors.accent,
-                )
-            } else if (live && !seekable) {
+            if (live && !seekable) {
                 Label(
                     text = when {
                         controller.timeshiftMinutes == 0 -> "Pause and rewind live TV is off. Turn it on in Settings › Player."
@@ -479,7 +456,7 @@ private fun ControlButton(
     enabled: Boolean = true,
     /** Shown as highlighted without having focus: what OK will press. */
     highlighted: Boolean = false,
-    /** Just the icon (the words are said underneath while it's highlighted). */
+    /** Just the icon, with the words only while it's highlighted. */
     compact: Boolean = false,
     onClick: () -> Unit,
 ) {
@@ -503,7 +480,7 @@ private fun ControlButton(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             IconGlyph(icon, tint, Modifier.size(18.dp))
-            if (!compact) Label(text = label, style = AppType.label, color = tint)
+            if (!compact || focused) Label(text = label, style = AppType.label, color = tint)
         }
     }
 }
