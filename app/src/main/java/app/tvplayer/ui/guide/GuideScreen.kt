@@ -148,6 +148,7 @@ fun GuideScreen(
         val from = now - days * DAY
         from - from % HALF_HOUR
     }
+    val windowState = remember { mutableLongStateOf(liveStart) }
     var windowStart by windowState
     // Read lazily by the rows, so moving the window doesn't rebuild them.
     val window: () -> Long = remember { { windowState.longValue } }
@@ -163,7 +164,6 @@ fun GuideScreen(
     // OK on a category the listings haven't changed to yet: change now (no pause) and go in.
     var openRequested by remember { mutableStateOf(false) }
     val favourites by channels.favouriteKeys.collectAsStateWithLifecycle(initialValue = emptySet())
-    val windowState = remember { mutableLongStateOf(liveStart) }
     LaunchedEffect(pendingGroup, openRequested) {
         val target = pendingGroup
         if (target != group) {
