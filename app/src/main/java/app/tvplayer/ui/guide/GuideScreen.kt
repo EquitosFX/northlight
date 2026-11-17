@@ -634,7 +634,7 @@ private fun Header(
             Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 26.dp))
             Label(text = "${channel.number} · ${channel.name}", style = AppType.title, color = colors.textDim)
             Label(
-                text = if (channel.key in favourites) "★ In Favourites · hold OK to remove" else "Hold OK to add to Favourites",
+                text = if (channel.key in favourites) "★ Favourite · hold OK to remove" else "Hold OK to make it a favourite",
                 style = AppType.label,
                 color = if (channel.key in favourites) colors.accent else colors.textFaint,
                 maxLines = 1,

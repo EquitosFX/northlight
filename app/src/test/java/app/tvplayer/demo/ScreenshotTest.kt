@@ -376,13 +376,14 @@ class ScreenshotTest {
         if (isCategory(focusedText())) problems += "OK on a category: focus stayed on the categories"
         // Holding OK on a programme adds its channel to Favourites (without playing it); again takes it off.
         val heldOn = focusedText()
-        expectShown("Hold OK to add to Favourites", "The guide says how to add a favourite")
+        val wasFavourite = isShown("★ Favourite · hold OK")
+        if (!wasFavourite) expectShown("Hold OK to make it a favourite", "The guide says how to add a favourite")
         holdOk()
-        expectShown("In Favourites", "Holding OK adds the channel to Favourites")
+        if (isShown("★ Favourite · hold OK") == wasFavourite) problems += "Holding OK should add or remove the channel from Favourites"
         if (focusedText() != heldOn) problems += "Holding OK should stay on \"$heldOn\", but focus was on \"${focusedText()}\""
         shot("07a-guide-favourite")
         holdOk()
-        expectShown("Hold OK to add to Favourites", "Holding OK again takes the channel off Favourites")
+        if (isShown("★ Favourite · hold OK") != wasFavourite) problems += "Holding OK again should undo it"
         // Down keeps to what's on now, whatever the lengths of the programmes above
         // (the demo guide changes with the time of day, so this checks the header says "On now").
         val startedOn = focusedText()
@@ -464,12 +465,13 @@ class ScreenshotTest {
             problems += "OK on Play/Pause moved focus to \"${focusedText()}\""
         }
         // The star adds the channel to Favourites, and takes it off again.
-        moveTo("Add to Favourites", "right", max = 12, step = "Along the controls to the favourite star")
+        moveTo("Favourites", "right", max = 12, step = "Along the controls to the favourite star")
+        val starBefore = focusedText()
         press("ok")
-        expectFocus("In Favourites", "The star adds the channel to Favourites")
+        if (focusedText() == starBefore) problems += "The star should add or remove the channel from Favourites (still \"$starBefore\")"
         shot("09b4-favourite-star")
         press("ok")
-        expectFocus("Add to Favourites", "The star again takes it off")
+        expectFocus(starBefore, "The star again undoes it")
         // The last button, Sleep, is on screen and can be reached.
         moveTo("Sleep", "right", max = 12, step = "Along the controls to Sleep")
         press("ok")
@@ -496,8 +498,8 @@ class ScreenshotTest {
         shot("10b-guide-on-playing-channel")
         press("back")
         expectFocus("News", "Back from there goes to the playing channel's category")
-        press("left")
-        expectFocus("TV guide", "Left from the categories goes to the menu")
+        press("back")
+        expectFocus("TV guide", "Back from the categories goes to the menu")
         press("down")
         expectFocus("Recents", "Down the menu with the picture showing")
     }
