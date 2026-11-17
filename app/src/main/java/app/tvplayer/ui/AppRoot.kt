@@ -196,6 +196,8 @@ fun AppRoot(
     var backHeld by remember { mutableStateOf(false) }
 
     var voiceToken by remember { mutableIntStateOf(0) }
+    // The guide's category, kept while Skyfall is open.
+    val guideMemory = remember { app.tvplayer.ui.guide.GuideMemory() }
 
     fun play(channelId: Long?) {
         controller.open(channelId)
@@ -793,6 +795,9 @@ fun AppRoot(
                             reminders = reminderIds,
                             onRemind = { channel, programme -> toggleReminder(channel, programme) },
                             notWorking = deadChannels,
+                            // Opens on the channel playing in the small picture, in the category last used.
+                            watching = controller.current?.key?.takeIf { controller.vod == null && mode != PlayerMode.NONE },
+                            memory = guideMemory,
                             onCatchup = { channel, programme ->
                                 scope.launch {
                                     try {

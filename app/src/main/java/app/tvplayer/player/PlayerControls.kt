@@ -70,7 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The icons on the player buttons, drawn rather than taken from a font so they're crisp at any size. */
-enum class ControlIcon { REWIND, PLAY, PAUSE, FORWARD, LIVE, SUBTITLES, AUDIO, CHANNELS, NEXT, SLEEP }
+enum class ControlIcon { REWIND, PLAY, PAUSE, FORWARD, LIVE, SUBTITLES, AUDIO, CHANNELS, NEXT, SLEEP, STAR, STAR_FILLED }
 
 private enum class Panel { NONE, SUBTITLES, AUDIO, FIND }
 
@@ -245,6 +245,16 @@ fun PlayerControls(
                 ControlButton(ControlIcon.SUBTITLES, "Subtitles") { panel = Panel.SUBTITLES }
                 ControlButton(ControlIcon.AUDIO, "Audio") { panel = Panel.AUDIO }
                 if (onChannels != null) ControlButton(ControlIcon.CHANNELS, "Channels") { onChannels() }
+                // Adds the channel to Favourites (or takes it off). Just the star until it's highlighted.
+                val channel = controller.current
+                if (live && channel != null) {
+                    val favourite = channel.key in controller.favourites
+                    ControlButton(
+                        if (favourite) ControlIcon.STAR_FILLED else ControlIcon.STAR,
+                        if (favourite) "In Favourites" else "Add to Favourites",
+                        compact = true,
+                    ) { controller.toggleFavourite(channel) }
+                }
                 // Each press moves on: off, 30 min, 1 hour, 1½ hours, 2 hours, off.
                 // A fixed width, so the button doesn't grow off the edge as the time is added.
                 ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes), modifier = Modifier.width(112.dp)) {
@@ -446,6 +456,8 @@ private fun ControlButton(
     enabled: Boolean = true,
     /** Shown as highlighted without having focus: what OK will press. */
     highlighted: Boolean = false,
+    /** Just the icon, with the words only while it's highlighted. */
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     val colors = AppTheme.colors
@@ -468,7 +480,7 @@ private fun ControlButton(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             IconGlyph(icon, tint, Modifier.size(18.dp))
-            Label(text = label, style = AppType.label, color = tint)
+            if (!compact || focused) Label(text = label, style = AppType.label, color = tint)
         }
     }
 }
@@ -535,6 +547,23 @@ private fun DrawScope.drawIcon(icon: ControlIcon, tint: Color) {
                 addOval(androidx.compose.ui.geometry.Rect(Offset(w * 0.68f, h * 0.36f), w * 0.3f))
             }
             drawPath(Path.combine(androidx.compose.ui.graphics.PathOperation.Difference, moon, bite), tint)
+        }
+        ControlIcon.STAR, ControlIcon.STAR_FILLED -> {
+            val star = Path().apply {
+                for (k in 0 until 10) {
+                    val r = if (k % 2 == 0) w * 0.48f else w * 0.2f
+                    val a = Math.toRadians(-90.0 + k * 36.0)
+                    val x = w * 0.5f + r * kotlin.math.cos(a).toFloat()
+                    val y = h * 0.53f + r * kotlin.math.sin(a).toFloat()
+                    if (k == 0) moveTo(x, y) else lineTo(x, y)
+                }
+                close()
+            }
+            if (icon == ControlIcon.STAR_FILLED) {
+                drawPath(star, tint)
+            } else {
+                drawPath(star, tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.09f, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            }
         }
         ControlIcon.CHANNELS -> {
             for (k in 0..2) {

@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -106,6 +107,11 @@ private val GuideBodyText = AppType.body.copy(fontSize = 15.sp, lineHeight = 21.
 private val SideMargin = 14.dp
 private const val FAVOURITES = "\u0000favourites"
 
+/** The guide's category, kept while Skyfall is open (the guide itself is rebuilt each time it's shown). */
+class GuideMemory {
+    var group: String? = null
+}
+
 /** The programme the viewer is on, for the header. A null programme means the channel has no guide data. */
 private data class Focused(val channel: LineupChannel, val programme: ProgrammeEntity?)
 
@@ -129,6 +135,10 @@ fun GuideScreen(
     onRemind: (LineupChannel, ProgrammeEntity) -> Unit = { _, _ -> },
     /** Channels that failed the last channel check (Settings › Refresh and check). */
     notWorking: Set<String> = emptySet(),
+    /** The live channel playing (in the small picture) when the guide opens: it opens on that channel. */
+    watching: String? = null,
+    /** The category last used, kept while Skyfall is open so the guide comes back to it. */
+    memory: GuideMemory = remember { GuideMemory() },
 ) {
     val colors = AppTheme.colors
     val now = remember { System.currentTimeMillis() }
@@ -136,10 +146,29 @@ fun GuideScreen(
     // Programmes already read for this visit, so a row that comes back (or a category changed to)
     // shows them straight away instead of drawing empty and filling in a moment later.
     val programmeCache = remember { ProgrammeCache() }
+    // The category list on the left: Favourites, All channels, then the playlist's groups.
+    var group by remember { mutableStateOf<String?>(null) }
+    var pendingGroup by remember { mutableStateOf<String?>(null) }
+    // Opening while a channel plays: straight to its listings, on that channel.
+    var startInListings by remember { mutableStateOf(false) }
     val lineup by produceState<Lineup?>(initialValue = null) {
         val loaded = channels.lineup()
+        val favs = runCatching { channels.favouriteKeys.first() }.getOrDefault(emptySet())
+        val watched = watching?.let { loaded.findByKey(it) }
+        // The category last used (if it's still there), unless what's playing isn't in it: then the
+        // playing channel's own category.
+        var start = memory.group?.takeIf { it == FAVOURITES || it in loaded.groups }
+        if (watched != null && channelsIn(loaded, start, favs).none { it.key == watched.key }) {
+            start = watched.group?.takeIf { it in loaded.groups }
+        }
+        group = start
+        pendingGroup = start
+        memory.group = start
+        startInListings = watched != null
         // The first screenful's programmes are read before the guide shows, so it opens complete.
-        programmeCache.prefetch(channels, loaded.channels.take(PREFETCH_ROWS), originFor(liveStart))
+        val firstRows = channelsIn(loaded, start, favs)
+        val at = watched?.let { w -> firstRows.indexOfFirst { it.key == w.key } }?.coerceAtLeast(0) ?: 0
+        programmeCache.prefetch(channels, firstRows.drop((at - 2).coerceAtLeast(0)).take(PREFETCH_ROWS), originFor(liveStart))
         value = loaded
     }
     // The guide goes back as far as the longest catch-up any channel has.
@@ -157,9 +186,6 @@ fun GuideScreen(
     val firstFocus = remember { FocusRequester() }
     val entryFocus = remember { FocusRequester() }
     var placedFocus by remember { mutableStateOf(false) }
-    // The category list on the left: Favourites, All channels, then the playlist's groups.
-    var group by remember { mutableStateOf<String?>(null) }
-    var pendingGroup by remember { mutableStateOf<String?>(null) }
     var openAfterSwitch by remember { mutableIntStateOf(0) }
     // OK on a category the listings haven't changed to yet: change now (no pause) and go in.
     var openRequested by remember { mutableStateOf(false) }
@@ -178,6 +204,7 @@ fun GuideScreen(
                 ready.await()
             }
             group = target
+            memory.group = target
         }
         if (openRequested) {
             openRequested = false
@@ -241,19 +268,7 @@ fun GuideScreen(
 
     // Once a category is chosen the categories step aside and the listings fill the screen.
     // Back brings them back with the chosen one highlighted; Back again goes to the side menu.
-    var listings by remember { mutableStateOf(false) }
-    // OK on a category the channels haven't caught up with yet: into its listings once they're there.
-    LaunchedEffect(openAfterSwitch) {
-        if (openAfterSwitch == 0) return@LaunchedEffect
-        // Up to a second for the first channel's programmes to load.
-        repeat(60) {
-            withFrameNanos { }
-            if (runCatching { entryFocus.requestFocus() }.isSuccess) {
-                listings = true
-                return@LaunchedEffect
-            }
-        }
-    }
+    var listings by remember { mutableStateOf(startInListings) }
     var backToCategories by remember { mutableStateOf(false) }
     val categoryFocus = remember { FocusRequester() }
     // Kept here, so the category list is still scrolled to the chosen category when it comes back.
@@ -269,7 +284,18 @@ fun GuideScreen(
         backToCategories = false
     }
 
-    val rows = remember(current, group, favourites) { channelsIn(current, group, favourites) }
+    // Favourites taken off while looking at Favourites stay in the list until the category changes,
+    // so the row being looked at doesn't vanish from under the highlight.
+    val favouritesSeen = remember(group) { HashSet<String>() }
+    val rows = remember(current, group, favourites) {
+        if (group == FAVOURITES) {
+            current.channels.filter { it.key in favourites || it.key in favouritesSeen }.also { shown -> shown.forEach { favouritesSeen += it.key } }
+        } else {
+            channelsIn(current, group, favourites)
+        }
+    }
+    // Where Right or OK from the categories lands: the playing channel if it's in this category, else the top one.
+    val entryIndex = remember(rows, watching) { rows.indexOfFirst { it.key == watching }.coerceAtLeast(0) }
     // Holding Up or Down (or pressing very fast) moves at a pace the TV box can keep up with,
     // instead of piling up moves until it freezes.
     val lastMove = remember { longArrayOf(0L) }
@@ -295,8 +321,33 @@ fun GuideScreen(
             if (holdingForJump) runCatching { entryFocus.requestFocus() }
         }
     }
-    val rowsList = remember(group) { LazyListState() }
+    val rowsList = remember(group) { LazyListState(firstVisibleItemIndex = (entryIndex - 2).coerceAtLeast(0)) }
     val gridScope = rememberCoroutineScope()
+    val latestEntry by androidx.compose.runtime.rememberUpdatedState(entryIndex)
+    val latestList by androidx.compose.runtime.rememberUpdatedState(rowsList)
+    // Into the listings (OK or Right on a category, or opening on what's playing): the entry channel
+    // is scrolled into view if needed, then highlighted on what's on now.
+    LaunchedEffect(openAfterSwitch) {
+        if (openAfterSwitch == 0) return@LaunchedEffect
+        withFrameNanos { }
+        val list = latestList
+        val target = latestEntry
+        if (list.layoutInfo.visibleItemsInfo.none { it.index == target }) {
+            runCatching { list.scrollToItem((target - 2).coerceAtLeast(0)) }
+        }
+        // Up to a second for its programmes to load.
+        repeat(60) {
+            if (runCatching { entryFocus.requestFocus() }.isSuccess) {
+                listings = true
+                return@LaunchedEffect
+            }
+            withFrameNanos { }
+        }
+    }
+    // Opened straight onto the playing channel (from a shortcut rather than the menu): focus goes there.
+    val autoFocusGuide = LocalAutoFocus.current
+    LaunchedEffect(Unit) { if (listings && autoFocusGuide()) openAfterSwitch++ }
+    val favouriteScope = rememberCoroutineScope()
 
     // Back, after moving to another time or day: back to now, on the same channel's programme on now.
     BackHandler(enabled = listings && windowStart != liveStart && focusedRow[0] >= 0) {
@@ -319,6 +370,9 @@ fun GuideScreen(
     }
     val keepCategories by remember { derivedStateOf { !listings || categoriesShown.value > 0f } }
     val categoryWidth = 150.dp
+    val hadFocus = remember { booleanArrayOf(false) }
+    // In the listings, moving in from the side menu lands on the entry channel's programme on now.
+    if (listings) EntryPoint(entryFocus)
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -326,7 +380,13 @@ fun GuideScreen(
             // Once anything in the guide has focus, it never jumps to the first programme by itself.
             // Leaving the guide altogether (to the side menu) brings the categories back for next time.
             .onFocusChanged {
-                if (it.hasFocus) placedFocus = true else if (!holdingForJump) listings = false
+                if (it.hasFocus) {
+                    placedFocus = true
+                    hadFocus[0] = true
+                } else if (hadFocus[0] && !holdingForJump) {
+                    hadFocus[0] = false
+                    listings = false
+                }
             }
             .focusGroup(),
     ) {
@@ -336,7 +396,7 @@ fun GuideScreen(
             .graphicsLayer { translationX = categoriesShown.value * categoryWidth.toPx() }
             .onFocusChanged { if (it.hasFocus) listings = true },
     ) {
-        Header(focusedState = focusedState, reminders = reminders, modifier = Modifier.padding(horizontal = SideMargin))
+        Header(focusedState = focusedState, reminders = reminders, favourites = favourites, modifier = Modifier.padding(horizontal = SideMargin))
         DayBar(
             earliest = earliest,
             now = now,
@@ -356,7 +416,7 @@ fun GuideScreen(
         TimeRuler(windowStart = windowStart, origin = origin, now = now, window = window, slide = slide)
         if (rows.isEmpty()) {
             Label(
-                text = if (group == FAVOURITES) "No favourites yet. In live TV, press OK for the channel list, then Right on a channel." else "No channels in this group.",
+                text = if (group == FAVOURITES) "No favourites yet. Hold OK on a channel's programme in the guide, or press OK while watching and choose Add to Favourites." else "No channels in this group.",
                 style = AppType.body,
                 color = colors.textDim,
                 maxLines = 2,
@@ -401,7 +461,7 @@ fun GuideScreen(
                     origin = origin,
                     now = now,
                     earliest = earliest,
-                    entry = if (index == 0) entryFocus else null,
+                    entry = if (index == entryIndex) entryFocus else null,
                     onFocus = { programme ->
                         focusedState.value = Focused(channel, programme)
                         focusedRow[0] = index
@@ -426,6 +486,8 @@ fun GuideScreen(
                     onRemind = { programme -> onRemind(channel, programme) },
                     notWorking = channel.key in notWorking,
                     cache = programmeCache,
+                    favourite = channel.key in favourites,
+                    onFavourite = { favouriteScope.launch { channels.toggleFavourite(channel.key) } },
                 )
             }
         }
@@ -443,8 +505,8 @@ fun GuideScreen(
             onOpen = {
                 if (pendingGroup != group) {
                     openRequested = true
-                } else if (runCatching { entryFocus.requestFocus() }.isSuccess) {
-                    listings = true
+                } else {
+                    openAfterSwitch++
                 }
             },
             currentFocus = categoryFocus,
@@ -515,6 +577,16 @@ private fun Categories(
                         .fillMaxWidth()
                         .height(38.dp)
                         .focusProperties { canFocus = interactive }
+                        // Right goes into the category's listings, just as OK does: onto the channel and what's on now.
+                        .onPreviewKeyEvent { event ->
+                            if (interactive && event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+                                onSelect(name)
+                                onOpen()
+                                true
+                            } else {
+                                false
+                            }
+                        }
                         .then(if (current) Modifier.focusRequester(currentFocus) else Modifier),
                     shape = RoundedCornerShape(3.dp),
                     container = if (current) colors.glass else Color.Transparent,
@@ -540,7 +612,12 @@ private fun Categories(
 }
 
 @Composable
-private fun Header(focusedState: androidx.compose.runtime.State<Focused?>, reminders: Set<String>, modifier: Modifier = Modifier) {
+private fun Header(
+    focusedState: androidx.compose.runtime.State<Focused?>,
+    reminders: Set<String>,
+    favourites: Set<String>,
+    modifier: Modifier = Modifier,
+) {
     val colors = AppTheme.colors
     val focused = focusedState.value
     Column(
@@ -556,6 +633,12 @@ private fun Header(focusedState: androidx.compose.runtime.State<Focused?>, remin
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 26.dp))
             Label(text = "${channel.number} · ${channel.name}", style = AppType.title, color = colors.textDim)
+            Label(
+                text = if (channel.key in favourites) "★ In Favourites · hold OK to remove" else "Hold OK to add to Favourites",
+                style = AppType.label,
+                color = if (channel.key in favourites) colors.accent else colors.textFaint,
+                maxLines = 1,
+            )
         }
         if (programme == null) {
             Label(text = "No programme information", style = GuideTitleText)
@@ -664,6 +747,8 @@ private fun GuideRow(
     jumpState: androidx.compose.runtime.MutableState<Jump?>? = null,
     index: Int = -1,
     cache: ProgrammeCache? = null,
+    favourite: Boolean = false,
+    onFavourite: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
     // Only the row being moved to notices the move.
@@ -704,6 +789,7 @@ private fun GuideRow(
                 modifier = Modifier.width(32.dp),
             )
             Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 28.dp))
+            if (favourite) Label(text = "★", style = GuideChannelText, color = colors.accent)
             Label(text = channel.name, style = GuideChannelText)
             // Didn't respond in the last channel check.
             if (notWorking) Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFFFF5A5F)))
@@ -743,6 +829,7 @@ private fun GuideRow(
                     onClick = onPlay,
                     refocus = jumpTime != null,
                     onRefocused = onJumped,
+                    onLongPress = onFavourite,
                     modifier = edgeKeys(Long.MIN_VALUE / 2, Long.MAX_VALUE / 2)
                         .fillMaxSize()
                         .then(if (entry != null) Modifier.focusRequester(entry) else Modifier),
@@ -773,6 +860,7 @@ private fun GuideRow(
                                 onFocus = { onFocus(programme) },
                                 refocus = jumpId != null && programme.id == jumpId && loadedOrigin == origin,
                                 onRefocused = onJumped,
+                                onLongPress = onFavourite,
                                 // The name stays in view at the left edge for a programme that started earlier.
                                 titleShift = { pxPerMilli ->
                                     val visibleFrom = window() + slide().toLong()
@@ -861,9 +949,13 @@ private fun GuideCell(
     onRefocused: () -> Unit = {},
     /** How far to move the name along (in pixels, given pixels per millisecond) to keep it in view. */
     titleShift: ((Float) -> Int)? = null,
+    /** Holding OK down (the remote repeats the press after about half a second). */
+    onLongPress: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
     val requester = remember { FocusRequester() }
+    // A hold that's been acted on: letting go mustn't also count as a press.
+    val held = remember { booleanArrayOf(false) }
     val pxPerMilli = LocalPxPerMilli.current
     if (refocus) {
         LaunchedEffect(Unit) {
@@ -873,8 +965,21 @@ private fun GuideCell(
         }
     }
     FocusSurface(
-        onClick = onClick,
+        onClick = { if (held[0]) held[0] = false else onClick() },
         modifier = modifier
+            .onPreviewKeyEvent { event ->
+                val ok = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+                if (onLongPress == null || !ok || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (event.nativeKeyEvent.repeatCount == 0) {
+                    held[0] = false
+                    return@onPreviewKeyEvent false
+                }
+                if (!held[0]) {
+                    held[0] = true
+                    onLongPress()
+                }
+                true
+            }
             .focusRequester(requester)
             .fillMaxHeight(),
         shape = RoundedCornerShape(6.dp),

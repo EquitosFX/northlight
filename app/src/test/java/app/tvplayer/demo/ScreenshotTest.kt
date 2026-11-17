@@ -156,6 +156,19 @@ class ScreenshotTest {
         println("  after $key (watched): focus on \"${focusedText()}\"")
     }
 
+    /** Holds OK down for most of a second, as the remote does when OK is held. */
+    private fun holdOk() {
+        runCatching {
+            rule.onNode(isFocused()).performKeyInput {
+                keyDown(Key.DirectionCenter)
+                advanceEventTime(900)
+                keyUp(Key.DirectionCenter)
+            }
+        }.onFailure { problems += "Holding OK wasn't delivered: $it" }
+        settle()
+        println("  after holding ok: focus on \"${focusedText()}\"")
+    }
+
     /** Where a piece of text starts across the screen, in pixels. */
     private fun leftOf(text: String): Float =
         rule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.left ?: Float.NaN
@@ -361,6 +374,15 @@ class ScreenshotTest {
         press("ok")
         expectHidden("Favourites", "The categories step aside in the listings")
         if (isCategory(focusedText())) problems += "OK on a category: focus stayed on the categories"
+        // Holding OK on a programme adds its channel to Favourites (without playing it); again takes it off.
+        val heldOn = focusedText()
+        expectShown("Hold OK to add to Favourites", "The guide says how to add a favourite")
+        holdOk()
+        expectShown("In Favourites", "Holding OK adds the channel to Favourites")
+        if (focusedText() != heldOn) problems += "Holding OK should stay on \"$heldOn\", but focus was on \"${focusedText()}\""
+        shot("07a-guide-favourite")
+        holdOk()
+        expectShown("Hold OK to add to Favourites", "Holding OK again takes the channel off Favourites")
         // Down keeps to what's on now, whatever the lengths of the programmes above
         // (the demo guide changes with the time of day, so this checks the header says "On now").
         val startedOn = focusedText()
@@ -400,6 +422,12 @@ class ScreenshotTest {
         // Back twice: the categories, then the side menu.
         press("back")
         expectFocus("News", "Back returns to the chosen category")
+        // Right on a category goes in just as OK does: the top channel, on what's on now.
+        press("right")
+        expectHidden("Favourites", "Right on a category goes into its listings")
+        expectShown("On now", "Right on a category lands on what's on now")
+        press("back")
+        expectFocus("News", "Back from the listings returns to the category again")
         press("back")
         expectFocus("TV guide", "Back again goes to the side menu")
         expectPanel(open = true, step = "Back in the side menu")
@@ -435,6 +463,13 @@ class ScreenshotTest {
         if (!focusedText().contains("Pause") && !focusedText().contains("Play")) {
             problems += "OK on Play/Pause moved focus to \"${focusedText()}\""
         }
+        // The star adds the channel to Favourites, and takes it off again.
+        moveTo("Add to Favourites", "right", max = 12, step = "Along the controls to the favourite star")
+        press("ok")
+        expectFocus("In Favourites", "The star adds the channel to Favourites")
+        shot("09b4-favourite-star")
+        press("ok")
+        expectFocus("Add to Favourites", "The star again takes it off")
         // The last button, Sleep, is on screen and can be reached.
         moveTo("Sleep", "right", max = 12, step = "Along the controls to Sleep")
         press("ok")
@@ -453,6 +488,16 @@ class ScreenshotTest {
         expectPanel(open = true, step = "Back from full-screen TV")
         expectFocus("TV guide", "Back from full-screen TV lands on the menu")
         shot("10-picture-in-panel")
+        // The guide behind already shows the channel playing, in its category; OK goes straight to it.
+        expectHidden("Favourites", "Back from TV: the guide shows the playing channel's listings")
+        press("ok")
+        expectShown("· Atlas News", "OK on TV guide lands on the channel playing")
+        expectShown("On now", "OK on TV guide lands on what's on now")
+        shot("10b-guide-on-playing-channel")
+        press("back")
+        expectFocus("News", "Back from there goes to the playing channel's category")
+        press("left")
+        expectFocus("TV guide", "Left from the categories goes to the menu")
         press("down")
         expectFocus("Recents", "Down the menu with the picture showing")
     }
