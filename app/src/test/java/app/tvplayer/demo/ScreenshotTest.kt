@@ -161,8 +161,12 @@ class ScreenshotTest {
         val screenWidth = rule.onRoot().fetchSemanticsNode().size.width
         for (label in listOf("5 min", "Sleep")) {
             for (node in rule.onAllNodesWithText(label, substring = true).fetchSemanticsNodes()) {
+                // What's visible (cut to the row's edges) against the button's whole width.
                 val b = node.boundsInRoot
-                if (b.left < 0f || b.right > screenWidth) problems += "$step: the \"$label\" button should be fully on screen (from ${b.left} to ${b.right} of $screenWidth)"
+                println("  $step: \"$label\" visible ${b.left}–${b.right} of ${node.size.width} wide, screen $screenWidth")
+                if (b.left < 0f || b.right > screenWidth || b.width < node.size.width - 1f) {
+                    problems += "$step: the \"$label\" button should be fully on screen (${b.width} of ${node.size.width} showing)"
+                }
             }
         }
     }
