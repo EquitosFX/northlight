@@ -465,13 +465,7 @@ private fun SeasonList(
         modifier = modifier
             .fillMaxHeight()
             .width(330.dp)
-            .background(
-                Brush.horizontalGradient(
-                    0f to colors.groundBottom,
-                    0.85f to colors.groundBottom.copy(alpha = 0.97f),
-                    1f to colors.groundBottom.copy(alpha = 0.9f),
-                ),
-            )
+            .background(colors.groundBottom)
             .padding(start = 48.dp, end = 32.dp, top = 30.dp)
             // Focus stays in the list until a season is chosen or Back closes it.
             .focusProperties { exit = { FocusRequester.Cancel } }
