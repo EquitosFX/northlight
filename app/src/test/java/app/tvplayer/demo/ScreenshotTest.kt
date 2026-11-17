@@ -158,11 +158,15 @@ class ScreenshotTest {
 
     /** Holds OK down for most of a second, as the remote does when OK is held. */
     private fun holdOk() {
+        // What a remote sends: the press, repeats of it every so often while held, then the release.
         runCatching {
-            rule.onNode(isFocused()).performKeyInput {
-                keyDown(Key.DirectionCenter)
-                advanceEventTime(900)
-                keyUp(Key.DirectionCenter)
+            rule.runOnUiThread {
+                val code = android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                val t = android.os.SystemClock.uptimeMillis()
+                for ((after, repeat) in listOf(0L to 0, 500L to 1, 550L to 2, 600L to 3)) {
+                    rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t + after, android.view.KeyEvent.ACTION_DOWN, code, repeat))
+                }
+                rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t + 700, android.view.KeyEvent.ACTION_UP, code, 0))
             }
         }.onFailure { problems += "Holding OK wasn't delivered: $it" }
         settle()
