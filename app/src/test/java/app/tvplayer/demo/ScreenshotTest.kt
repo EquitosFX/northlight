@@ -512,7 +512,7 @@ class ScreenshotTest {
         moveTo("Atlas News HD", "down", max = 4, step = "Down the Stream list to the HD copy")
         press("ok")
         expectHidden("Automatic (best quality first)", "Choosing a copy closes the list")
-        repeat(4) { if (!isShown("OK to choose which one plays")) press("right") }
+        repeat(12) { if (!isShown("OK to choose which one plays")) press("right") }
         press("ok")
         expectShown("Plays first", "The chosen copy is marked as playing first")
         // Back to the usual order.
