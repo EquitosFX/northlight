@@ -9,15 +9,15 @@
         android:drawable="@drawable/ic_skyfall_s"
         android:gravity="center" />
     <item
-        android:width="117dp"
-        android:height="18dp"
-        android:top="110dp"
+        android:width="182dp"
+        android:height="28dp"
+        android:top="120dp"
         android:drawable="@drawable/ic_skyfall_wordmark"
         android:gravity="center" />
     <item
-        android:width="150dp"
-        android:height="5.8dp"
-        android:top="166dp"
+        android:width="284dp"
+        android:height="11dp"
+        android:top="198dp"
         android:drawable="@drawable/ic_skyfall_slogan"
         android:gravity="center" />
 </layer-list>

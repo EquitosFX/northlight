@@ -1,5 +1,6 @@
 package app.tvplayer.player
 
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
@@ -72,11 +73,14 @@ import kotlinx.coroutines.launch
 
 /** The icons on the player buttons, drawn rather than taken from a font so they're crisp at any size. */
 /** How far the row of buttons reaches past the words above it, at each end. */
-private val ButtonRowOverhang = 24.dp
+private val ButtonRowOverhang = 36.dp
 
-enum class ControlIcon { REWIND, PLAY, PAUSE, FORWARD, LIVE, SUBTITLES, AUDIO, CHANNELS, NEXT, SLEEP, STAR, STAR_FILLED }
+enum class ControlIcon { REWIND, PLAY, PAUSE, FORWARD, LIVE, SUBTITLES, AUDIO, CHANNELS, NEXT, SLEEP, STAR, STAR_FILLED, COPIES }
 
-private enum class Panel { NONE, SUBTITLES, AUDIO, FIND }
+private enum class Panel { NONE, SUBTITLES, AUDIO, FIND, STREAMS }
+
+/** A button that's just an icon: what it does is said under the buttons while it's highlighted. */
+private enum class ControlHint { STAR, COPIES }
 
 /**
  * The player's controls, shown when OK is pressed while watching: a timeline, then play/pause,
@@ -102,7 +106,7 @@ fun PlayerControls(
     var seekable by remember { mutableStateOf(false) }
     var panel by remember { mutableStateOf(Panel.NONE) }
     var touched by remember { mutableIntStateOf(0) }
-    var starFocused by remember { mutableStateOf(false) }
+    var hint by remember { mutableStateOf<ControlHint?>(null) }
     val playFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
     // When the controls open, focus waits on an invisible spot with Pause shown highlighted: OK pauses
@@ -259,29 +263,45 @@ fun PlayerControls(
                 ControlButton(ControlIcon.SUBTITLES, "Subtitles") { panel = Panel.SUBTITLES }
                 ControlButton(ControlIcon.AUDIO, "Audio") { panel = Panel.AUDIO }
                 if (onChannels != null) ControlButton(ControlIcon.CHANNELS, "Channels") { onChannels() }
-                // Adds the channel to Favourites (or takes it off). Just the star until it's highlighted.
                 val channel = controller.current
+                // The channel's copies (an HD and an FHD stream, say): choose which one plays.
+                if (live && channel != null && channel.variantIds.size > 1) {
+                    ControlButton(
+                        ControlIcon.COPIES,
+                        "Stream",
+                        compact = true,
+                        modifier = Modifier.onFocusChanged {
+                            if (it.hasFocus) hint = ControlHint.COPIES else if (hint == ControlHint.COPIES) hint = null
+                        },
+                    ) { panel = Panel.STREAMS }
+                }
+                // Adds the channel to Favourites (or takes it off).
                 if (live && channel != null) {
                     val favourite = channel.key in controller.favourites
                     ControlButton(
                         if (favourite) ControlIcon.STAR_FILLED else ControlIcon.STAR,
                         if (favourite) "In Favourites" else "Add to Favourites",
                         compact = true,
-                        modifier = Modifier.onFocusChanged { starFocused = it.hasFocus },
+                        modifier = Modifier.onFocusChanged {
+                            if (it.hasFocus) hint = ControlHint.STAR else if (hint == ControlHint.STAR) hint = null
+                        },
                     ) { controller.toggleFavourite(channel) }
                 }
                 // Each press moves on: off, 30 min, 1 hour, 1½ hours, 2 hours, off.
                 // A fixed width, so the button doesn't grow off the edge as the time is added.
-                ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes), modifier = Modifier.width(112.dp)) {
+                ControlButton(ControlIcon.SLEEP, sleepLabel(controller.sleepMinutes), modifier = Modifier.width(108.dp)) {
                     controller.cycleSleep()
                 }
                 if (!live && controller.hasNextEpisode) ControlButton(ControlIcon.NEXT, "Next episode") { controller.skipEpisode(+1) }
             }
-            val starChannel = controller.current
-            if (live && starFocused && starChannel != null) {
-                // What the star does, said underneath (the button itself is just the star, so the row fits).
+            val hinted = controller.current
+            if (live && hint != null && hinted != null) {
+                // What an icon-only button does, said underneath (the buttons are just icons, so the row fits).
                 Label(
-                    text = if (starChannel.key in controller.favourites) "★ ${starChannel.name} is in Favourites · OK to take it off" else "OK to add ${starChannel.name} to Favourites",
+                    text = when (hint) {
+                        ControlHint.STAR -> if (hinted.key in controller.favourites) "★ ${hinted.name} is in Favourites · OK to take it off" else "OK to add ${hinted.name} to Favourites"
+                        else -> "${hinted.name} comes in ${hinted.variantIds.size} copies · OK to choose which one plays"
+                    },
                     style = AppType.caption,
                     color = colors.accent,
                 )
@@ -327,6 +347,7 @@ fun PlayerControls(
                         )
                         AudioSyncRows(controller)
                     }
+                    Panel.STREAMS -> StreamPanel(controller = controller, focus = panelFocus, onDone = { panel = Panel.NONE })
                     Panel.FIND -> FindSubtitles(controller = controller, subtitles = subtitles, focus = panelFocus, onDone = { panel = Panel.NONE })
                     Panel.NONE -> Unit
                 }
@@ -571,6 +592,12 @@ private fun DrawScope.drawIcon(icon: ControlIcon, tint: Color) {
             }
             drawPath(Path.combine(androidx.compose.ui.graphics.PathOperation.Difference, moon, bite), tint)
         }
+        ControlIcon.COPIES -> {
+            // Two screens, one behind the other.
+            val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.09f)
+            drawRoundRect(tint, Offset(w * 0.3f, h * 0.12f), androidx.compose.ui.geometry.Size(w * 0.64f, h * 0.48f), androidx.compose.ui.geometry.CornerRadius(w * 0.06f), style = stroke)
+            drawRoundRect(tint, Offset(w * 0.06f, h * 0.36f), androidx.compose.ui.geometry.Size(w * 0.64f, h * 0.48f), androidx.compose.ui.geometry.CornerRadius(w * 0.06f))
+        }
         ControlIcon.STAR, ControlIcon.STAR_FILLED -> {
             val star = Path().apply {
                 for (k in 0 until 10) {
@@ -631,6 +658,69 @@ private fun TrackPanel(
             )
         }
         extra?.let { (text, action) -> row(text, false) { action() } }
+    }
+}
+
+/**
+ * The channel's copies (the same channel listed more than once by the playlist, usually in different
+ * qualities): which one is playing, the picture size each has been seen at, and which plays first.
+ * Choosing one plays it now and keeps it as the one this channel starts with.
+ */
+@Composable
+private fun StreamPanel(controller: LivePlayerController, focus: FocusRequester, onDone: () -> Unit) {
+    val colors = AppTheme.colors
+    val copies by androidx.compose.runtime.produceState<List<LivePlayerController.StreamCopy>?>(null, controller.current?.key, controller.copiesToken) {
+        value = controller.copies()
+    }
+    // The list is read a moment after the panel opens: focus goes to it once it's there.
+    val loaded = copies != null
+    LaunchedEffect(loaded) {
+        if (loaded) {
+            withFrameNanos { }
+            runCatching { focus.requestFocus() }
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Label(text = "Stream", style = AppType.headline, modifier = Modifier.padding(bottom = 2.dp))
+        Label(
+            text = "Your playlist lists this channel more than once. Choose the copy to play first; it's remembered for this channel, and the others are still tried if it stops.",
+            style = AppType.caption,
+            color = colors.textDim,
+            maxLines = 4,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        val list = copies.orEmpty()
+        val anyChosen = list.any { it.chosen }
+        if (copies != null) PanelRow(text = "Automatic (best quality first)", selected = !anyChosen, modifier = Modifier.focusRequester(focus)) {
+            controller.chooseCopy(null)
+            onDone()
+        }
+        for (copy in list) {
+            val detail = listOfNotNull(
+                if (copy.playing) "Playing now" else null,
+                copy.seenHeight?.let { "${it}p when last played" } ?: "Not played yet",
+                if (copy.chosen) "Plays first" else null,
+            ).joinToString(" · ")
+            FocusSurface(
+                onClick = {
+                    controller.chooseCopy(copy.index)
+                    onDone()
+                },
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(6.dp),
+                container = if (copy.chosen) colors.glassStrong else Color.Transparent,
+                outlined = false,
+                focusScale = 1.01f,
+            ) { focused ->
+                Column(
+                    modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Label(text = copy.name, style = AppType.body, color = if (focused) colors.text else colors.textDim, maxLines = 1)
+                    Label(text = detail, style = AppType.caption, color = if (copy.playing) colors.accent else colors.textFaint, maxLines = 1)
+                }
+            }
+        }
     }
 }
 

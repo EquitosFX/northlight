@@ -499,6 +499,25 @@ class ScreenshotTest {
         if (!focusedText().contains("Pause") && !focusedText().contains("Play")) {
             problems += "OK on Play/Pause moved focus to \"${focusedText()}\""
         }
+        // Atlas News comes in two copies: the Stream button lists them, and choosing one plays it first from then on.
+        repeat(12) { if (!isShown("OK to choose which one plays")) press("right") }
+        expectShown("comes in 2 copies", "The Stream button says what it does")
+        press("ok")
+        expectShown("Automatic (best quality first)", "The Stream list offers the usual order")
+        expectShown("Atlas News FHD", "The Stream list shows the FHD copy")
+        expectShown("Atlas News HD", "The Stream list shows the HD copy")
+        expectShown("Playing now", "The Stream list says which copy is playing")
+        shot("09b5-stream-copies")
+        // Choose the HD copy: it's then marked as the one that plays first.
+        moveTo("Atlas News HD", "down", max = 4, step = "Down the Stream list to the HD copy")
+        press("ok")
+        expectHidden("Automatic (best quality first)", "Choosing a copy closes the list")
+        repeat(4) { if (!isShown("OK to choose which one plays")) press("right") }
+        press("ok")
+        expectShown("Plays first", "The chosen copy is marked as playing first")
+        // Back to the usual order.
+        moveTo("Automatic", "up", max = 4, step = "Up the Stream list to Automatic")
+        press("ok")
         // The star adds the channel to Favourites, and takes it off again.
         fun starSays() = when {
             isShown("is in Favourites · OK to take it off") -> "in"
@@ -544,6 +563,15 @@ class ScreenshotTest {
         expectFocus("TV guide", "Back from the categories goes to the menu")
         press("down")
         expectFocus("Recents", "Down the menu with the picture showing")
+    }
+
+    /** The start-up screen (Android draws it from the window background, so it's drawn here directly). */
+    @Test fun startScreen() {
+        val splash = androidx.core.content.ContextCompat.getDrawable(app, app.tvplayer.R.drawable.splash) ?: return fail("No start-up screen")
+        val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        splash.setBounds(0, 0, 1920, 1080)
+        splash.draw(Canvas(bitmap))
+        File(outDir, "00-start-screen.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     /** Holding Down on the menu, then letting go: it stops where it was let go, without jumping back a place. */

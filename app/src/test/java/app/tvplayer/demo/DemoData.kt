@@ -256,6 +256,16 @@ object DemoData {
                 catchupDays = if (i < 4) 7 else null,
             )
         }
+        // Atlas News is listed twice, in HD and FHD, as many playlists do: one channel with two copies.
+        channels.withIndex().firstOrNull { it.value.first == "Atlas News" }?.let { (i, entry) ->
+            rows += ChannelEntity(
+                playlistId = pid, kind = ChannelEntity.KIND_LIVE, name = "${entry.first} FHD", baseName = entry.first,
+                variantKey = entry.first.lowercase(), quality = 3, url = "http://demo.invalid/live/demo/demo/${500 + i}.ts", remoteId = 500L + i,
+                logo = image("ch$i.png"), groupName = entry.second, number = 101 + i, guideId = "ch$i", epgId = "ch$i",
+                position = i,
+                catchupDays = if (i < 4) 7 else null,
+            )
+        }
         films.forEachIndexed { i, f ->
             rows += ChannelEntity(
                 playlistId = pid, kind = ChannelEntity.KIND_MOVIE, name = f.title, baseName = f.title,

@@ -350,6 +350,8 @@ class LivePlayerController(
         cancelRecovery()
         current = channel
         variantIndex = 0
+        // A copy chosen to play first (in the controls' Stream list) goes to the front once its name is read.
+        preferPending = true
         attempt = 0
         streamInfo = null
         bannerToken++
@@ -859,6 +861,26 @@ class LivePlayerController(
             status = PlaybackStatus.Failed
             return
         }
+        if (preferPending) {
+            preferPending = false
+            if (channel.variantIds.size > 1 && streamChoices.getString(PICK + channel.key, null) != null) {
+                // Put the chosen copy first (reading the copies' names takes a moment), then play.
+                tuneJob?.cancel()
+                status = showing
+                tuneJob = scope.launch {
+                    val names = copyNames(channel)
+                    val wanted = streamChoices.getString(PICK + channel.key, null)
+                    val at = names.indexOf(wanted)
+                    if (at > 0 && current?.key == channel.key) {
+                        val ids = channel.variantIds
+                        current = channel.copy(variantIds = listOf(ids[at]) + ids.filterIndexed { i, _ -> i != at })
+                        variantIndex = 0
+                    }
+                    playVariant(showing)
+                }
+                return
+            }
+        }
         tuneJob?.cancel()
         pictureJob?.cancel()
         firstFrameSeen = false
@@ -885,6 +907,7 @@ class LivePlayerController(
                 return@launch
             }
             playingRow = row
+            playingCopy = current?.let { now -> copyNames(now).getOrNull(now.variantIds.indexOf(row.id)) }
             if (stopped) return@launch
             val minutes = settings.timeshiftMinutes.first()
             timeshiftMinutes = minutes
@@ -967,6 +990,71 @@ class LivePlayerController(
     }
 
     private fun isHls(url: String) = url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)
+
+    // ---- Choosing between a channel's copies ----
+
+    /** Which copy of each channel plays first, and the picture size each copy has been seen at (on this box only). */
+    private val streamChoices = context.getSharedPreferences("stream_choices", Context.MODE_PRIVATE)
+    private var preferPending = false
+    private var playingCopy: String? = null
+    /** Changes when a copy is chosen, so the Stream list reads itself again. */
+    var copiesToken by mutableIntStateOf(0)
+        private set
+
+    /** One copy of the channel playing, as the Stream list shows it. */
+    data class StreamCopy(val index: Int, val name: String, val seenHeight: Int?, val playing: Boolean, val chosen: Boolean)
+
+    /** The copies' names, made distinct where a playlist repeats one ("Name", "Name (2)"). */
+    private suspend fun copyNames(channel: LineupChannel): List<String> {
+        val seen = HashMap<String, Int>()
+        return channel.variantIds.map { id ->
+            val name = channels.row(id)?.name.orEmpty()
+            val n = (seen[name] ?: 0) + 1
+            seen[name] = n
+            if (n == 1) name else "$name ($n)"
+        }
+    }
+
+    /** The playing channel's copies, in the order they're tried. */
+    suspend fun copies(): List<StreamCopy> {
+        val channel = current ?: return emptyList()
+        if (channel.variantIds.size < 2) return emptyList()
+        val names = copyNames(channel)
+        val chosen = streamChoices.getString(PICK + channel.key, null)
+        return names.mapIndexed { i, name ->
+            StreamCopy(
+                index = i,
+                name = name,
+                seenHeight = streamChoices.getInt(SEEN + channel.key + "|" + name, 0).takeIf { it > 0 },
+                playing = i == variantIndex && playingRow != null,
+                chosen = name == chosen,
+            )
+        }
+    }
+
+    /** Plays copy [index] now and keeps it as the one this channel starts with; null goes back to the usual order. */
+    fun chooseCopy(index: Int?) {
+        val channel = current ?: return
+        scope.launch {
+            val names = copyNames(channel)
+            if (index == null) {
+                streamChoices.edit().remove(PICK + channel.key).apply()
+            } else {
+                names.getOrNull(index)?.let { streamChoices.edit().putString(PICK + channel.key, it).apply() }
+            }
+            copiesToken++
+            val now = current
+            if (index != null && index != variantIndex && now?.key == channel.key && index < now.variantIds.size) {
+                // The chosen copy first, then the others in their usual order if it ever stops.
+                val ids = now.variantIds
+                current = now.copy(variantIds = listOf(ids[index]) + ids.filterIndexed { i, _ -> i != index })
+                cancelRecovery()
+                variantIndex = 0
+                attempt = 0
+                playVariant(PlaybackStatus.Loading)
+            }
+        }
+    }
 
 
     private fun recover() {
@@ -1069,7 +1157,15 @@ class LivePlayerController(
     private fun updateStreamInfo() {
         val parts = ArrayList<String>()
         player.videoFormat?.let { video ->
-            if (video.height > 0) parts.add(resolutionLabel(video.height))
+            if (video.height > 0) {
+                parts.add(resolutionLabel(video.height))
+                // Remembered against the copy, so the Stream list can say what each copy turned out to be.
+                val channel = current
+                val copy = playingCopy
+                if (channel != null && copy != null && channel.variantIds.size > 1) {
+                    streamChoices.edit().putInt(SEEN + channel.key + "|" + copy, video.height).apply()
+                }
+            }
             val fps = video.frameRate.takeIf { it > 0f } ?: frameRate
             if (fps != null) parts.add("${fps.roundToInt()}fps")
         }
@@ -1184,6 +1280,8 @@ class LivePlayerController(
     }
 
     private companion object {
+        const val PICK = "pick|"
+        const val SEEN = "seen|"
         const val STALL_MILLIS = 15_000L
         const val NO_PICTURE_MILLIS = 7_000L
         const val CATCHUP_SETTLE_MILLIS = 700L
