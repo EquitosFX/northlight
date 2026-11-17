@@ -49,6 +49,7 @@ class NorthlightApp : Application(), coil.ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        CrashLog.noteExitReason(this)
         container = AppContainer(this)
     }
 }

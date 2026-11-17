@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Keeps Wi-Fi at full power while a stream plays. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Lets Settings › Updates install a newer build over this one (the viewer still confirms). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Voice search through the remote's microphone. -->
@@ -9,6 +11,17 @@
     <!-- Rows on the Shield's home screen. -->
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Android 11 and later only let an app see the other apps it names here: the speech recogniser
+         (for voice search) and the "install unknown apps" settings page (for updates). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.MANAGE_UNKNOWN_APP_SOURCES" />
+        </intent>
+    </queries>
 
     <uses-feature
         android:name="android.software.leanback"

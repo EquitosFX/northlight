@@ -66,7 +66,7 @@ fun BackupPane(backup: BackupRepository) {
                     status = try {
                         val copy = backup.save()
                         savedAt = backup.savedAt()
-                        "Saved on this Shield" + (copy?.let { ", with a copy in $it" } ?: "") + "."
+                        "Saved on this TV box" + (copy?.let { ", with a copy in $it" } ?: "") + "."
                     } catch (e: Exception) {
                         "Couldn't save the backup: ${e.message}"
                     }
@@ -91,11 +91,11 @@ fun BackupPane(backup: BackupRepository) {
         Label(text = "With your phone or computer", style = AppType.headline, modifier = Modifier.padding(top = 16.dp))
         val url = address
         if (url == null) {
-            Label(text = "The Shield isn't on a network, so this isn't available.", style = AppType.body, color = colors.textDim)
+            Label(text = "This TV box isn't on a network, so this isn't available.", style = AppType.body, color = colors.textDim)
         } else {
             Label(
                 text = "On a phone or computer on the same Wi-Fi, open this address in the web browser. You can download a " +
-                    "backup to keep, or choose a backup file to load onto the Shield. It works while this page is open.",
+                    "backup to keep, or choose a backup file to load onto this TV box. It works while this page is open.",
                 style = AppType.body,
                 color = colors.textDim,
                 maxLines = 3,

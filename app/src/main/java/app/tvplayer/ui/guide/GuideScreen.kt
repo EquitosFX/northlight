@@ -257,7 +257,20 @@ fun GuideScreen(
     val jumpState = remember { mutableStateOf<Jump?>(null) }
     // Focus parked while Back takes the grid back to now; the listings stay open meanwhile.
     var holdingForJump by remember { mutableStateOf(false) }
-    LaunchedEffect(jumpState.value) { if (jumpState.value == null) holdingForJump = false }
+    LaunchedEffect(jumpState.value) {
+        val pending = jumpState.value
+        if (pending == null) {
+            holdingForJump = false
+            return@LaunchedEffect
+        }
+        // A move that can't land (that row has nothing to land on) is let go of, and focus never
+        // stays parked: it goes to the first channel.
+        delay(JUMP_GIVE_UP_MILLIS)
+        if (jumpState.value === pending) {
+            jumpState.value = null
+            if (holdingForJump) runCatching { entryFocus.requestFocus() }
+        }
+    }
     val rowsList = remember(group) { LazyListState() }
     val gridScope = rememberCoroutineScope()
 
@@ -988,6 +1001,9 @@ private const val SLIDE_MILLIS = 320
 
 /** The quickest the guide moves between channels with the button held down. */
 private const val HELD_MOVE_MILLIS = 120L
+
+/** How long a move up or down (or Back to now) is given to land before it's abandoned. */
+private const val JUMP_GIVE_UP_MILLIS = 1_500L
 
 /** How long a move up or down may take to land before another press is taken anyway. */
 private const val JUMP_TIMEOUT_MILLIS = 600L

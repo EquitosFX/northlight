@@ -52,7 +52,7 @@ class TimeshiftSession(
     private val referrer: String?,
     root: File,
     windowSeconds: Double,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     /** Called when the stream can't be reached any more, after reconnecting has been tried. */
     private val onFailed: () -> Unit,
 ) {
@@ -117,7 +117,12 @@ class TimeshiftSession(
         call?.cancel()
         job.cancel()
         if (!ready.isCompleted) ready.cancel()
-        dir.deleteRecursively()
+        // Up to half an hour of recording (hundreds of files) is deleted in the background once the
+        // recorder has finished writing, so changing channel never waits for it.
+        scope.launch(Dispatchers.IO) {
+            job.join()
+            dir.deleteRecursively()
+        }
     }
 
     companion object {

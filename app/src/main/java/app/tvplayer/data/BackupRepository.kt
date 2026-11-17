@@ -65,7 +65,7 @@ class BackupRepository(
 
     /** Restores the backup kept on this Shield. Returns a message for the screen. */
     suspend fun restoreSaved(): String {
-        val text = withContext(Dispatchers.IO) { saved.takeIf { it.exists() }?.readText() } ?: return "There's no backup saved on this Shield yet."
+        val text = withContext(Dispatchers.IO) { saved.takeIf { it.exists() }?.readText() } ?: return "There's no backup saved on this TV box yet."
         return restore(text)
     }
 

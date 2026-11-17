@@ -575,6 +575,20 @@ class ScreenshotTest {
         }
     }
 
+    /** The crash note says which box it was, where the cause was, and never carries addresses. */
+    @Test fun crashNote() {
+        val cause = IllegalStateException("bad state at http://user:secret@example.invalid/live/1.ts")
+        val error = RuntimeException("Wrapped", cause)
+        val note = app.tvplayer.CrashLog.describe(app, Thread.currentThread(), error)
+        if ("Caused by IllegalStateException" !in note) problems += "The crash note should name the underlying cause"
+        if (android.os.Build.MODEL !in note) problems += "The crash note should name the TV box model"
+        if ("secret" in note || "http" in note) problems += "The crash note must not contain addresses"
+        // Nothing recorded by Android means nothing is noted.
+        app.tvplayer.CrashLog.clear(app)
+        app.tvplayer.CrashLog.noteExitReason(app)
+        if (app.tvplayer.CrashLog.read(app) != null) problems += "No exit reason should leave no crash note"
+    }
+
     /** Back after moving to another time in the guide returns to what's on now, on the same channel. */
     @Test fun guideBackToNow() {
         open(Dest.GUIDE)

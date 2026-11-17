@@ -189,7 +189,10 @@ class LivePlayerController(
     private var queue: List<VodItem> = emptyList()
     private var upNextJob: Job? = null
     private var timeshift: TimeshiftSession? = null
-    private val timeshiftRoot = File(context.cacheDir, "timeshift").also { TimeshiftSession.clearAll(it) }
+    // Recordings left behind by a previous run are cleared away in the background.
+    private val timeshiftRoot = File(context.cacheDir, "timeshift").also { root ->
+        scope.launch(Dispatchers.IO) { TimeshiftSession.clearAll(root) }
+    }
 
     /** Subtitle files added to the film playing (from OpenSubtitles). */
     private var addedSubtitles: List<MediaItem.SubtitleConfiguration> = emptyList()
@@ -284,6 +287,16 @@ class LivePlayerController(
         .setRenderersFactory(DelayedAudioRenderersFactory(context, audioDelay).setEnableDecoderFallback(true))
         // Start playing after one second of video rather than the default two and a half.
         .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 50_000, 1_000, 2_000).build())
+        // Plays as a film/TV app: pauses for the voice assistant and other apps' sound, then carries on.
+        .setAudioAttributes(
+            androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build(),
+            true,
+        )
+        // Keeps Wi-Fi at full power while playing (some boxes save power on Wi-Fi, which drops streams).
+        .setWakeMode(C.WAKE_MODE_NETWORK)
         .build()
         .also { exo ->
             // Follows the setting, whether it's changed here or in Settings › Player.
@@ -787,6 +800,12 @@ class LivePlayerController(
         stopped = true
         cancelRecovery()
         tuneJob?.cancel()
+        // Nothing starts playing while the app is away: the next episode's countdown, a catch-up skip
+        // waiting to be made, or the black-screen check.
+        upNextJob?.cancel()
+        catchupJob?.cancel()
+        pendingCatchup = null
+        pictureJob?.cancel()
         stopTimeshift()
         player.stop()
     }
@@ -847,9 +866,21 @@ class LivePlayerController(
         stopTimeshift()
         status = showing
         tuneJob = scope.launch {
-            val row = channels.row(id)
+            var row = channels.row(id)
             if (row == null) {
-                // The playlist was refreshed or removed underneath us.
+                // The playlist was refreshed underneath us (the daily refresh renumbers everything):
+                // find the same channel in the new list and carry on with it.
+                val fresh = channels.lineup()
+                val again = fresh.findByKey(channel.key)
+                if (again != null && !fresh.isEmpty) {
+                    lineup = fresh
+                    current = again
+                    variantIndex = variantIndex.coerceAtMost(again.variantIds.size - 1)
+                    row = again.variantIds.getOrNull(variantIndex)?.let { channels.row(it) }
+                }
+            }
+            if (row == null) {
+                // The playlist was removed, or the channel is no longer in it.
                 status = PlaybackStatus.Failed
                 return@launch
             }

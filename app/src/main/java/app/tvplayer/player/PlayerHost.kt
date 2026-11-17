@@ -136,7 +136,15 @@ fun PlayerHost(
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
                     // Hold the last picture while the next channel starts, instead of flashing black.
                     setKeepContentOnPlayerReset(true)
-                    keepScreenOn = true
+                    // The TV stays awake while something plays; paused, it may sleep as usual.
+                    keepScreenOn = controller.player.isPlaying
+                    val awake = object : androidx.media3.common.Player.Listener {
+                        override fun onIsPlayingChanged(isPlaying: Boolean) {
+                            keepScreenOn = isPlaying
+                        }
+                    }
+                    controller.player.addListener(awake)
+                    tag = awake
                     // Focus stays with the Compose screens, never inside the video view.
                     isFocusable = false
                     descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -145,7 +153,10 @@ fun PlayerHost(
                     subtitleView?.visibility = android.view.View.GONE
                 }
             },
-            onRelease = { view -> view.player = null },
+            onRelease = { view ->
+                (view.tag as? androidx.media3.common.Player.Listener)?.let(controller.player::removeListener)
+                view.player = null
+            },
             modifier = Modifier.fillMaxSize(),
         )
 

@@ -94,10 +94,15 @@ fun BackupPlayerLayer(
             when (event.type) {
                 MediaPlayer.Event.Playing -> {
                     if (stream.audioDelayMs != 0) runCatching { player.setAudioDelay(stream.audioDelayMs * 1_000L) }
+                    layout?.keepScreenOn = true
                     playing = true
                     state = "Playing with the backup player"
                 }
-                MediaPlayer.Event.Paused -> playing = false
+                // Paused, the TV may sleep as usual (no picture left burning in).
+                MediaPlayer.Event.Paused, MediaPlayer.Event.Stopped -> {
+                    layout?.keepScreenOn = false
+                    playing = false
+                }
                 MediaPlayer.Event.Buffering -> if (event.buffering < 100f) state = "Buffering… ${event.buffering.toInt()}%"
                 MediaPlayer.Event.TimeChanged -> position = event.timeChanged
                 MediaPlayer.Event.LengthChanged -> length = event.lengthChanged
@@ -123,6 +128,21 @@ fun BackupPlayerLayer(
                 vlc.release()
             }
         }
+    }
+
+    // Pressing Home stops the backup player's sound too; it carries on when Skyfall comes back.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(engine, lifecycle) {
+        val player = engine?.second
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> runCatching { player?.pause() }
+                androidx.lifecycle.Lifecycle.Event.ON_START -> runCatching { if (player?.isPlaying == false) player.play() }
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(bannerToken) {
@@ -155,12 +175,13 @@ fun BackupPlayerLayer(
                         if (!stream.live && player.isSeekable) player.time = player.time + 10_000
                         true
                     }
+                    // The same way round as the main player: Up is the next channel.
                     Key.DirectionUp, Key.ChannelUp -> {
-                        onZap?.invoke(-1)
+                        onZap?.invoke(1)
                         onZap != null
                     }
                     Key.DirectionDown, Key.ChannelDown -> {
-                        onZap?.invoke(1)
+                        onZap?.invoke(-1)
                         onZap != null
                     }
                     else -> false

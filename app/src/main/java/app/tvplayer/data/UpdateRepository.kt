@@ -87,7 +87,7 @@ class UpdateRepository(
             } catch (e: UpdateException) {
                 UpdateState.Failed(e.message.orEmpty(), null)
             } catch (e: IOException) {
-                UpdateState.Failed("Couldn't reach GitHub. Check the Shield's internet connection and try again.", null)
+                UpdateState.Failed("Couldn't reach GitHub. Check the TV box's internet connection and try again.", null)
             }
         }
     }
@@ -208,7 +208,7 @@ class UpdateRepository(
                     ". Uninstall Skyfall and install the new build with Downloader.",
                 update,
             )
-            PackageInstaller.STATUS_FAILURE_STORAGE -> UpdateState.Failed("There isn't enough free space on the Shield.", update)
+            PackageInstaller.STATUS_FAILURE_STORAGE -> UpdateState.Failed("There isn't enough free space on this TV box.", update)
             else -> UpdateState.Failed("Android couldn't install the update" + (message?.let { ": $it" } ?: "."), update)
         }
     }

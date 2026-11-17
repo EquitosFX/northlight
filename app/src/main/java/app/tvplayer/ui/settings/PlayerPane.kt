@@ -76,7 +76,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     ) {
         Label(text = "Pause and rewind live TV", style = AppType.headline)
         Label(
-            text = "Keeps the channel you're watching on the Shield's storage, so you can pause, rewind and catch up to live. " +
+            text = "Keeps the channel you're watching on this TV box's storage, so you can pause, rewind and catch up to live. " +
                 "It uses at most half the free space, and is cleared when you change channel.",
             style = AppType.body,
             color = colors.textDim,

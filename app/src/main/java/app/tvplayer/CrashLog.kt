@@ -20,6 +20,55 @@ object CrashLog {
         }
     }
 
+    /**
+     * Crashes inside the video and sound engines (VLC, FFmpeg) and "not responding" freezes don't go
+     * through the handler above. Android records why the app last ended, so that's checked when it
+     * starts and noted the same way. (Android 11 and later: both the Shield and Google TV.)
+     */
+    fun noteExitReason(context: Context) {
+        if (android.os.Build.VERSION.SDK_INT < 30) return
+        runCatching {
+            val app = context.applicationContext
+            val manager = app.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val last = manager.getHistoricalProcessExitReasons(app.packageName, 0, 1).firstOrNull() ?: return
+            val prefs = app.getSharedPreferences("crash_log", Context.MODE_PRIVATE)
+            if (last.timestamp <= prefs.getLong("seen_exit", 0L)) return
+            prefs.edit().putLong("seen_exit", last.timestamp).apply()
+            val what = when (last.reason) {
+                android.app.ApplicationExitInfo.REASON_ANR -> "Skyfall stopped responding (froze) and Android closed it."
+                android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "Skyfall's video or sound engine crashed."
+                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "Android closed Skyfall because the box ran out of memory."
+                else -> return
+            }
+            // A Java crash already wrote its own, fuller note.
+            if (read(app) != null) return
+            val build = runCatching {
+                @Suppress("DEPRECATION")
+                app.packageManager.getPackageInfo(app.packageName, 0).versionCode
+            }.getOrNull()
+            val trace = if (last.reason == android.app.ApplicationExitInfo.REASON_ANR) {
+                runCatching {
+                    last.traceInputStream?.bufferedReader()?.useLines { lines ->
+                        // The main thread's lines in Skyfall's own code say where it was stuck.
+                        lines.dropWhile { !it.startsWith("\"main\"") }.take(60).filter { "app.tvplayer" in it }.take(8).toList()
+                    }
+                }.getOrNull().orEmpty()
+            } else {
+                emptyList()
+            }
+            File(app.filesDir, FILE).writeText(
+                buildString {
+                    append("Build ").append(build ?: "?").append(" · ").append(device()).append('\n')
+                    append(what).append('\n')
+                    last.description?.let { append(scrub(it)).append('\n') }
+                    trace.forEach { append(it.trim()).append('\n') }
+                }.take(3_000),
+            )
+        }
+    }
+
+    private fun device() = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE}"
+
     /** The note from the last crash, or null if Skyfall closed normally. */
     fun read(context: Context): String? =
         runCatching { File(context.filesDir, FILE).takeIf { it.exists() }?.readText() }.getOrNull()?.takeIf { it.isNotBlank() }
@@ -38,11 +87,17 @@ object CrashLog {
         // Skyfall's own lines first: they say where in the app it happened.
         val ours = frames.filter { it.className.startsWith("app.tvplayer") }.take(8)
         return buildString {
-            append("Build ").append(build ?: "?").append(" · thread ").append(thread.name).append('\n')
+            append("Build ").append(build ?: "?").append(" · thread ").append(thread.name).append(" · ").append(device()).append('\n')
             append(error.javaClass.simpleName).append(": ").append(scrub(error.message)).append('\n')
             if (root !== error) append("Caused by ").append(root.javaClass.simpleName).append(": ").append(scrub(root.message)).append('\n')
             frames.firstOrNull()?.let { append("at ").append(it.toString()).append('\n') }
             ours.forEach { append("at ").append(it.className.removePrefix("app.tvplayer.")).append('.').append(it.methodName).append(':').append(it.lineNumber).append('\n') }
+            // Where the underlying cause happened, when it's somewhere else in Skyfall.
+            if (root !== error) {
+                root.stackTrace.filter { it.className.startsWith("app.tvplayer") }.take(4).forEach {
+                    append("cause at ").append(it.className.removePrefix("app.tvplayer.")).append('.').append(it.methodName).append(':').append(it.lineNumber).append('\n')
+                }
+            }
         }.take(3_000)
     }
 
