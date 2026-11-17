@@ -23,6 +23,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -129,6 +130,35 @@ class ScreenshotTest {
             println("  after $name: focus on \"${focusedText()}\"")
         }
     }
+
+    /**
+     * Presses [key] and watches frame by frame (as the TV would draw them) that no guide row is ever
+     * shown without its programmes: a category's listings change in one go, already filled in.
+     */
+    private fun pressWatchingRows(key: String, step: String) {
+        val target = if (focusCount() > 0) rule.onNode(isFocused()) else rule.onRoot()
+        rule.mainClock.autoAdvance = false
+        try {
+            target.performKeyInput { pressKey(keys.getValue(key)) }
+            repeat(90) {
+                rule.mainClock.advanceTimeBy(16)
+                Thread.sleep(6)
+                val waiting = rule.onAllNodesWithTag("guide-row-waiting", useUnmergedTree = true).fetchSemanticsNodes().size
+                if (waiting > 0) {
+                    problems += "$step: $waiting guide rows were drawn before their programmes were ready"
+                    return
+                }
+            }
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        settle()
+        println("  after $key (watched): focus on \"${focusedText()}\"")
+    }
+
+    /** Where a piece of text starts across the screen, in pixels. */
+    private fun leftOf(text: String): Float =
+        rule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.left ?: Float.NaN
 
     /** Presses [key] until focus is on [text], up to [max] times. */
     private fun moveTo(text: String, key: String, max: Int = 8, step: String) {
@@ -347,12 +377,20 @@ class ScreenshotTest {
         press("back")
         expectFocus("All channels", "Back from the listings goes to the categories")
         expectShown("Favourites", "The categories come back")
-        press("down", "down")
+        // The listings move aside for the categories, clear of them.
+        if (!(leftOf("Meridian One") > (rule.onAllNodesWithText("Favourites").fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.right ?: Float.MAX_VALUE))) {
+            problems += "With the categories showing, the listings should sit to their right"
+        }
+        press("down")
+        pressWatchingRows("down", "Changing category")
         expectFocus("News", "Down the categories")
+        expectShown("Atlas News", "Resting on News shows its channels")
         shot("08-guide-categories")
 
         // OK on a category: its listings fill the screen.
+        val beside = leftOf("Atlas News")
         press("ok")
+        if (!(leftOf("Atlas News") < beside)) problems += "Into the listings, they should slide left to fill the screen"
         expectHidden("Favourites", "Choosing a category hides the categories")
         expectShown("Atlas News", "News category shows news channels")
         expectHidden("Meridian Two", "News category hides other channels")

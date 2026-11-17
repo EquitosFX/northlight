@@ -1,5 +1,10 @@
 package app.tvplayer.ui.guide
 
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import androidx.compose.ui.platform.testTag
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.layout.Layout
@@ -126,16 +131,23 @@ fun GuideScreen(
     notWorking: Set<String> = emptySet(),
 ) {
     val colors = AppTheme.colors
-    val lineup by produceState<Lineup?>(initialValue = null) { value = channels.lineup() }
     val now = remember { System.currentTimeMillis() }
     val liveStart = remember { now - now % HALF_HOUR }
+    // Programmes already read for this visit, so a row that comes back (or a category changed to)
+    // shows them straight away instead of drawing empty and filling in a moment later.
+    val programmeCache = remember { ProgrammeCache() }
+    val lineup by produceState<Lineup?>(initialValue = null) {
+        val loaded = channels.lineup()
+        // The first screenful's programmes are read before the guide shows, so it opens complete.
+        programmeCache.prefetch(channels, loaded.channels.take(PREFETCH_ROWS), originFor(liveStart))
+        value = loaded
+    }
     // The guide goes back as far as the longest catch-up any channel has.
     val earliest = remember(lineup) {
         val days = lineup?.channels?.maxOfOrNull { it.catchupDays ?: 0 } ?: 0
         val from = now - days * DAY
         from - from % HALF_HOUR
     }
-    val windowState = remember { mutableLongStateOf(liveStart) }
     var windowStart by windowState
     // Read lazily by the rows, so moving the window doesn't rebuild them.
     val window: () -> Long = remember { { windowState.longValue } }
@@ -148,12 +160,30 @@ fun GuideScreen(
     var group by remember { mutableStateOf<String?>(null) }
     var pendingGroup by remember { mutableStateOf<String?>(null) }
     var openAfterSwitch by remember { mutableIntStateOf(0) }
-    LaunchedEffect(pendingGroup) {
-        if (pendingGroup == group) return@LaunchedEffect
-        delay(CATEGORY_SETTLE_MILLIS)
-        group = pendingGroup
-    }
+    // OK on a category the listings haven't changed to yet: change now (no pause) and go in.
+    var openRequested by remember { mutableStateOf(false) }
     val favourites by channels.favouriteKeys.collectAsStateWithLifecycle(initialValue = emptySet())
+    val windowState = remember { mutableLongStateOf(liveStart) }
+    LaunchedEffect(pendingGroup, openRequested) {
+        val target = pendingGroup
+        if (target != group) {
+            val loaded = lineup ?: return@LaunchedEffect
+            // The new category's first screenful of programmes is read while the highlight rests,
+            // and the listings change in one go once it's ready: the old ones stay until then.
+            coroutineScope {
+                val ready = async {
+                    programmeCache.prefetch(channels, channelsIn(loaded, target, favourites).take(PREFETCH_ROWS), originFor(windowState.longValue))
+                }
+                if (!openRequested) delay(CATEGORY_SETTLE_MILLIS)
+                ready.await()
+            }
+            group = target
+        }
+        if (openRequested) {
+            openRequested = false
+            openAfterSwitch++
+        }
+    }
 
     val current = lineup
     if (current == null || current.isEmpty) {
@@ -239,13 +269,7 @@ fun GuideScreen(
         backToCategories = false
     }
 
-    val rows = remember(current, group, favourites) {
-        when (group) {
-            null -> current.channels
-            FAVOURITES -> current.channels.filter { it.key in favourites }
-            else -> current.inGroup(group)
-        }
-    }
+    val rows = remember(current, group, favourites) { channelsIn(current, group, favourites) }
     // Holding Up or Down (or pressing very fast) moves at a pace the TV box can keep up with,
     // instead of piling up moves until it freezes.
     val lastMove = remember { longArrayOf(0L) }
@@ -286,7 +310,16 @@ fun GuideScreen(
         moveWindow(liveStart)
     }
 
-    Row(
+    // The listings are always laid out at their full width; with the categories showing they're just
+    // drawn further right. Showing or hiding the categories slides the two along together, so
+    // nothing is measured or laid out again (that was the jolt going in and out of the listings).
+    val categoriesShown = remember { Animatable(if (listings) 0f else 1f) }
+    LaunchedEffect(listings) {
+        categoriesShown.animateTo(if (listings) 0f else 1f, tween(PANEL_MILLIS, easing = FastOutSlowInEasing))
+    }
+    val keepCategories by remember { derivedStateOf { !listings || categoriesShown.value > 0f } }
+    val categoryWidth = 150.dp
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(start = 34.dp)
@@ -297,31 +330,10 @@ fun GuideScreen(
             }
             .focusGroup(),
     ) {
-    if (!listings) {
-        Categories(
-            groups = current.groups,
-            selected = group,
-            // Moving quickly through the categories doesn't build every one's listings on the way:
-            // the channels change once the highlight has paused on a category.
-            onSelect = { pendingGroup = it },
-            // OK on a category moves into its listings (focus first, so it never falls out of the guide).
-            onOpen = {
-                if (pendingGroup != group) {
-                    group = pendingGroup
-                    openAfterSwitch++
-                } else if (runCatching { entryFocus.requestFocus() }.isSuccess) {
-                    listings = true
-                }
-            },
-            currentFocus = categoryFocus,
-            listState = categoryList,
-            modifier = Modifier.width(150.dp).fillMaxHeight(),
-        )
-    }
     Column(
         modifier = Modifier
-            .weight(1f)
-            .fillMaxHeight()
+            .fillMaxSize()
+            .graphicsLayer { translationX = categoriesShown.value * categoryWidth.toPx() }
             .onFocusChanged { if (it.hasFocus) listings = true },
     ) {
         Header(focusedState = focusedState, reminders = reminders, modifier = Modifier.padding(horizontal = SideMargin))
@@ -413,9 +425,40 @@ fun GuideScreen(
                     reminders = reminders,
                     onRemind = { programme -> onRemind(channel, programme) },
                     notWorking = channel.key in notWorking,
+                    cache = programmeCache,
                 )
             }
         }
+    }
+    // Drawn over the listings' left edge, sliding off to the left as they slide in. While sliding
+    // away they can't be highlighted, so Left from the listings still goes to the side menu.
+    if (keepCategories) {
+        Categories(
+            groups = current.groups,
+            selected = group,
+            // Moving quickly through the categories doesn't build every one's listings on the way:
+            // the channels change once the highlight has paused on a category.
+            onSelect = { pendingGroup = it },
+            // OK on a category moves into its listings (focus first, so it never falls out of the guide).
+            onOpen = {
+                if (pendingGroup != group) {
+                    openRequested = true
+                } else if (runCatching { entryFocus.requestFocus() }.isSuccess) {
+                    listings = true
+                }
+            },
+            currentFocus = categoryFocus,
+            listState = categoryList,
+            interactive = !listings,
+            modifier = Modifier
+                .width(categoryWidth)
+                .fillMaxHeight()
+                .graphicsLayer {
+                    val shown = categoriesShown.value
+                    translationX = -(1f - shown) * categoryWidth.toPx()
+                    alpha = shown
+                },
+        )
     }
     }
 }
@@ -429,6 +472,7 @@ private fun Categories(
     onOpen: () -> Unit,
     currentFocus: FocusRequester,
     listState: LazyListState,
+    interactive: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
@@ -470,6 +514,7 @@ private fun Categories(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(38.dp)
+                        .focusProperties { canFocus = interactive }
                         .then(if (current) Modifier.focusRequester(currentFocus) else Modifier),
                     shape = RoundedCornerShape(3.dp),
                     container = if (current) colors.glass else Color.Transparent,
@@ -618,6 +663,7 @@ private fun GuideRow(
     notWorking: Boolean = false,
     jumpState: androidx.compose.runtime.MutableState<Jump?>? = null,
     index: Int = -1,
+    cache: ProgrammeCache? = null,
 ) {
     val colors = AppTheme.colors
     // Only the row being moved to notices the move.
@@ -625,17 +671,20 @@ private fun GuideRow(
     val onJumped: () -> Unit = { if (jumpState?.value?.row == index) jumpState.value = null }
     // Several hours either side of what's in view, loaded once and laid out once: moving along the
     // grid just slides them, with nothing rebuilt or loaded until a few hours further on.
-    var programmes by remember { mutableStateOf<List<ProgrammeEntity>?>(null) }
-    var loadedOrigin by remember { mutableLongStateOf(Long.MIN_VALUE) }
+    // Already read (the category's first screenful is read before it's shown): there from the first frame.
+    var programmes by remember { mutableStateOf(cache?.get(channel, origin)) }
+    var loadedOrigin by remember { mutableLongStateOf(if (programmes != null) origin else Long.MIN_VALUE) }
     LaunchedEffect(channel.key, origin) {
-        programmes = channels.programmes(channel, origin, origin + SPAN)
+        programmes = cache?.load(channels, channel, origin) ?: channels.programmes(channel, origin, origin + SPAN)
         loadedOrigin = origin
     }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(RowHeight),
+            .height(RowHeight)
+            // Lets the walkthrough check no row is ever shown waiting for its programmes after a change.
+            .then(if (programmes == null) Modifier.testTag("guide-row-waiting") else Modifier),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
@@ -995,6 +1044,42 @@ private fun originFor(windowStart: Long): Long = windowStart - Math.floorMod(win
 
 /** How long the highlight rests on a category before its channels are shown. */
 private const val CATEGORY_SETTLE_MILLIS = 160L
+
+/** How many rows' programmes are read before a category is shown: a screenful and a little more. */
+private const val PREFETCH_ROWS = 12
+
+/** How long the categories take to slide away or back. */
+private const val PANEL_MILLIS = 220
+
+private fun channelsIn(lineup: Lineup, group: String?, favourites: Set<String>): List<LineupChannel> = when (group) {
+    null -> lineup.channels
+    FAVOURITES -> lineup.channels.filter { it.key in favourites }
+    else -> lineup.inGroup(group)
+}
+
+/** Programmes read during one visit to the guide, by channel guide and laid-out hours (the most recent few hundred). */
+private class ProgrammeCache {
+    private val map = object : LinkedHashMap<String, List<ProgrammeEntity>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<ProgrammeEntity>>?) = size > 600
+    }
+
+    private fun key(channel: LineupChannel, origin: Long) = "${channel.playlistId}|${channel.guideId}|$origin"
+
+    fun get(channel: LineupChannel, origin: Long): List<ProgrammeEntity>? =
+        if (channel.guideId == null) emptyList() else synchronized(map) { map[key(channel, origin)] }
+
+    suspend fun load(channels: ChannelsRepository, channel: LineupChannel, origin: Long): List<ProgrammeEntity> =
+        get(channel, origin) ?: channels.programmes(channel, origin, origin + SPAN).also { found ->
+            synchronized(map) { map[key(channel, origin)] = found }
+        }
+
+    /** Reads the programmes for [rows] together; already-read ones cost nothing. */
+    suspend fun prefetch(channels: ChannelsRepository, rows: List<LineupChannel>, origin: Long) {
+        runCatching {
+            coroutineScope { rows.filter { get(it, origin) == null }.map { async { load(channels, it, origin) } }.awaitAll() }
+        }
+    }
+}
 
 /** How long the grid takes to slide along an hour. */
 private const val SLIDE_MILLIS = 320
