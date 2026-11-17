@@ -398,10 +398,13 @@ class ScreenshotTest {
         val wasFavourite = isShown("★ Favourite · hold OK")
         if (!wasFavourite) expectShown("Hold OK to make it a favourite", "The guide says how to add a favourite")
         holdOk()
+        // (Saved in the background: given a moment to show.)
+        repeat(8) { if (isShown("★ Favourite · hold OK") == wasFavourite) settle(3) }
         if (isShown("★ Favourite · hold OK") == wasFavourite) problems += "Holding OK should add or remove the channel from Favourites"
         if (focusedText() != heldOn) problems += "Holding OK should stay on \"$heldOn\", but focus was on \"${focusedText()}\""
         shot("07a-guide-favourite")
         holdOk()
+        repeat(8) { if (isShown("★ Favourite · hold OK") != wasFavourite) settle(3) }
         if (isShown("★ Favourite · hold OK") != wasFavourite) problems += "Holding OK again should undo it"
         // Down keeps to what's on now, whatever the lengths of the programmes above
         // (the demo guide changes with the time of day, so this checks the header says "On now").
