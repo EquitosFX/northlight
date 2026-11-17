@@ -156,6 +156,17 @@ class ScreenshotTest {
         println("  after $key (watched): focus on \"${focusedText()}\"")
     }
 
+    /** Every player button is fully on screen without scrolling, from the first 5 min to Sleep. */
+    private fun expectButtonsFit(step: String) {
+        val screenWidth = rule.onRoot().fetchSemanticsNode().size.width
+        for (label in listOf("5 min", "Sleep")) {
+            for (node in rule.onAllNodesWithText(label, substring = true).fetchSemanticsNodes()) {
+                val b = node.boundsInRoot
+                if (b.left < 0f || b.right > screenWidth) problems += "$step: the \"$label\" button should be fully on screen (from ${b.left} to ${b.right} of $screenWidth)"
+            }
+        }
+    }
+
     /** Holds OK down for most of a second, as the remote does when OK is held. */
     private fun holdOk() {
         // What a remote sends: the press, repeats of it every so often while held, then the release.
@@ -455,14 +466,7 @@ class ScreenshotTest {
         expectShown("Channels", "The controls offer the channel list")
         expectShown("min left", "The controls show the programme's times")
         if (focusedText().contains("Pause")) problems += "The controls opened with Pause already highlighted"
-        // Every button fits on screen without scrolling, from the first 5 min to Sleep.
-        val screenWidth = rule.onRoot().fetchSemanticsNode().size.width
-        for (label in listOf("5 min", "Sleep")) {
-            for (node in rule.onAllNodesWithText(label, substring = true).fetchSemanticsNodes()) {
-                val b = node.boundsInRoot
-                if (b.left < 0f || b.right > screenWidth) problems += "The \"$label\" button should be fully on screen (from ${b.left} to ${b.right} of $screenWidth)"
-            }
-        }
+        expectButtonsFit("When the controls open")
         shot("09b-player-controls")
         // OK again pauses, with Play highlighted; OK once more carries on.
         press("ok")
@@ -492,6 +496,7 @@ class ScreenshotTest {
         if (starSays() != starBefore) problems += "The star again should undo it"
         // The last button, Sleep, is on screen and can be reached.
         moveTo("Sleep", "right", max = 12, step = "Along the controls to Sleep")
+        expectButtonsFit("Moved along to Sleep")
         press("ok")
         expectShown("Sleep 30m", "Sleep sets 30 minutes")
         shot("09b3-sleep-timer")
