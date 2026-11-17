@@ -1,5 +1,6 @@
 package app.tvplayer.ui.home
 
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -233,7 +234,10 @@ internal fun Rail(title: String, tiles: List<Tile>, onTileClick: (Tile) -> Unit 
             contentPadding = PaddingValues(horizontal = SideMargin, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(tiles) { tile -> TileCard(tile = tile, onClick = { onTileClick(tile) }) }
+            // Keyed, so a rail that gains or loses a tile keeps the rest as they are rather than rebuilding them.
+            itemsIndexed(tiles, key = { index, tile -> if (tiles.count { it.title == tile.title } == 1) "t:${tile.title}" else "i:$index" }) { _, tile ->
+                TileCard(tile = tile, onClick = { onTileClick(tile) })
+            }
         }
     }
 }

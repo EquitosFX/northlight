@@ -163,12 +163,16 @@ fun AppRoot(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Bring TV guides up to date in the background when the app opens.
-    LaunchedEffect(Unit) { container.playlists.refreshStaleGuides() }
+    // Bring TV guides up to date in the background, a few seconds after opening so the first
+    // screens have the box to themselves while they appear.
+    LaunchedEffect(Unit) {
+        delay(6_000)
+        container.playlists.refreshStaleGuides()
+    }
     // Get Series, Films and Sport ready in the background shortly after opening (and again after a
     // playlist refresh), so they open straight away rather than loading when first chosen.
     LaunchedEffect(Unit) {
-        delay(4_000)
+        delay(3_000)
         while (true) {
             runCatching {
                 container.channels.groups(ChannelEntity.KIND_SERIES)

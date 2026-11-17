@@ -1,5 +1,7 @@
 package app.tvplayer.ui.theme
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -72,20 +74,23 @@ fun Snowfall(
     } else {
         null
     }
-    Canvas(modifier) {
+    // Soft glows, like stage lights through mist: drawn once and kept, as they never move.
+    androidx.compose.foundation.layout.Box(
+        modifier.drawWithCache {
+            val w = size.width
+            val h = size.height
+            val red = Brush.radialGradient(listOf(Color(0xFFD0102A).copy(alpha = 0.38f), Color.Transparent), center = Offset(w * 0.55f, h * 1.05f), radius = h * 0.9f)
+            val green = Brush.radialGradient(listOf(Color(0xFF1F7A4D).copy(alpha = 0.30f), Color.Transparent), center = Offset(w * 0.3f, h * 0.05f), radius = h * 0.8f)
+            onDrawBehind {
+                drawCircle(red, radius = h * 0.9f, center = Offset(w * 0.55f, h * 1.05f))
+                drawCircle(green, radius = h * 0.8f, center = Offset(w * 0.3f, h * 0.05f))
+            }
+        },
+    )
+    // The snow in a layer of its own, so redrawing it each frame redraws only the snow, not the screen.
+    Canvas(modifier.graphicsLayer()) {
         val w = size.width
         val h = size.height
-        // Soft glows, like stage lights through mist.
-        drawCircle(
-            Brush.radialGradient(listOf(Color(0xFFD0102A).copy(alpha = 0.38f), Color.Transparent), center = Offset(w * 0.55f, h * 1.05f), radius = h * 0.9f),
-            radius = h * 0.9f,
-            center = Offset(w * 0.55f, h * 1.05f),
-        )
-        drawCircle(
-            Brush.radialGradient(listOf(Color(0xFF1F7A4D).copy(alpha = 0.30f), Color.Transparent), center = Offset(w * 0.3f, h * 0.05f), radius = h * 0.8f),
-            radius = h * 0.8f,
-            center = Offset(w * 0.3f, h * 0.05f),
-        )
         val t = seconds?.value ?: 0f
         val scale = density
         for (f in flakes) {

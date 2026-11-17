@@ -292,13 +292,15 @@ fun MovieNightScreen(
 private fun SoftLights() {
     val colors = AppTheme.colors
     val drift = rememberInfiniteTransition(label = "lights")
-    val t by drift.animateFloat(
+    // Read only while drawing, in a layer of its own: each frame redraws just the lights.
+    val drifting = drift.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(14_000, easing = LinearEasing), RepeatMode.Reverse),
         label = "t",
     )
-    Canvas(Modifier.fillMaxSize()) {
+    Canvas(Modifier.fillMaxSize().graphicsLayer()) {
+        val t = drifting.value
         val w = size.width
         val h = size.height
         drawCircle(
@@ -352,13 +354,15 @@ private fun Intro(onStart: () -> Unit) {
         Spacer(Modifier.height(26.dp))
         // A slow glow around the button invites the first press.
         val glow = rememberInfiniteTransition(label = "glow")
-        val pulse by glow.animateFloat(0.2f, 0.55f, infiniteRepeatable(tween(1_400), RepeatMode.Reverse), label = "pulse")
+        val pulse = glow.animateFloat(0.2f, 0.55f, infiniteRepeatable(tween(1_400), RepeatMode.Reverse), label = "pulse")
         Box(contentAlignment = Alignment.Center) {
             Box(
                 Modifier
                     .size(width = 200.dp, height = 66.dp)
+                    // The glow's strength is read only while drawing, so the screen isn't rebuilt with every beat.
+                    .graphicsLayer { alpha = pulse.value / 0.55f }
                     .background(
-                        Brush.radialGradient(listOf(colors.accent.copy(alpha = pulse), Color.Transparent)),
+                        Brush.radialGradient(listOf(colors.accent.copy(alpha = 0.55f), Color.Transparent)),
                         RoundedCornerShape(33.dp),
                     ),
             )

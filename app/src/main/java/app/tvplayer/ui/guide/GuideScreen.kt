@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.layout.Layout
 import androidx.compose.runtime.DisposableEffect
@@ -145,6 +146,13 @@ fun GuideScreen(
     var placedFocus by remember { mutableStateOf(false) }
     // The category list on the left: Favourites, All channels, then the playlist's groups.
     var group by remember { mutableStateOf<String?>(null) }
+    var pendingGroup by remember { mutableStateOf<String?>(null) }
+    var openAfterSwitch by remember { mutableIntStateOf(0) }
+    LaunchedEffect(pendingGroup) {
+        if (pendingGroup == group) return@LaunchedEffect
+        delay(CATEGORY_SETTLE_MILLIS)
+        group = pendingGroup
+    }
     val favourites by channels.favouriteKeys.collectAsStateWithLifecycle(initialValue = emptySet())
 
     val current = lineup
@@ -204,6 +212,18 @@ fun GuideScreen(
     // Once a category is chosen the categories step aside and the listings fill the screen.
     // Back brings them back with the chosen one highlighted; Back again goes to the side menu.
     var listings by remember { mutableStateOf(false) }
+    // OK on a category the channels haven't caught up with yet: into its listings once they're there.
+    LaunchedEffect(openAfterSwitch) {
+        if (openAfterSwitch == 0) return@LaunchedEffect
+        // Up to a second for the first channel's programmes to load.
+        repeat(60) {
+            withFrameNanos { }
+            if (runCatching { entryFocus.requestFocus() }.isSuccess) {
+                listings = true
+                return@LaunchedEffect
+            }
+        }
+    }
     var backToCategories by remember { mutableStateOf(false) }
     val categoryFocus = remember { FocusRequester() }
     // Kept here, so the category list is still scrolled to the chosen category when it comes back.
@@ -268,9 +288,18 @@ fun GuideScreen(
         Categories(
             groups = current.groups,
             selected = group,
-            onSelect = { group = it },
+            // Moving quickly through the categories doesn't build every one's listings on the way:
+            // the channels change once the highlight has paused on a category.
+            onSelect = { pendingGroup = it },
             // OK on a category moves into its listings (focus first, so it never falls out of the guide).
-            onOpen = { if (runCatching { entryFocus.requestFocus() }.isSuccess) listings = true },
+            onOpen = {
+                if (pendingGroup != group) {
+                    group = pendingGroup
+                    openAfterSwitch++
+                } else if (runCatching { entryFocus.requestFocus() }.isSuccess) {
+                    listings = true
+                }
+            },
             currentFocus = categoryFocus,
             listState = categoryList,
             modifier = Modifier.width(150.dp).fillMaxHeight(),
@@ -950,6 +979,9 @@ private const val CHUNK = 4 * 3_600_000L
 private const val SPAN = 10 * 3_600_000L
 
 private fun originFor(windowStart: Long): Long = windowStart - Math.floorMod(windowStart, CHUNK) - 2 * 3_600_000L
+
+/** How long the highlight rests on a category before its channels are shown. */
+private const val CATEGORY_SETTLE_MILLIS = 160L
 
 /** How long the grid takes to slide along an hour. */
 private const val SLIDE_MILLIS = 320

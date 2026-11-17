@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import kotlinx.coroutines.flow.distinctUntilChanged
 import app.tvplayer.core.sport.SportKind
 import app.tvplayer.core.sport.SportFinder
 import app.tvplayer.core.vod.EpisodeNames
@@ -229,7 +230,16 @@ class ChannelsRepository(private val db: AppDatabase) {
     }
 
     /** Films and episodes started but not finished, most recent first. */
+    /**
+     * Saved positions, for Carry on watching. A film saves its place every few seconds while it
+     * plays; Home only needs to hear about it when the minutes left change, not every save.
+     */
     val continueWatching: Flow<List<ProgressEntity>> = db.progress().observeRecent()
+        .distinctUntilChanged { old, new ->
+            old.size == new.size && old.zip(new).all { (a, b) ->
+                a.url == b.url && a.positionMs / 60_000 == b.positionMs / 60_000 && a.durationMs == b.durationMs
+            }
+        }
 
     suspend fun progressFor(url: String): ProgressEntity? = db.progress().get(url)
 

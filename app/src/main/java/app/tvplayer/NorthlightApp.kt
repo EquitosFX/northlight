@@ -24,10 +24,27 @@ import kotlinx.coroutines.SupervisorJob
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
-class NorthlightApp : Application() {
+class NorthlightApp : Application(), coil.ImageLoaderFactory {
 
     lateinit var container: AppContainer
         private set
+
+    /**
+     * Posters, logos and artwork. Many IPTV servers mark their pictures "don't keep", which made every
+     * poster download again each time a screen opened; they're kept on disk regardless now (a picture
+     * at the same address rarely changes), so screens fill in straight away.
+     */
+    override fun newImageLoader(): coil.ImageLoader =
+        coil.ImageLoader.Builder(this)
+            .respectCacheHeaders(false)
+            .memoryCache { coil.memory.MemoryCache.Builder(this).maxSizePercent(0.25).build() }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizePercent(0.03)
+                    .build()
+            }
+            .build()
 
     override fun onCreate() {
         super.onCreate()
