@@ -571,8 +571,11 @@ class ScreenshotTest {
         press("back")
         // Moved to another time: the first Back returns to now; the next, to the categories.
         if (!focusedText().startsWith("Group") && !isCategory(focusedText())) press("back")
+        // After scrolling down the listings, hovering another category shows its listings at now.
+        press("down", "down")
+        shot("07j-guide-hover-after-scrolling")
         // A category far down the list, then back to it.
-        repeat(30) { press("down") }
+        repeat(28) { press("down") }
         expectFocus("Group 23", "Far down the categories")
         press("ok", "down", "back")
         expectFocus("Group 23", "Back from a far-down category's listings returns to it")
