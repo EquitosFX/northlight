@@ -697,8 +697,11 @@ private fun StreamPanel(controller: LivePlayerController, focus: FocusRequester,
         }
         for (copy in list) {
             val detail = listOfNotNull(
-                if (copy.playing) "Playing now" else null,
-                copy.seenHeight?.let { "${it}p when last played" } ?: "Not played yet",
+                when {
+                    copy.playing -> listOfNotNull("Playing now", copy.seenHeight?.let { "${it}p" }).joinToString(" · ")
+                    copy.seenHeight != null -> "${copy.seenHeight}p when last played"
+                    else -> "Not played yet"
+                },
                 if (copy.chosen) "Plays first" else null,
             ).joinToString(" · ")
             FocusSurface(
