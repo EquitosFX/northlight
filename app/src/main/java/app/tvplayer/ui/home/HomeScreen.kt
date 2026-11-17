@@ -1,5 +1,7 @@
 package app.tvplayer.ui.home
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -102,11 +104,14 @@ fun HomeScreen(
     }
 }
 
-/** Recents: channels watched lately, and films and episodes to carry on with. */
+/**
+ * Recents: the last few channels watched, as on Home, then films and episodes to carry on with as big
+ * picture tiles, three to a row (they're what's mostly picked up again here).
+ */
 @Composable
-fun RecentsScreen(rails: List<HomeRail>, onTile: (Tile) -> Unit) {
+fun RecentsScreen(channels: List<Tile>, resume: List<Tile>, onTile: (Tile) -> Unit) {
     val colors = AppTheme.colors
-    if (rails.all { it.tiles.isEmpty() }) {
+    if (channels.isEmpty() && resume.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Label(text = "Nothing watched yet. Channels and films you watch will appear here.", style = AppType.headline, color = colors.textDim)
         }
@@ -115,13 +120,90 @@ fun RecentsScreen(rails: List<HomeRail>, onTile: (Tile) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 8.dp, bottom = 27.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        for (rail in rails) {
-            if (rail.tiles.isNotEmpty()) item(key = rail.title) { Rail(title = rail.title, tiles = rail.tiles, onTileClick = onTile) }
+        if (channels.isNotEmpty()) {
+            item(key = "channels") { Rail(title = "Recent channels", tiles = channels.take(RECENT_CHANNELS), onTileClick = onTile) }
+        }
+        if (resume.isNotEmpty()) {
+            item(key = "resume-title") {
+                Label(
+                    text = "Continue watching",
+                    style = AppType.label,
+                    color = colors.textDim,
+                    modifier = Modifier.padding(start = SideMargin),
+                )
+            }
+            val rows = resume.chunked(RESUME_PER_ROW)
+            items(rows.size, key = { "resume-$it" }) { r ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = SideMargin),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    for (tile in rows[r]) ResumeCard(tile = tile, onClick = { onTile(tile) }, modifier = Modifier.weight(1f))
+                    // A short last row keeps the tiles the same size as the rows above.
+                    repeat(RESUME_PER_ROW - rows[r].size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
         }
     }
 }
+
+/** A film or episode to carry on with: its picture, name, time left and how far through. */
+@Composable
+private fun ResumeCard(tile: Tile, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = AppTheme.colors
+    val art = Color(tile.color)
+    FocusSurface(
+        onClick = onClick,
+        modifier = modifier.aspectRatio(16f / 9f),
+        shape = RoundedCornerShape(10.dp),
+        container = art,
+        focusedContainer = art,
+        outlined = false,
+        focusScale = 1.04f,
+    ) {
+        if (tile.logo != null) {
+            AsyncImage(
+                model = tile.logo,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to colors.scrim)),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Label(text = tile.title, style = AppType.title, maxLines = 1)
+            Label(text = tile.caption, style = AppType.label, color = colors.textDim, maxLines = 1)
+        }
+        if (tile.progress != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(Color.White.copy(alpha = 0.18f)),
+            ) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(tile.progress).background(colors.accent))
+            }
+        }
+    }
+}
+
+/** How many channels Recents shows, and how many films and episodes to a row. */
+private const val RECENT_CHANNELS = 8
+private const val RESUME_PER_ROW = 3
 
 @Composable
 private fun Hero(hero: HomeHero, primaryFocus: FocusRequester) {

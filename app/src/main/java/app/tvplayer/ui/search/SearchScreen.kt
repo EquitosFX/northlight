@@ -1,5 +1,6 @@
 package app.tvplayer.ui.search
 
+import androidx.compose.ui.graphics.Color
 import app.tvplayer.ui.vod.PosterCard
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.grid.items
@@ -64,7 +65,9 @@ fun SearchScreen(
     LaunchedEffect(Unit) { if (autoFocus()) runCatching { fieldFocus.requestFocus() } }
 
     // Listens in the app through the remote's mic; the words fill the search box as they're heard.
-    val voice = rememberVoiceInput { words -> query = words }
+    // Searches asked for (typed and finished, said, or a result opened), most recent first, kept on this box.
+    val history = rememberSearchHistory()
+    val voice = rememberVoiceInput(onWords = { words -> query = words }, onFinal = { words -> history.add(words) })
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) voice.start() else voice.problem = "Allow the microphone to search by voice."
     }
@@ -111,6 +114,7 @@ fun SearchScreen(
             TvTextField(
                 value = query,
                 onValueChange = { query = it },
+                onDone = { history.add(query) },
                 label = "Channels, films, series and people",
                 placeholder = "Press OK to type",
                 modifier = Modifier
@@ -137,9 +141,26 @@ fun SearchScreen(
             voice.problem != null -> Label(text = voice.problem.orEmpty(), style = AppType.body, color = colors.accent)
         }
 
+        // With nothing typed: the searches made before, to search again with OK.
+        if (text.length < 2 && history.items.isNotEmpty()) {
+            HistoryPills(
+                items = history.items,
+                onPick = { picked ->
+                    query = picked
+                    history.add(picked)
+                    // The pills make way for the results: focus goes back to the search box.
+                    runCatching { fieldFocus.requestFocus() }
+                },
+                onClear = {
+                    history.clear()
+                    runCatching { fieldFocus.requestFocus() }
+                },
+            )
+        }
+
         val list = results
         val status = when {
-            text.length < 2 -> "Type at least two letters."
+            text.length < 2 -> if (history.items.isEmpty()) "Type at least two letters." else ""
             list == null -> "Searching…"
             list.isEmpty() && people.isEmpty() -> "Nothing found for \"$text\"."
             else -> listOfNotNull(
@@ -165,7 +186,7 @@ fun SearchScreen(
                 item(key = "h-titles", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("Films and series") }
                 items(titles, key = { "t${it.id}" }) { row ->
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        PosterCard(row = row, onClick = { onOpen(row) }, modifier = Modifier.fillMaxWidth())
+                        PosterCard(row = row, onClick = { history.add(text); onOpen(row) }, modifier = Modifier.fillMaxWidth())
                         Label(
                             text = if (row.kind == ChannelEntity.KIND_MOVIE) "Film" else "Series",
                             style = AppType.caption,
@@ -177,16 +198,107 @@ fun SearchScreen(
             if (people.isNotEmpty()) {
                 item(key = "h-people", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("People") }
                 items(people, key = { "p${it.id}" }) { person ->
-                    PersonTile(person = person, onClick = { onPerson(person) })
+                    PersonTile(person = person, onClick = { history.add(text); onPerson(person) })
                 }
             }
             if (liveChannels.isNotEmpty()) {
                 item(key = "h-live", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("Live channels") }
                 items(liveChannels, key = { "c${it.id}" }) { row ->
-                    ChannelTile(row = row, onClick = { onOpen(row) })
+                    ChannelTile(row = row, onClick = { history.add(text); onOpen(row) })
                 }
             }
         }
+    }
+}
+
+/** The searches made before, kept on this box (the most recent twelve). */
+@androidx.compose.runtime.Stable
+class SearchHistory(private val prefs: android.content.SharedPreferences) {
+    var items by mutableStateOf(prefs.getString(KEY, null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty())
+        private set
+
+    fun add(search: String) {
+        val clean = search.trim().replace('\n', ' ')
+        if (clean.length < 2) return
+        items = (listOf(clean) + items.filterNot { it.equals(clean, ignoreCase = true) }).take(MAX)
+        prefs.edit().putString(KEY, items.joinToString("\n")).apply()
+    }
+
+    fun clear() {
+        items = emptyList()
+        prefs.edit().remove(KEY).apply()
+    }
+
+    private companion object {
+        const val KEY = "searches"
+        const val MAX = 12
+    }
+}
+
+@Composable
+private fun rememberSearchHistory(): SearchHistory {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return remember { SearchHistory(context.getSharedPreferences("search_history", android.content.Context.MODE_PRIVATE)) }
+}
+
+/** Earlier searches as pills: OK searches again. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun HistoryPills(items: List<String>, onPick: (String) -> Unit, onClear: () -> Unit) {
+    val colors = AppTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Label(text = "Recent searches", style = AppType.title)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            for (item in items) {
+                FocusSurface(
+                    onClick = { onPick(item) },
+                    modifier = Modifier.height(36.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                    container = colors.glass,
+                    focusedContainer = colors.accent,
+                    outlined = false,
+                ) { focused ->
+                    Row(
+                        modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        HistoryClock(tint = if (focused) colors.onAccent else colors.textDim, modifier = Modifier.size(14.dp))
+                        Label(text = item, style = AppType.label, color = if (focused) colors.onAccent else colors.text, maxLines = 1)
+                    }
+                }
+            }
+            FocusSurface(
+                onClick = onClear,
+                modifier = Modifier.height(36.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                container = Color.Transparent,
+                focusedContainer = colors.glassStrong,
+                outlined = false,
+            ) { focused ->
+                Label(
+                    text = "Clear history",
+                    style = AppType.label,
+                    color = if (focused) colors.text else colors.textFaint,
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
+                )
+            }
+        }
+    }
+}
+
+/** A small clock: "searched before". */
+@Composable
+private fun HistoryClock(tint: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val stroke = size.width * 0.12f
+        drawCircle(tint, radius = size.width / 2 - stroke / 2, style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke))
+        val c = center
+        drawLine(tint, c, androidx.compose.ui.geometry.Offset(c.x, size.height * 0.24f), strokeWidth = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(tint, c, androidx.compose.ui.geometry.Offset(size.width * 0.72f, c.y), strokeWidth = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
     }
 }
 

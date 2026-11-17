@@ -47,6 +47,8 @@ fun TvTextField(
     placeholder: String = "",
     isPassword: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
+    /** Typing finished (the keyboard's Done, or Back out of it). */
+    onDone: () -> Unit = {},
 ) {
     val colors = AppTheme.colors
     val shape = RoundedCornerShape(9.dp)
@@ -62,6 +64,7 @@ fun TvTextField(
             BackHandler {
                 editing = false
                 returnFocus = true
+                onDone()
             }
             LaunchedEffect(Unit) { runCatching { typingFocus.requestFocus() } }
 
@@ -77,6 +80,7 @@ fun TvTextField(
                     onDone = {
                         editing = false
                         returnFocus = true
+                        onDone()
                     },
                 ),
                 modifier = Modifier

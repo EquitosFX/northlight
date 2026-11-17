@@ -31,7 +31,7 @@ import androidx.core.content.ContextCompat
  * than in Android's own search. Words appear as they're heard; [onFinal] gets the finished phrase.
  */
 @Stable
-class VoiceInput(private val context: Context, private val onWords: (String) -> Unit) {
+class VoiceInput(private val context: Context, private val onWords: (String) -> Unit, private val onFinal: (String) -> Unit = {}) {
     var listening by mutableStateOf(false)
         private set
     var problem by mutableStateOf<String?>(null)
@@ -69,7 +69,10 @@ class VoiceInput(private val context: Context, private val onWords: (String) -> 
             }
             override fun onResults(results: Bundle?) {
                 listening = false
-                words(results)?.let(onWords)
+                words(results)?.let {
+                    onWords(it)
+                    onFinal(it)
+                }
             }
             override fun onError(error: Int) {
                 listening = false
@@ -106,9 +109,9 @@ class VoiceInput(private val context: Context, private val onWords: (String) -> 
 }
 
 @Composable
-fun rememberVoiceInput(onWords: (String) -> Unit): VoiceInput {
+fun rememberVoiceInput(onWords: (String) -> Unit, onFinal: (String) -> Unit = {}): VoiceInput {
     val context = LocalContext.current
-    val voice = remember { VoiceInput(context, onWords) }
+    val voice = remember { VoiceInput(context, onWords, onFinal) }
     DisposableEffect(voice) { onDispose { voice.stop() } }
     return voice
 }

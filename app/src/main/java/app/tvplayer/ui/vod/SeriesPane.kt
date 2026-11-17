@@ -1,5 +1,7 @@
 package app.tvplayer.ui.vod
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
 import app.tvplayer.ui.components.LocalNewEpisodes
 import app.tvplayer.ui.components.WatchedTick
 import app.tvplayer.ui.components.LocalWatched
@@ -151,7 +153,7 @@ internal fun SeriesPane(
         }
     }
 
-    val seasons = episodes.map { it.season }.distinct()
+    val seasons = episodes.map { it.season }.distinct().sorted()
     var season by remember(series.id) { mutableIntStateOf(-1) }
     LaunchedEffect(nextUp?.episode?.season) { if (season == -1) nextUp?.episode?.season?.let { season = it } }
     val shownSeason = if (season in seasons) season else seasons.firstOrNull() ?: 1
@@ -336,23 +338,8 @@ internal fun SeriesPane(
                         }
                         WideButton("Episodes") { runCatching { episodeRowFocus.requestFocus() } }
                         if (seasons.size > 1 || seasonsOpen) {
-                            WideButton("Season $shownSeason", chevron = true, modifier = Modifier.focusRequester(seasonPicker)) {
+                            WideButton(if (shownSeason == 0) "Specials" else "Season $shownSeason", chevron = true, modifier = Modifier.focusRequester(seasonPicker)) {
                                 if (seasonsOpen) closeSeasons() else seasonsOpen = true
-                            }
-                            if (seasonsOpen) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    seasons.forEach { number ->
-                                        WideButton(
-                                            text = "Season $number",
-                                            selected = number == shownSeason,
-                                            modifier = if (number == shownSeason) Modifier.focusRequester(currentSeasonFocus) else Modifier,
-                                        ) {
-                                            season = number
-                                            highlighted = null
-                                            closeSeasons()
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -441,6 +428,70 @@ internal fun SeriesPane(
                 }
             }
             Spacer(Modifier.height(40.dp))
+        }
+
+        // The seasons, as a list over the left of the page that scrolls however many there are.
+        // (Opening it no longer pushes the page about, so the title stays where it is.)
+        if (seasonsOpen) {
+            SeasonList(
+                seasons = seasons,
+                shown = shownSeason,
+                currentFocus = currentSeasonFocus,
+                onPick = { number ->
+                    season = number
+                    highlighted = null
+                    closeSeasons()
+                },
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+        }
+    }
+}
+
+/** Every season, with the one showing highlighted; Back closes it. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+private fun SeasonList(
+    seasons: List<Int>,
+    shown: Int,
+    currentFocus: FocusRequester,
+    onPick: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AppTheme.colors
+    val at = seasons.indexOf(shown).coerceAtLeast(0)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (at - 3).coerceAtLeast(0))
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(330.dp)
+            .background(
+                Brush.horizontalGradient(
+                    0f to colors.groundBottom,
+                    0.85f to colors.groundBottom.copy(alpha = 0.97f),
+                    1f to colors.groundBottom.copy(alpha = 0.9f),
+                ),
+            )
+            .padding(start = 48.dp, end = 32.dp, top = 30.dp)
+            // Focus stays in the list until a season is chosen or Back closes it.
+            .focusProperties { exit = { FocusRequester.Cancel } }
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Label(text = "Seasons", style = AppType.headline)
+        androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(top = 4.dp, bottom = 30.dp, start = 4.dp, end = 4.dp),
+        ) {
+            items(seasons.size, key = { seasons[it] }) { i ->
+                val number = seasons[i]
+                WideButton(
+                    text = if (number == 0) "Specials" else "Season $number",
+                    selected = number == shown,
+                    modifier = if (number == shown) Modifier.focusRequester(currentFocus) else Modifier,
+                ) { onPick(number) }
+            }
         }
     }
 }

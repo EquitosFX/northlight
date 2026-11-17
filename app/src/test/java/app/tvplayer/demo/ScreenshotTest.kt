@@ -387,8 +387,13 @@ class ScreenshotTest {
     @Test fun recents() {
         open(Dest.RECENTS)
         expectShown("Recent channels", "Recents")
+        expectShown("Continue watching", "Recents shows what to carry on with")
         press("right")
         expectPanel(open = false, step = "Browsing Recents")
+        // Films and episodes to carry on with are big tiles, much wider than the channel tiles.
+        val channelWidth = rule.onAllNodesWithText("Meridian One", substring = true).fetchSemanticsNodes().firstOrNull()?.size?.width ?: 0
+        val resumeWidth = rule.onAllNodesWithText("Ember Valley", substring = true).fetchSemanticsNodes().firstOrNull()?.size?.width ?: 0
+        if (resumeWidth < channelWidth * 1.5) problems += "Carry-on tiles should be bigger than channel tiles ($resumeWidth vs $channelWidth wide)"
         shot("05-recents")
     }
 
@@ -897,6 +902,19 @@ class ScreenshotTest {
         press("ok")
         expectShown("Season 2 · 3 episodes", "Choosing a season shows its episodes")
         expectFocus("Season 2", "Choosing a season returns to the picker")
+        // All nine seasons can be reached, and the page (with the show's name at the top) stays put.
+        press("ok")
+        moveTo("Season 9", "down", max = 10, step = "Down the season list to the last season")
+        shot("17a2-series-many-seasons")
+        press("ok")
+        expectShown("Season 9 · 3 episodes", "The last season can be chosen")
+        val name = rule.onAllNodesWithText("Cobalt Street", substring = true).fetchSemanticsNodes().firstOrNull()
+        if (name == null || name.boundsInRoot.top < 0f || name.boundsInRoot.height < name.size.height - 1f) {
+            problems += "The show's name should still be fully on screen after choosing a season"
+        }
+        press("ok")
+        moveTo("Season 2", "up", max = 10, step = "Back up the season list")
+        press("ok")
         // Down to the episode cards.
         press("down")
         expectShown("S2 E1", "Highlighting an episode describes it")
@@ -939,10 +957,26 @@ class ScreenshotTest {
         expectShown("The Quiet Orchard", "Searching \"the\" finds films")
         expectShown("The Archivist", "Searching \"the\" finds series")
         shot("18-search-titles")
+        // Finishing typing remembers the search.
+        press("back")
+        press("ok")
         type("priya")
         expectShown("Priya Desai", "Searching a name finds the person")
         expectHidden("Nothing found", "A person found isn't reported as nothing found")
         shot("19-search-people")
+        press("back")
+        // With the box emptied, the earlier searches are listed; OK on one searches again.
+        press("ok")
+        type("")
+        press("back")
+        expectShown("Recent searches", "Earlier searches are listed")
+        expectShown("priya", "The last search is remembered")
+        expectShown("the", "The search before is remembered")
+        shot("19a-search-history")
+        press("down")
+        expectFocus("priya", "Down from the search box to the most recent search")
+        press("ok")
+        expectShown("Priya Desai", "OK on an earlier search searches again")
     }
 
     @Test fun settings() {

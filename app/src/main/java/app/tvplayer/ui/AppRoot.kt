@@ -681,8 +681,22 @@ fun AppRoot(
                         },
                     )
                     Dest.RECENTS -> TopInset {
+                        // The big carry-on tiles use the film's or show's wide picture where TMDB has one.
+                        val wide by produceState(initialValue = emptyMap<String, String>(), progress) {
+                            value = progress.mapNotNull { saved ->
+                                val isEpisode = " · S" in saved.title
+                                val info = runCatching {
+                                    container.metadata.lookup(
+                                        saved.title.substringBefore(" · "),
+                                        if (isEpisode) ChannelEntity.KIND_SERIES else ChannelEntity.KIND_MOVIE,
+                                    )
+                                }.getOrNull()
+                                info?.backdrop?.let { saved.url to it }
+                            }.toMap()
+                        }
                         RecentsScreen(
-                            rails = listOf(HomeRail("Recent channels", recentTiles), HomeRail("Continue watching", continueWatching)),
+                            channels = recentTiles,
+                            resume = continueWatching.map { tile -> tile.vod?.url?.let(wide::get)?.let { tile.copy(logo = it) } ?: tile },
                             onTile = { tile -> openTile(tile) },
                         )
                     }

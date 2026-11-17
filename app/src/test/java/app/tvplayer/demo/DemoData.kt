@@ -103,7 +103,8 @@ object DemoData {
                 fun episode(season: Int, n: Int) =
                     """{"id":"${id * 100 + season * 10 + n}","episode_num":"$n","title":"${titles[(n - 1 + season) % titles.size]}","container_extension":"mkv",""" +
                         """"season":$season,"info":{"plot":"A demo episode.","duration_secs":"${2700 + n * 60}"}}"""
-                val seasons = (1..2).joinToString(",") { season ->
+                // Nine seasons: more than fit on screen at once.
+                val seasons = (1..9).joinToString(",") { season ->
                     if (id == 5000L) {
                         "\"$season\":[" + (1..3).joinToString(",") { episode(season, it) } + "]"
                     } else {
