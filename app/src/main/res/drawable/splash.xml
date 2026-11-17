@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Start-up screen: the S above the SKYFALL wordmark, centred on midnight navy. -->
+<!-- Start-up screen: the S above the SKYFALL wordmark and the slogan, centred on midnight navy. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/window_ground" />
     <item
@@ -13,5 +13,11 @@
         android:height="18dp"
         android:top="110dp"
         android:drawable="@drawable/ic_skyfall_wordmark"
+        android:gravity="center" />
+    <item
+        android:width="150dp"
+        android:height="5.8dp"
+        android:top="166dp"
+        android:drawable="@drawable/ic_skyfall_slogan"
         android:gravity="center" />
 </layer-list>

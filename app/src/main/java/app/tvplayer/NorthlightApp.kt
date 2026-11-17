@@ -95,7 +95,11 @@ class AppContainer(context: Context) {
     val lowPower: Boolean by lazy {
         val manager = appContext.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
         val memory = android.app.ActivityManager.MemoryInfo().also(manager::getMemoryInfo)
-        manager.isLowRamDevice || memory.totalMem < 3L * 1024 * 1024 * 1024
+        // By model, not memory alone: a Shield has 2-3 GB but plenty of power.
+        val model = android.os.Build.MODEL.orEmpty()
+        manager.isLowRamDevice ||
+            model.contains("Chromecast", ignoreCase = true) ||
+            memory.totalMem < 1_600L * 1024 * 1024
     }
 
     /** A link from the Shield's home screen waiting to be opened ("skyfall://resume/…", "skyfall://channel/…"). */

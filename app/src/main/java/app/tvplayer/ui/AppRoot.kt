@@ -606,7 +606,9 @@ fun AppRoot(
             },
     ) {
         // The Christmas theme's snow, behind everything (and paused while a video fills the screen).
-        if (themeId.snows && mode != PlayerMode.FULL) Snowfall(Modifier.fillMaxSize(), animate = !container.lowPower)
+        // The snow keeps still in the guide (mostly hidden behind the grid there), leaving the box's
+        // full power for moving through the listings.
+        if (themeId.snows && mode != PlayerMode.FULL) Snowfall(Modifier.fillMaxSize(), animate = !container.lowPower && dest != Dest.GUIDE)
         // The side panel slides in and out. Only the drawing moves during the slide: the screens are
         // laid out once at their new width, so nothing has to be measured again on every frame.
         // During the Movie Night Quiz the menu steps right off the screen, so the quiz has it all.

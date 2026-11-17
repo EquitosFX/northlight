@@ -1,5 +1,7 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.layout.Layout
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -132,7 +134,10 @@ fun GuideScreen(
         val from = now - days * DAY
         from - from % HALF_HOUR
     }
-    var windowStart by remember { mutableLongStateOf(liveStart) }
+    val windowState = remember { mutableLongStateOf(liveStart) }
+    var windowStart by windowState
+    // Read lazily by the rows, so moving the window doesn't rebuild them.
+    val window: () -> Long = remember { { windowState.longValue } }
     // Read only by the header (and when sliding the grid), so moving around the grid doesn't redraw every row.
     val focusedState = remember { mutableStateOf<Focused?>(null) }
     val firstFocus = remember { FocusRequester() }
@@ -154,24 +159,12 @@ fun GuideScreen(
         return
     }
 
-    // Sliding the grid rebuilds its cells, so focus is parked while it happens and put back on the
-    // programme that had it once the new hours have loaded.
     val holdFocus = LocalHoldFocus.current
-    var refocus by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(refocus) {
-        // If the programme can't be found again, focus goes to the first channel rather than staying parked.
-        if (refocus == null) return@LaunchedEffect
-        delay(2_000)
-        refocus = null
-        runCatching { entryFocus.requestFocus() }
-    }
 
-    // Moving along by an hour slides the grid smoothly rather than jumping. The grid is laid out for
-    // where it's going, then drawn shifted back to where it was and slid into place: only the drawing
-    // moves, so it stays smooth on slower boxes.
+    // Moving along by an hour slides the grid smoothly. The programmes for several hours either side
+    // are already laid out, so only the drawing moves: nothing is rebuilt or loaded.
     val slideMillis = remember { floatArrayOf(0f) }
     val slideTick = remember { mutableFloatStateOf(0f) }
-    var sliding by remember { mutableStateOf(false) }
     val slideScope = rememberCoroutineScope()
     var slideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     fun moveWindow(target: Long) {
@@ -182,32 +175,31 @@ fun GuideScreen(
             val from = slideMillis[0] + delta
             slideMillis[0] = from
             slideTick.floatValue = from
-            sliding = true
             slideJob = slideScope.launch {
                 androidx.compose.animation.core.animate(from, 0f, animationSpec = tween<Float>(SLIDE_MILLIS, easing = FastOutSlowInEasing)) { value, _ ->
                     slideMillis[0] = value
                     slideTick.floatValue = value
                 }
-                sliding = false
             }
         } else {
             slideMillis[0] = 0f
             slideTick.floatValue = 0f
-            sliding = false
         }
         windowStart = target
     }
     // Read only while drawing, so the slide doesn't rebuild anything.
-    val slide: () -> Float = { slideTick.floatValue }
+    val slide: () -> Float = remember { { slideTick.floatValue } }
+    // The hours the rows have laid out: moves on only every few hours of moving along.
+    val origin = originFor(windowStart)
 
+    // The highlighted programme stays where it is (it's always still in view after an hour's move).
     fun shift(by: Long) {
         val target = (windowStart + by).coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW)
         if (target == windowStart) return
-        // Focus waits to one side during the slide and goes back to the same programme once it's settled.
-        refocus = focusedState.value?.programme?.id
-        if (refocus != null) holdFocus()
         moveWindow(target)
     }
+    val latestShift by androidx.compose.runtime.rememberUpdatedState<(Long) -> Unit>(::shift)
+    val onShift: (Long) -> Unit = remember { { by -> latestShift(by) } }
 
     // Once a category is chosen the categories step aside and the listings fill the screen.
     // Back brings them back with the chosen one highlighted; Back again goes to the side menu.
@@ -243,6 +235,9 @@ fun GuideScreen(
     val focusedRow = remember { intArrayOf(-1) }
     val movingVertically = remember { booleanArrayOf(false) }
     val jumpState = remember { mutableStateOf<Jump?>(null) }
+    // Focus parked while Back takes the grid back to now; the listings stay open meanwhile.
+    var holdingForJump by remember { mutableStateOf(false) }
+    LaunchedEffect(jumpState.value) { if (jumpState.value == null) holdingForJump = false }
     val rowsList = remember(group) { LazyListState() }
     val gridScope = rememberCoroutineScope()
 
@@ -250,7 +245,7 @@ fun GuideScreen(
     BackHandler(enabled = listings && windowStart != liveStart && focusedRow[0] >= 0) {
         val row = focusedRow[0]
         val nowAgain = System.currentTimeMillis()
-        refocus = null
+        holdingForJump = true
         holdFocus()
         anchor[0] = nowAgain
         movingVertically[0] = true
@@ -265,7 +260,7 @@ fun GuideScreen(
             // Once anything in the guide has focus, it never jumps to the first programme by itself.
             // Leaving the guide altogether (to the side menu) brings the categories back for next time.
             .onFocusChanged {
-                if (it.hasFocus) placedFocus = true else if (refocus == null) listings = false
+                if (it.hasFocus) placedFocus = true else if (!holdingForJump) listings = false
             }
             .focusGroup(),
     ) {
@@ -304,7 +299,7 @@ fun GuideScreen(
                 moveWindow(target.coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW))
             },
         )
-        TimeRuler(windowStart = windowStart, now = now, slide = slide, sliding = sliding)
+        TimeRuler(windowStart = windowStart, origin = origin, now = now, window = window, slide = slide)
         if (rows.isEmpty()) {
             Label(
                 text = if (group == FAVOURITES) "No favourites yet. In live TV, press OK for the channel list, then Right on a channel." else "No channels in this group.",
@@ -347,19 +342,19 @@ fun GuideScreen(
                 GuideRow(
                     channel = channel,
                     channels = channels,
-                    windowStart = windowStart,
+                    window = window,
+                    slide = slide,
+                    origin = origin,
                     now = now,
-                    canGoBack = windowStart > earliest,
-                    // The guide opens on the categories; the listings never take focus by themselves.
-                    focusRequester = null,
+                    earliest = earliest,
                     entry = if (index == 0) entryFocus else null,
-                    onFocusPlaced = { placedFocus = true },
                     onFocus = { programme ->
                         focusedState.value = Focused(channel, programme)
                         focusedRow[0] = index
                         // Moving along a row (not up or down) sets the moment Up and Down keep to.
                         if (!movingVertically[0]) {
                             val now2 = System.currentTimeMillis()
+                            val windowStart = window()
                             anchor[0] = when {
                                 programme == null -> maxOf(windowStart, minOf(now2, windowStart + WINDOW - MINUTE))
                                 now2 in programme.start until programme.stop -> now2
@@ -370,11 +365,7 @@ fun GuideScreen(
                     },
                     jumpState = jumpState,
                     index = index,
-                    slide = slide,
-                    sliding = sliding,
-                    onShift = ::shift,
-                    refocus = refocus,
-                    onRefocused = { refocus = null },
+                    onShift = onShift,
                     onPlay = { onPlay(channel) },
                     onCatchup = { programme -> onCatchup(channel, programme) },
                     reminders = reminders,
@@ -515,7 +506,7 @@ private fun Header(focusedState: androidx.compose.runtime.State<Focused?>, remin
 }
 
 @Composable
-private fun TimeRuler(windowStart: Long, now: Long, slide: () -> Float = { 0f }, sliding: Boolean = false) {
+private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> Long, slide: () -> Float) {
     val colors = AppTheme.colors
     Row(
         modifier = Modifier
@@ -531,32 +522,33 @@ private fun TimeRuler(windowStart: Long, now: Long, slide: () -> Float = { 0f },
                 modifier = Modifier.align(Alignment.CenterStart),
             )
         }
-        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
-            val width = maxWidth
-            val widthPx = constraints.maxWidth.toFloat()
-            Box(Modifier.fillMaxSize().graphicsLayer { translationX = -(slide() / WINDOW) * widthPx }) {
-            // While sliding, the times either side are drawn too, coming into view.
-            val steps = if (sliding) (-(WINDOW / HALF_HOUR).toInt() until (2 * WINDOW / HALF_HOUR).toInt()) else (0 until (WINDOW / HALF_HOUR).toInt())
-            for (step in steps) {
-                val at = windowStart + step * HALF_HOUR
-                Label(
-                    text = clockTime(at),
-                    style = AppType.label,
-                    color = colors.textDim,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .offset(x = position(at - windowStart, width)),
-                )
-            }
-            if (now in windowStart - (if (sliding) WINDOW else 0L) until windowStart + (if (sliding) 2 * WINDOW else WINDOW)) {
-                Box(
-                    modifier = Modifier
-                        .offset(x = position(now - windowStart, width))
-                        .width(2.dp)
-                        .fillMaxHeight()
-                        .background(colors.accent),
-                )
-            }
+        // The times for the hours either side too, laid out once and slid along with the grid.
+        val times = remember(origin) { (0 until (SPAN / HALF_HOUR).toInt()).map { origin + it * HALF_HOUR } }
+        val spans = remember(origin, now) {
+            times.map { it to it + HALF_HOUR } + listOfNotNull((now to now + MINUTE).takeIf { now in origin until origin + SPAN })
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+            ProgrammeStrip(spans = spans, origin = origin, window = window, slide = slide) {
+                for (at in times) {
+                    Box(Modifier.fillMaxSize()) {
+                        Label(
+                            text = clockTime(at),
+                            style = AppType.label,
+                            color = colors.textDim,
+                            modifier = Modifier.align(Alignment.CenterStart),
+                        )
+                    }
+                }
+                if (now in origin until origin + SPAN) {
+                    Box(Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .width(2.dp)
+                                .fillMaxHeight()
+                                .background(colors.accent),
+                        )
+                    }
+                }
             }
         }
     }
@@ -566,16 +558,17 @@ private fun TimeRuler(windowStart: Long, now: Long, slide: () -> Float = { 0f },
 private fun GuideRow(
     channel: LineupChannel,
     channels: ChannelsRepository,
-    windowStart: Long,
+    /** Where the grid is (read only when needed, so moving it doesn't rebuild the row). */
+    window: () -> Long,
+    /** The slide in progress, in milliseconds still to go. */
+    slide: () -> Float,
+    /** The time the row's programmes are laid out from; changes only every few hours of moving. */
+    origin: Long,
     now: Long,
-    canGoBack: Boolean,
-    focusRequester: FocusRequester?,
+    earliest: Long,
     entry: FocusRequester?,
-    onFocusPlaced: () -> Unit,
     onFocus: (ProgrammeEntity?) -> Unit,
     onShift: (Long) -> Unit,
-    refocus: Long?,
-    onRefocused: () -> Unit,
     onPlay: () -> Unit,
     onCatchup: (ProgrammeEntity) -> Unit,
     reminders: Set<String>,
@@ -583,21 +576,18 @@ private fun GuideRow(
     notWorking: Boolean = false,
     jumpState: androidx.compose.runtime.MutableState<Jump?>? = null,
     index: Int = -1,
-    slide: () -> Float = { 0f },
-    sliding: Boolean = false,
 ) {
     val colors = AppTheme.colors
-    val windowEnd = windowStart + WINDOW
     // Only the row being moved to notices the move.
     val jumpTime by remember(jumpState, index) { derivedStateOf { jumpState?.value?.takeIf { it.row == index }?.time } }
     val onJumped: () -> Unit = { if (jumpState?.value?.row == index) jumpState.value = null }
-    // Keeps showing the previous programmes while new ones load, so the grid doesn't flash.
+    // Several hours either side of what's in view, loaded once and laid out once: moving along the
+    // grid just slides them, with nothing rebuilt or loaded until a few hours further on.
     var programmes by remember { mutableStateOf<List<ProgrammeEntity>?>(null) }
-    var loadedFor by remember { mutableLongStateOf(-1L) }
-    LaunchedEffect(channel.key, windowStart) {
-        // An extra window either side, ready to slide into view.
-        programmes = channels.programmes(channel, windowStart - WINDOW, windowEnd + WINDOW)
-        loadedFor = windowStart
+    var loadedOrigin by remember { mutableLongStateOf(Long.MIN_VALUE) }
+    LaunchedEffect(channel.key, origin) {
+        programmes = channels.programmes(channel, origin, origin + SPAN)
+        loadedOrigin = origin
     }
 
     Row(
@@ -628,107 +618,139 @@ private fun GuideRow(
             if (notWorking) Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFFFF5A5F)))
         }
 
-        BoxWithConstraints(
+        // Edge keys slide the grid instead of leaving it.
+        fun edgeKeys(start: Long, stop: Long) = Modifier.onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val w = window()
+            when {
+                event.key == Key.DirectionRight && stop >= w + WINDOW -> {
+                    onShift(HOUR)
+                    true
+                }
+                event.key == Key.DirectionLeft && start <= w && w > earliest -> {
+                    onShift(-HOUR)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        val list = programmes.orEmpty().filter { it.stop > origin && it.start < origin + SPAN }
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
                 .clipToBounds(),
         ) {
-            val width = maxWidth
-            val widthPx = constraints.maxWidth.toFloat()
-            // Slides with the rest of the grid when moving along by an hour.
-            SlideLayer(slide, widthPx) {
-            // Settled: the programmes in view, the first and last trimmed to the edges so their names show.
-            // Sliding: those either side too, at their full lengths, coming into or going out of view.
-            val shownFrom = if (sliding) windowStart - WINDOW else windowStart
-            val shownTo = if (sliding) windowEnd + WINDOW else windowEnd
-            val list = programmes?.filter { it.stop > shownFrom && it.start < shownTo } ?: return@SlideLayer
-            val inViewList = list.filter { it.stop > windowStart && it.start < windowEnd }
-
-            // Edge keys slide the grid instead of leaving it.
-            fun edgeKeys(start: Long, stop: Long) = Modifier.onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when {
-                    event.key == Key.DirectionRight && stop >= windowEnd -> {
-                        onShift(HOUR)
-                        true
-                    }
-                    event.key == Key.DirectionLeft && start <= windowStart && canGoBack -> {
-                        onShift(-HOUR)
-                        true
-                    }
-                    else -> false
-                }
-            }
-
-            if (inViewList.isEmpty()) {
+            if (programmes != null && list.isEmpty()) {
                 GuideCell(
                     title = "No programme information",
-                    x = 0.dp,
-                    width = width,
                     past = false,
                     live = false,
                     catchup = false,
                     onFocus = { onFocus(null) },
                     onClick = onPlay,
-                    refocus = jumpTime != null && !sliding,
+                    refocus = jumpTime != null,
                     onRefocused = onJumped,
-                    modifier = edgeKeys(windowStart, windowEnd)
-                        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    modifier = edgeKeys(Long.MIN_VALUE / 2, Long.MAX_VALUE / 2)
+                        .fillMaxSize()
                         .then(if (entry != null) Modifier.focusRequester(entry) else Modifier),
                 )
-                if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
-                return@SlideLayer
-            }
-
-            val focusTarget = inViewList.firstOrNull { now in it.start until it.stop } ?: inViewList.firstOrNull() ?: list.first()
-            // Up or Down landing here: the programme on at the moment being kept to, or the nearest after it.
-            val jumpId = jumpTime?.let { time ->
-                (inViewList.firstOrNull { time >= it.start && time < it.stop }
-                    ?: inViewList.firstOrNull { it.stop > time }
-                    ?: inViewList.lastOrNull() ?: list.last()).id
-            }
-            for (programme in list) {
-                val from = maxOf(programme.start, shownFrom)
-                val to = minOf(programme.stop, shownTo)
-                if (to - from < MINUTE) continue
-                // Only what's in view once the slide ends can be highlighted.
-                val inView = programme.stop > windowStart && programme.start < windowEnd
-                val live = now in programme.start until programme.stop
-                val catchup = !live && Catchup.available(channel.catchupDays, programme.start, programme.stop, now)
-                key(programme.id) {
-                    GuideCell(
-                        title = programme.title,
-                        x = position(from - windowStart, width),
-                        width = position(to - from, width) - 3.dp,
-                        past = programme.stop <= now,
-                        live = live,
-                        catchup = catchup,
-                        reminder = "${channel.key}|${programme.start}" in reminders,
-                        onFocus = { onFocus(programme) },
-                        refocus = !sliding && ((programme.id == refocus && loadedFor == windowStart) || (jumpId != null && programme.id == jumpId && loadedFor == windowStart)),
-                        onRefocused = if (jumpId != null && programme.id == jumpId) onJumped else onRefocused,
-                        onClick = {
-                            when {
-                                live -> onPlay()
-                                catchup -> onCatchup(programme)
-                                programme.start > now -> onRemind(programme)
-                            }
-                        },
-                        modifier = edgeKeys(programme.start, programme.stop).focusProperties { canFocus = inView }.then(
-                            if (focusRequester != null && programme.id == focusTarget.id) {
-                                Modifier.focusRequester(focusRequester)
-                            } else {
-                                Modifier
-                            },
-                        ).then(
-                            // The first channel's current programme is where Right from the menu lands.
-                            if (entry != null && programme.id == focusTarget.id) Modifier.focusRequester(entry) else Modifier,
-                        ),
-                    )
+            } else if (list.isNotEmpty()) {
+                val focusTarget = list.firstOrNull { now in it.start until it.stop } ?: list.first()
+                // Up or Down landing here: the programme on at the moment being kept to, or the nearest after it.
+                val jumpId = jumpTime?.let { time ->
+                    val w = window()
+                    val inView = list.filter { it.stop > w && it.start < w + WINDOW }
+                    (inView.firstOrNull { time >= it.start && time < it.stop }
+                        ?: inView.firstOrNull { it.stop > time }
+                        ?: inView.lastOrNull() ?: list.last()).id
+                }
+                ProgrammeStrip(spans = list.map { maxOf(it.start, origin) to minOf(it.stop, origin + SPAN) }, origin = origin, window = window, slide = slide) {
+                    for (programme in list) {
+                        val from = maxOf(programme.start, origin)
+                        val to = minOf(programme.stop, origin + SPAN)
+                        val live = now in programme.start until programme.stop
+                        val catchup = !live && Catchup.available(channel.catchupDays, programme.start, programme.stop, now)
+                        key(programme.id) {
+                            GuideCell(
+                                title = programme.title,
+                                past = programme.stop <= now,
+                                live = live,
+                                catchup = catchup,
+                                reminder = "${channel.key}|${programme.start}" in reminders,
+                                onFocus = { onFocus(programme) },
+                                refocus = jumpId != null && programme.id == jumpId && loadedOrigin == origin,
+                                onRefocused = onJumped,
+                                // The name stays in view at the left edge for a programme that started earlier.
+                                titleShift = { pxPerMilli ->
+                                    val visibleFrom = window() + slide().toLong()
+                                    val hidden = (visibleFrom - from).coerceIn(0L, (to - from - 20 * MINUTE).coerceAtLeast(0L))
+                                    (hidden * pxPerMilli).toInt()
+                                },
+                                onClick = {
+                                    when {
+                                        live -> onPlay()
+                                        catchup -> onCatchup(programme)
+                                        programme.start > now -> onRemind(programme)
+                                    }
+                                },
+                                modifier = edgeKeys(programme.start, programme.stop)
+                                    // Only programmes in view can be highlighted.
+                                    .focusProperties {
+                                        val w = window()
+                                        canFocus = programme.stop > w && programme.start < w + WINDOW
+                                    }
+                                    // The first channel's current programme is where Right from the menu lands.
+                                    .then(if (entry != null && programme.id == focusTarget.id) Modifier.focusRequester(entry) else Modifier),
+                            )
+                        }
+                    }
                 }
             }
-            if (focusRequester != null) FocusOnce(focusRequester, onFocusPlaced)
+        }
+    }
+}
+
+/** How wide a millisecond is, shared with the cells so their names can stay in view. */
+private val LocalPxPerMilli = androidx.compose.runtime.compositionLocalOf { floatArrayOf(0f) }
+
+/**
+ * Lays programmes out by time from [origin] (positions depend only on the time and the width, so
+ * they're worked out once), then draws the strip slid along to the current window: moving the guide
+ * only moves the drawing.
+ */
+@Composable
+private fun ProgrammeStrip(
+    spans: List<Pair<Long, Long>>,
+    origin: Long,
+    window: () -> Long,
+    slide: () -> Float,
+    content: @Composable () -> Unit,
+) {
+    val pxPerMilli = remember { floatArrayOf(0f) }
+    androidx.compose.runtime.CompositionLocalProvider(LocalPxPerMilli provides pxPerMilli) {
+        Layout(
+            content = content,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = -((window() - origin) + slide()) * pxPerMilli[0] },
+        ) { measurables, constraints ->
+            val width = constraints.maxWidth
+            val height = constraints.maxHeight
+            val perMilli = width.toFloat() / WINDOW
+            pxPerMilli[0] = perMilli
+            val gap = 3.dp.roundToPx()
+            val placeables = measurables.mapIndexed { i, measurable ->
+                val (from, to) = spans.getOrElse(i) { origin to origin }
+                val cellWidth = ((to - from) * perMilli).toInt() - gap
+                measurable.measure(androidx.compose.ui.unit.Constraints.fixed(cellWidth.coerceAtLeast(4), height))
+            }
+            layout(width, height) {
+                placeables.forEachIndexed { i, placeable ->
+                    val (from, _) = spans.getOrElse(i) { origin to origin }
+                    placeable.place(((from - origin) * perMilli).toInt(), 0)
+                }
             }
         }
     }
@@ -737,8 +759,6 @@ private fun GuideRow(
 @Composable
 private fun GuideCell(
     title: String,
-    x: Dp,
-    width: Dp,
     past: Boolean,
     live: Boolean,
     catchup: Boolean,
@@ -748,9 +768,12 @@ private fun GuideCell(
     modifier: Modifier = Modifier,
     refocus: Boolean = false,
     onRefocused: () -> Unit = {},
+    /** How far to move the name along (in pixels, given pixels per millisecond) to keep it in view. */
+    titleShift: ((Float) -> Int)? = null,
 ) {
     val colors = AppTheme.colors
     val requester = remember { FocusRequester() }
+    val pxPerMilli = LocalPxPerMilli.current
     if (refocus) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
@@ -762,8 +785,6 @@ private fun GuideCell(
         onClick = onClick,
         modifier = modifier
             .focusRequester(requester)
-            .offset(x = x)
-            .width(width.coerceAtLeast(4.dp))
             .fillMaxHeight(),
         shape = RoundedCornerShape(6.dp),
         container = if (live) colors.glassStrong else colors.glass,
@@ -780,6 +801,7 @@ private fun GuideCell(
         Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
+                .then(if (titleShift != null) Modifier.offset { IntOffset(titleShift(pxPerMilli[0]), 0) } else Modifier)
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -922,6 +944,12 @@ private fun DayBar(earliest: Long, now: Long, windowStart: Long, onDay: (Long) -
         }
     }
 }
+
+/** The hours a row lays out at once: from two hours before a four-hour block to four after it. */
+private const val CHUNK = 4 * 3_600_000L
+private const val SPAN = 10 * 3_600_000L
+
+private fun originFor(windowStart: Long): Long = windowStart - Math.floorMod(windowStart, CHUNK) - 2 * 3_600_000L
 
 /** How long the grid takes to slide along an hour. */
 private const val SLIDE_MILLIS = 320
