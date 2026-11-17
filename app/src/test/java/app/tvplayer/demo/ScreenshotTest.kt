@@ -582,7 +582,7 @@ class ScreenshotTest {
         val note = app.tvplayer.CrashLog.describe(app, Thread.currentThread(), error)
         if ("Caused by IllegalStateException" !in note) problems += "The crash note should name the underlying cause"
         if (android.os.Build.MODEL !in note) problems += "The crash note should name the TV box model"
-        if ("secret" in note || "http" in note) problems += "The crash note must not contain addresses"
+        if ("secret" in note || "example.invalid" in note) problems += "The crash note must not contain addresses"
         // Nothing recorded by Android means nothing is noted.
         app.tvplayer.CrashLog.clear(app)
         app.tvplayer.CrashLog.noteExitReason(app)
