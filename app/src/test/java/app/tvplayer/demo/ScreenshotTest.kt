@@ -171,6 +171,18 @@ class ScreenshotTest {
         }
     }
 
+    /** Hands a key event to the app's screen directly (as the test's own key presses do). */
+    private fun sendKey(event: android.view.KeyEvent) {
+        fun find(v: android.view.View): androidx.compose.ui.platform.ViewRootForTest? =
+            (v as? androidx.compose.ui.platform.ViewRootForTest)
+                ?: (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
+        val root = find(rule.activity.window.decorView) ?: run {
+            problems += "No screen to send keys to"
+            return
+        }
+        root.sendKeyEvent(androidx.compose.ui.input.key.KeyEvent(event))
+    }
+
     /** Holds OK down for most of a second, as the remote does when OK is held. */
     private fun holdOk() {
         // What a remote sends: the press, repeats of it every so often while held, then the release.
@@ -179,9 +191,9 @@ class ScreenshotTest {
                 val code = android.view.KeyEvent.KEYCODE_DPAD_CENTER
                 val t = android.os.SystemClock.uptimeMillis()
                 for ((after, repeat) in listOf(0L to 0, 500L to 1, 550L to 2, 600L to 3)) {
-                    rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t + after, android.view.KeyEvent.ACTION_DOWN, code, repeat))
+                    sendKey(android.view.KeyEvent(t, t + after, android.view.KeyEvent.ACTION_DOWN, code, repeat))
                 }
-                rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t + 700, android.view.KeyEvent.ACTION_UP, code, 0))
+                sendKey(android.view.KeyEvent(t, t + 700, android.view.KeyEvent.ACTION_UP, code, 0))
             }
         }.onFailure { problems += "Holding OK wasn't delivered: $it" }
         settle()
@@ -543,13 +555,13 @@ class ScreenshotTest {
             val code = android.view.KeyEvent.KEYCODE_DPAD_DOWN
             val t = android.os.SystemClock.uptimeMillis()
             for (repeat in 0..4) {
-                rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t + repeat * 50L, android.view.KeyEvent.ACTION_DOWN, code, repeat))
+                sendKey(android.view.KeyEvent(t, t + repeat * 50L, android.view.KeyEvent.ACTION_DOWN, code, repeat))
             }
         }
         settle(2)
         rule.runOnUiThread {
             val t = android.os.SystemClock.uptimeMillis()
-            rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN, 0))
+            sendKey(android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN, 0))
         }
         settle()
         expectFocus("Sport", "Holding Down five places and letting go stays there")
@@ -571,11 +583,12 @@ class ScreenshotTest {
         press("back")
         // Moved to another time: the first Back returns to now; the next, to the categories.
         if (!focusedText().startsWith("Group") && !isCategory(focusedText())) press("back")
-        // After scrolling down the listings, hovering another category shows its listings at now.
-        press("down", "down")
+        // After scrolling down the listings, hovering another category (one with lots of channels)
+        // shows its listings at now.
+        moveTo("Group 1", "down", max = 12, step = "Down the categories to Group 1")
         shot("07j-guide-hover-after-scrolling")
         // A category far down the list, then back to it.
-        repeat(28) { press("down") }
+        repeat(22) { press("down") }
         expectFocus("Group 23", "Far down the categories")
         press("ok", "down", "back")
         expectFocus("Group 23", "Back from a far-down category's listings returns to it")
