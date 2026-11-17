@@ -1,5 +1,6 @@
 package app.tvplayer.ui.search
 
+import app.tvplayer.ui.components.entersAt
 import androidx.compose.ui.graphics.Color
 import app.tvplayer.ui.vod.PosterCard
 import androidx.compose.foundation.layout.aspectRatio
@@ -246,16 +247,23 @@ private fun rememberSearchHistory(): SearchHistory {
 @Composable
 private fun HistoryPills(items: List<String>, onPick: (String) -> Unit, onClear: () -> Unit) {
     val colors = AppTheme.colors
+    // Down from the search box lands on the most recent search, not whichever pill is nearest.
+    val entry = remember { app.tvplayer.ui.components.EntryFocus() }
+    val firstPill = remember { androidx.compose.ui.focus.FocusRequester() }
+    app.tvplayer.ui.components.EntryPoint(firstPill, entry)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Label(text = "Recent searches", style = AppType.title)
         androidx.compose.foundation.layout.FlowRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.entersAt(entry),
         ) {
-            for (item in items) {
+            for ((index, item) in items.withIndex()) {
                 FocusSurface(
                     onClick = { onPick(item) },
-                    modifier = Modifier.height(36.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .then(if (index == 0) Modifier.focusRequester(firstPill) else Modifier),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
                     container = colors.glass,
                     focusedContainer = colors.accent,
