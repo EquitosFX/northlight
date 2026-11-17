@@ -455,6 +455,14 @@ class ScreenshotTest {
         expectShown("Channels", "The controls offer the channel list")
         expectShown("min left", "The controls show the programme's times")
         if (focusedText().contains("Pause")) problems += "The controls opened with Pause already highlighted"
+        // Every button fits on screen without scrolling, from the first 5 min to Sleep.
+        val screenWidth = rule.onRoot().fetchSemanticsNode().size.width
+        for (label in listOf("5 min", "Sleep")) {
+            for (node in rule.onAllNodesWithText(label, substring = true).fetchSemanticsNodes()) {
+                val b = node.boundsInRoot
+                if (b.left < 0f || b.right > screenWidth) problems += "The \"$label\" button should be fully on screen (from ${b.left} to ${b.right} of $screenWidth)"
+            }
+        }
         shot("09b-player-controls")
         // OK again pauses, with Play highlighted; OK once more carries on.
         press("ok")
@@ -469,13 +477,19 @@ class ScreenshotTest {
             problems += "OK on Play/Pause moved focus to \"${focusedText()}\""
         }
         // The star adds the channel to Favourites, and takes it off again.
-        moveTo("Favourites", "right", max = 12, step = "Along the controls to the favourite star")
-        val starBefore = focusedText()
+        fun starSays() = when {
+            isShown("is in Favourites · OK to take it off") -> "in"
+            isShown("to Favourites") -> "out"
+            else -> null
+        }
+        repeat(12) { if (starSays() == null) press("right") }
+        val starBefore = starSays()
+        if (starBefore == null) problems += "Along the controls to the favourite star: it should say what it does"
         press("ok")
-        if (focusedText() == starBefore) problems += "The star should add or remove the channel from Favourites (still \"$starBefore\")"
+        if (starSays() == starBefore) problems += "The star should add or remove the channel from Favourites"
         shot("09b4-favourite-star")
         press("ok")
-        expectFocus(starBefore, "The star again undoes it")
+        if (starSays() != starBefore) problems += "The star again should undo it"
         // The last button, Sleep, is on screen and can be reached.
         moveTo("Sleep", "right", max = 12, step = "Along the controls to Sleep")
         press("ok")
@@ -506,6 +520,29 @@ class ScreenshotTest {
         expectFocus("TV guide", "Back from the categories goes to the menu")
         press("down")
         expectFocus("Recents", "Down the menu with the picture showing")
+    }
+
+    /** Holding Down on the menu, then letting go: it stops where it was let go, without jumping back a place. */
+    @Test fun menuHold() {
+        open(Dest.HOME)
+        expectFocus("Home", "The menu starts on Home")
+        // What a remote sends while Down is held: the press, quick repeats, then letting go.
+        rule.runOnUiThread {
+            val code = android.view.KeyEvent.KEYCODE_DPAD_DOWN
+            val t = android.os.SystemClock.uptimeMillis()
+            for (repeat in 0..4) {
+                rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t + repeat * 50L, android.view.KeyEvent.ACTION_DOWN, code, repeat))
+            }
+        }
+        settle(2)
+        rule.runOnUiThread {
+            val t = android.os.SystemClock.uptimeMillis()
+            rule.activity.dispatchKeyEvent(android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN, 0))
+        }
+        settle()
+        expectFocus("Sport", "Holding Down five places and letting go stays there")
+        settle()
+        expectFocus("Sport", "A moment later, still there")
     }
 
     /** A big, untidy guide: opening it, moving around, sliding in time and changing category mustn't crash. */
