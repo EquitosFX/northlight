@@ -39,6 +39,7 @@ import coil.Coil
 import coil.ImageLoader
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.fail
@@ -407,17 +408,16 @@ class ScreenshotTest {
         if (isCategory(focusedText())) problems += "OK on a category: focus stayed on the categories"
         // Holding OK on a programme adds its channel to Favourites (without playing it); again takes it off.
         val heldOn = focusedText()
-        val wasFavourite = isShown("★ Favourite · hold OK")
-        if (!wasFavourite) expectShown("Hold OK to make it a favourite", "The guide says how to add a favourite")
+        if (!isShown("★ Favourite · hold OK")) expectShown("Hold OK to make it a favourite", "The guide says how to add a favourite")
+        // What's saved, read straight from the database (the screen catches up a moment later).
+        fun savedFavourites() = runBlocking(Dispatchers.IO) { app.container.channels.favouriteKeys.first() }
+        val before = savedFavourites()
         holdOk()
-        // (Saved in the background: given a moment to show.)
-        repeat(8) { if (isShown("★ Favourite · hold OK") == wasFavourite) settle(3) }
-        if (isShown("★ Favourite · hold OK") == wasFavourite) problems += "Holding OK should add or remove the channel from Favourites"
+        if (savedFavourites() == before) problems += "Holding OK should add or remove the channel from Favourites"
         if (focusedText() != heldOn) problems += "Holding OK should stay on \"$heldOn\", but focus was on \"${focusedText()}\""
         shot("07a-guide-favourite")
         holdOk()
-        repeat(8) { if (isShown("★ Favourite · hold OK") != wasFavourite) settle(3) }
-        if (isShown("★ Favourite · hold OK") != wasFavourite) problems += "Holding OK again should undo it"
+        if (savedFavourites() != before) problems += "Holding OK again should undo it"
         // Down keeps to what's on now, whatever the lengths of the programmes above
         // (the demo guide changes with the time of day, so this checks the header says "On now").
         val startedOn = focusedText()
