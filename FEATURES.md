@@ -122,6 +122,9 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Stream info, auto-reconnect, fall-through to backup copies, retry | Built |
 | Sleep timer (30 min to 2 hours, warns a minute before) | Built |
 | Black-screen detection: no picture after 7 s tries without rewind, then other copies, then the backup player | Built |
+| Plays nicely with other sound: takes audio focus, keeps Wi-Fi awake while playing, lets the TV sleep when paused | Built |
+| Nothing starts playing in the background after Home (up next, catch-up skips, backup player) | Built |
+| Playback carries on after the daily playlist refresh renumbers channels | Built |
 | Zoom modes, deinterlacing, buffer settings | Not started |
 
 ## Profiles, sport, voice, system
@@ -142,6 +145,7 @@ Status key: **Tested** = compiled and unit-tested (64 tests in `core/`). **Built
 | Tested on a Shield TV | Not started |
 | Unit tests: parsers, variant grouping, guide matching, line-up, reconnect timing | Tested |
 | Unit tests: recording scheduler | Not started |
-| Focus-navigation UI tests | Not started |
+| Focus-navigation UI tests | Robolectric walkthrough of every screen |
+| Crash notes: app crashes, freezes (ANR), engine crashes and low-memory closes, with box model, no addresses | Built |
 | Performance targets (cold start under 2s, zap under 1s) | Not started |
 | Accessibility pass (TalkBack, text scaling) | Not started |
