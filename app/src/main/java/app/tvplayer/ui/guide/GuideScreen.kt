@@ -105,6 +105,7 @@ private val GuideTitleText = AppType.headline.copy(fontSize = 26.sp, lineHeight 
 private val GuideMetaText = AppType.label.copy(fontSize = 14.sp, lineHeight = 18.sp)
 private val GuideBodyText = AppType.body.copy(fontSize = 15.sp, lineHeight = 21.sp)
 private val SideMargin = 14.dp
+private val ListingsEndMargin = 40.dp
 private const val FAVOURITES = "\u0000favourites"
 
 /** The guide's category, kept while Skyfall is open (the guide itself is rebuilt each time it's shown). */
@@ -424,7 +425,7 @@ fun GuideScreen(
             )
         }
         LazyColumn(
-            contentPadding = PaddingValues(start = SideMargin, end = 40.dp, top = 4.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = SideMargin, end = ListingsEndMargin, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
                 .weight(1f)
@@ -682,7 +683,8 @@ private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> 
         modifier = Modifier
             .fillMaxWidth()
             .height(22.dp)
-            .padding(horizontal = SideMargin),
+            // The same margins as the listings, so the times and the line for now sit over the programmes.
+            .padding(start = SideMargin, end = ListingsEndMargin),
     ) {
         Box(modifier = Modifier.width(ChannelColumn + 4.dp)) {
             Label(
@@ -909,11 +911,35 @@ private fun ProgrammeStrip(
 ) {
     val pxPerMilli = remember { floatArrayOf(0f) }
     androidx.compose.runtime.CompositionLocalProvider(LocalPxPerMilli provides pxPerMilli) {
+        // The strip is slid along by a drawing layer set up as it's placed, with the scale it has just
+        // been measured at. (Read from a value kept between passes, it could be read before the strip
+        // was measured, when a row was reused for another category: the programmes then showed hours
+        // early, all marked as catch-up, with their names pushed along.)
+        Layout(
+            content = { StripCells(spans = spans, origin = origin, pxPerMilli = pxPerMilli, content = content) },
+            modifier = Modifier.fillMaxSize(),
+        ) { measurables, constraints ->
+            val strip = measurables.first().measure(constraints)
+            val perMilli = constraints.maxWidth.toFloat() / WINDOW
+            layout(strip.width, strip.height) {
+                strip.placeWithLayer(0, 0) { translationX = -((window() - origin) + slide()) * perMilli }
+            }
+        }
+    }
+}
+
+/** The programmes (or times) laid out by time from [origin], unslid. */
+@Composable
+private fun StripCells(
+    spans: List<Pair<Long, Long>>,
+    origin: Long,
+    pxPerMilli: FloatArray,
+    content: @Composable () -> Unit,
+) {
+    run {
         Layout(
             content = content,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { translationX = -((window() - origin) + slide()) * pxPerMilli[0] },
+            modifier = Modifier.fillMaxSize(),
         ) { measurables, constraints ->
             val width = constraints.maxWidth
             val height = constraints.maxHeight
