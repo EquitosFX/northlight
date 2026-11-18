@@ -94,7 +94,8 @@ class LoadTimes {
     }
 
     @Test fun loads() {
-        fill()
+        // (The database can't be written from the main thread.)
+        runBlocking(Dispatchers.IO) { fill() }
         val channels = app.container.channels
         val lineup = time("TV guide: channel list (lineup)") { channels.lineup() }
         val group = lineup.groups.first()
