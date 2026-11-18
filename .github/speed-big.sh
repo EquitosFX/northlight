@@ -16,7 +16,7 @@ for variant in after; do
   adb uninstall $PKG >/dev/null 2>&1
   adb install -r "$variant.apk" >/dev/null || { echo "$variant: install failed"; continue; }
   adb shell cmd package compile -f -m speed-profile $PKG >/dev/null 2>&1
-  adb shell am start -W -n $ACT >/dev/null
+  timeout 60 adb shell am start -W -n $ACT >/dev/null
   sleep 6
   # Settings (Up from Home), into its list, down to Backup and restore, open it.
   key 19
@@ -25,7 +25,8 @@ for variant in after; do
   repeat_key 20 5
   key 23
   sleep 3
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  echo "$variant: reading the restore page"
+  timeout 60 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
   address=$(adb shell cat /sdcard/ui.xml | grep -o 'http://[0-9.]*:8686/[a-z0-9]*' | head -1)
   code=${address##*/}
   if [ -z "$code" ]; then
@@ -34,7 +35,7 @@ for variant in after; do
     continue
   fi
   adb forward tcp:8686 tcp:8686 >/dev/null
-  echo "$variant: restore: $(curl -s -X POST --data-binary @big/backup.json "http://127.0.0.1:8686/$code/restore" | head -c 200)"
+  echo "$variant: restore: $(curl -s --max-time 120 -X POST --data-binary @big/backup.json "http://127.0.0.1:8686/$code/restore" | head -c 200)"
   # Let it load the playlist and the guide.
   sleep 150
 

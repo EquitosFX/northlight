@@ -10,6 +10,7 @@ on:
 jobs:
   speed:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +37,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: false
-          script: bash .github/speed.sh && bash .github/speed-big.sh
+          script: bash .github/speed.sh && timeout 1500 bash .github/speed-big.sh
 
   # How long each load takes with a big playlist (on the build machine, for comparing changes).
   load-times:
