@@ -54,5 +54,5 @@ jobs:
       - name: Time the loads
         run: |
           ./gradlew :app:testDebugUnitTest --tests 'app.tvplayer.demo.LoadTimes' -i > loadtimes.log 2>&1 || true
-          grep -E "^(Filled|Load |TV guide|Player|Films|Series|Sport|Search)" loadtimes.log || true
+          grep -E "^\s*(Filled|Load |TV guide|Player|Films|Series|Sport|Search)" loadtimes.log || true
           grep -E -A20 "loads FAILED|Exception:" loadtimes.log | head -60 || true
