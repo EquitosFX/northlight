@@ -120,6 +120,15 @@ class AppContainer(context: Context) {
             memory.totalMem < 1_600L * 1024 * 1024
     }
 
+    /**
+     * An NVIDIA Shield: enough graphics power for the snow to keep falling behind the TV guide too.
+     * (Other boxes, the Google TV Streamer included, keep it still there so the guide stays smooth.)
+     */
+    val shield: Boolean by lazy {
+        android.os.Build.MANUFACTURER.equals("NVIDIA", ignoreCase = true) ||
+            android.os.Build.MODEL.orEmpty().contains("SHIELD", ignoreCase = true)
+    }
+
     /** A link from the Shield's home screen waiting to be opened ("skyfall://resume/…", "skyfall://channel/…"). */
     val openLink = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
 }
