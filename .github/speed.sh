@@ -9,21 +9,24 @@ adb shell settings put global window_animation_scale 1
 for variant in debug release; do
   apk="app/build/outputs/apk/$variant/app-$variant.apk"
   adb uninstall $PKG >/dev/null 2>&1
+  echo "$variant: startup profile in the APK: $(unzip -l "$apk" | grep -c 'assets/dexopt/baseline.prof$')"
   adb install -r "$apk" >/dev/null || { echo "$variant: install failed"; continue; }
+  echo "$variant: debuggable: $(adb shell dumpsys package $PKG | tr -d '\r' | grep -c 'DEBUGGABLE')"
   # Let Android compile the startup profile, as it does in the background on a real box.
   adb shell cmd package compile -f -m speed-profile $PKG >/dev/null 2>&1
+  echo "$variant: compiled as: $(adb shell dumpsys package dexopt | tr -d '\r' | grep -A4 "\[$PKG\]" | grep -o 'status=[a-z-]*' | head -1)"
   adb logcat -c
   times=""
-  for i in 1 2 3 4 5 6; do
+  for i in 1 2 3 4 5 6 7 8 9 10 11; do
     adb shell am force-stop $PKG
     sleep 2
     t=$(adb shell am start -W -n $ACT | tr -d '\r' | awk -F': ' '/TotalTime/ {print $2}')
-    # The first start includes one-off set-up; count the other five.
+    # The first start includes one-off set-up; count the other ten.
     [ "$i" -gt 1 ] && times="$times $t"
     sleep 4
   done
   sorted=$(echo $times | tr ' ' '\n' | sort -n | tr '\n' ' ')
-  median=$(echo $times | tr ' ' '\n' | sort -n | sed -n 3p)
+  median=$(echo $times | tr ' ' '\n' | sort -n | sed -n 5p)
   echo "$variant: cold starts (ms): $sorted  median $median"
   # Up and down the menu, as fast as a held button.
   adb shell dumpsys gfxinfo $PKG reset >/dev/null
