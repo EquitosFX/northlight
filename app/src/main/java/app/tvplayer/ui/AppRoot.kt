@@ -365,10 +365,16 @@ fun AppRoot(
                 // Back from live TV: straight into the TV guide, on the channel playing and what's on now.
                 // (The guide puts focus there itself once it has read its channels; the menu if it can't.)
                 person = null
+                guideMemory.loaded = false
                 dest = Dest.GUIDE
-                repeat(90) {
+                // However long the guide takes to read its channels (a big playlist on a slow box), then
+                // a moment more for it to put focus on the channel.
+                var frames = 0
+                var afterLoaded = 0
+                while (frames++ < 1_200 && afterLoaded <= 90) {
                     withFrameNanos { }
                     if (contentFocused || menuFocused) return@LaunchedEffect
+                    if (guideMemory.loaded) afterLoaded++
                 }
             }
             focusMenu()

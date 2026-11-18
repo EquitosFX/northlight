@@ -132,6 +132,8 @@ private const val FAVOURITES = "\u0000favourites"
 /** The guide's category, kept while Skyfall is open (the guide itself is rebuilt each time it's shown). */
 class GuideMemory {
     var group: String? = null
+    /** Whether the guide has read its channels (and so can put focus on one). */
+    var loaded by mutableStateOf(false)
 }
 
 /** The programme the viewer is on, for the header. A null programme means the channel has no guide data. */
@@ -251,6 +253,7 @@ fun GuideScreen(
 
     val current = lineup
     MeasureOpen(name = "TV guide", ready = current != null)
+    LaunchedEffect(current != null) { memory.loaded = current != null }
     if (current == null || current.isEmpty) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Label(
