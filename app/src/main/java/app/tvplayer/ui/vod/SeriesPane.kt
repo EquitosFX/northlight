@@ -130,6 +130,7 @@ internal fun SeriesPane(
         }
     }
     val episodes = details?.episodes.orEmpty()
+    app.tvplayer.ui.components.MeasureOpen(name = "Series page", ready = episodes.isNotEmpty())
     val progress by produceState(initialValue = emptyList<ProgressEntity>(), episodes) {
         value = if (episodes.isEmpty()) emptyList() else channels.progressFor(episodes.map { it.url })
     }

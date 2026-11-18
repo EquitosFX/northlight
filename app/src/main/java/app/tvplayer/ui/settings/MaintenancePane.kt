@@ -50,6 +50,7 @@ fun MaintenancePane(settings: SettingsRepository, channels: ChannelsRepository, 
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        SpeedReport()
         Label(text = "Keep playlists up to date", style = AppType.headline)
         Label(
             text = "Skyfall downloads your playlists again by itself, so new channels, films and series appear. It happens quietly while the app is open.",
@@ -133,3 +134,34 @@ private fun SettingChip(label: String, selected: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+/** How long Skyfall and its screens took to open on this box, since it was last opened. */
+@Composable
+private fun SpeedReport() {
+    val colors = AppTheme.colors
+    val first = app.tvplayer.ui.components.Timing.first
+    val latest = app.tvplayer.ui.components.Timing.latest
+    Label(text = "Speed", style = AppType.headline)
+    if (first.isEmpty()) {
+        Label(text = "Open a few screens, then come back here to see how long they took.", style = AppType.body, color = colors.textDim)
+        return
+    }
+    Label(
+        text = "How long each screen took to open since Skyfall started: the first time, then the most recent.",
+        style = AppType.body,
+        color = colors.textDim,
+        maxLines = 2,
+    )
+    val order = listOf("Start-up", "TV guide", "Films", "Series", "Series page", "Sport")
+    for (name in order.filter { it in first } + first.keys.filter { it !in order }.sorted()) {
+        val a = first[name] ?: continue
+        val b = latest[name] ?: a
+        Label(
+            text = "$name: ${seconds(a)} first time" + if (b != a) " · ${seconds(b)} last time" else "",
+            style = AppType.body,
+            color = if (a > 1500) colors.accent else colors.text,
+        )
+    }
+}
+
+private fun seconds(millis: Long) = if (millis < 1000) "$millis ms" else "%.1f s".format(millis / 1000.0)

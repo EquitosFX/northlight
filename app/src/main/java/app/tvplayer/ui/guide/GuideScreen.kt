@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import app.tvplayer.ui.components.MeasureOpen
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawWithContent
@@ -249,6 +250,7 @@ fun GuideScreen(
     }
 
     val current = lineup
+    MeasureOpen(name = "TV guide", ready = current != null)
     if (current == null || current.isEmpty) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Label(

@@ -338,6 +338,14 @@ fun AppRoot(
         }
     }
 
+    // How long Skyfall took to open, from the system starting it to its first screen drawn.
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        app.tvplayer.ui.components.Timing.record(
+            "Start-up",
+            android.os.SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis(),
+        )
+    }
     // The app opens with the menu focused on Home.
     LaunchedEffect(Unit) {
         withFrameNanos { }

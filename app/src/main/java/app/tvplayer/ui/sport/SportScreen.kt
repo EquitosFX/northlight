@@ -1,5 +1,6 @@
 package app.tvplayer.ui.sport
 
+import app.tvplayer.ui.components.MeasureOpen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +63,7 @@ fun SportScreen(
 ) {
     val colors = AppTheme.colors
     val events by produceState(initialValue = channels.cachedSport()) { value = channels.sport() }
+    MeasureOpen(name = "Sport", ready = events != null)
     var filter by remember { mutableStateOf<SportKind?>(null) }
     val first = remember { FocusRequester() }
     EntryPoint(first)

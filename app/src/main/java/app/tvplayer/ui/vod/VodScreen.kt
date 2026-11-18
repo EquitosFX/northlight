@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.MeasureOpen
 import app.tvplayer.ui.components.LocalPosterLookup
 import app.tvplayer.ui.components.NewEpisodesBadge
 import app.tvplayer.ui.components.WatchedTick
@@ -149,6 +150,7 @@ fun VodScreen(
     }
 
     val groups by produceState(initialValue = channels.cachedGroups(kind), kind) { value = channels.groups(kind) }
+    MeasureOpen(name = if (kind == ChannelEntity.KIND_SERIES) "Series" else "Films", ready = groups != null)
     val list = groups
     val noun = if (kind == ChannelEntity.KIND_MOVIE) "films" else "series"
     if (list == null || list.isEmpty()) {
