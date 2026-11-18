@@ -10,7 +10,8 @@ val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 
 android {
     namespace = "app.tvplayer"
-    compileSdk = 35
+    // 36 for Compose 1.10 (its faster lists and scrolling); the app still targets Android 15 (35).
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.tvplayer"
@@ -41,7 +42,11 @@ android {
         // runs the app's code, and especially its screens, several times slower), with the startup
         // profile below. Signed with the same key as before, so it installs over the copy already there.
         release {
-            isMinifyEnabled = false
+            // Shrinks and optimises the code (R8), as Google recommends for Compose apps: smaller and
+            // quicker. Names are kept, so crash notes stay readable; proguard-rules.pro keeps the parts
+            // that are looked up by name at run time.
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
         }
     }

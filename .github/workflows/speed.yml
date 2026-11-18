@@ -5,7 +5,7 @@ name: Speed check
 on:
   workflow_dispatch:
   push:
-    branches: [release-build]
+    branches: [release-build, speed-2]
 
 jobs:
   speed:
@@ -20,8 +20,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build both
-        run: ./gradlew assembleDebug assembleRelease --stacktrace
+      - name: Build
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Let the emulator use the processor's virtualisation
         run: |
