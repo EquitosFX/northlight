@@ -133,6 +133,13 @@ interface ChannelDao {
     )
     suspend fun allInSection(kind: String): List<GroupedVodRow>
 
+    /** Only the entries listed episode by episode (M3U), which need gathering into shows; Xtream series are whole. */
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer, groupName FROM channels " +
+            "WHERE kind = :kind AND remoteId IS NULL ORDER BY playlistId, position",
+    )
+    suspend fun episodeEntries(kind: String): List<GroupedVodRow>
+
     /** Names containing the search text: live channels first, then films, then series; shorter names first. */
     @Query(
         "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +

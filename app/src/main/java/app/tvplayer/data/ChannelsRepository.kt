@@ -172,13 +172,17 @@ class ChannelsRepository(private val db: AppDatabase) {
         val result = if (kind != ChannelEntity.KIND_SERIES) {
             groups
         } else {
-            // Count shows, not the separate episodes an M3U playlist lists. The whole section is read
-            // once (a read per group took many seconds with big playlists), and every group's shows kept.
-            val byGroup = db.channels().allInSection(kind).groupBy({ it.groupName }, { it.toRow() })
-            groups.map { group ->
-                val shows = showsIn(byGroup[group.groupName].orEmpty())
-                listCache["i|$kind|${group.groupName}"] = shows
-                group.copy(count = shows.size)
+            // Count shows, not the separate episodes an M3U playlist lists. Only those episode entries are
+            // read (Xtream series are already one entry per show, and the database counts them).
+            val episodes = db.channels().episodeEntries(kind)
+            if (episodes.isEmpty()) {
+                groups
+            } else {
+                val byGroup = episodes.groupBy({ it.groupName }, { it.toRow() })
+                groups.map { group ->
+                    val entries = byGroup[group.groupName] ?: return@map group
+                    group.copy(count = group.count - entries.size + showsIn(entries).size)
+                }
             }
         }
         listCache["g|$kind"] = result
