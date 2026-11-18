@@ -101,6 +101,28 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
             Chip(label = "Off", selected = !backupPlayer) { scope.launch { settings.setBackupPlayer(false) } }
         }
 
+        Label(text = "Buffer", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var buffer by remember { mutableStateOf(app.tvplayer.player.BufferSize.saved(context)) }
+        val bufferChanged = remember { mutableStateOf(false) }
+        Label(
+            text = "How much of a channel or film is loaded ahead. More rides out a slow or patchy connection, " +
+                "but channels take longer to start. " + buffer.detail + "." +
+                if (bufferChanged.value) " Takes effect the next time Skyfall opens." else "",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 3,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (size in app.tvplayer.player.BufferSize.entries) {
+                Chip(label = size.label, selected = buffer == size) {
+                    app.tvplayer.player.BufferSize.save(context, size)
+                    buffer = size
+                    bufferChanged.value = true
+                }
+            }
+        }
+
         Label(text = "Match frame rate", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
         Label(
             text = "Switches the TV to 50 Hz for UK channels (and 24 Hz for films) while watching, for smooth movement. " +
@@ -117,7 +139,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
         Label(text = "Sound in sync", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
         Label(
             text = "If voices don't match lips (common with soundbars and some TVs), move the sound. " +
-                "Also in the player: OK › Audio.",
+                "This is the usual setting; in the player (OK › Audio) it can be set for one channel or film.",
             style = AppType.body,
             color = colors.textDim,
             maxLines = 2,

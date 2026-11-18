@@ -104,6 +104,23 @@ private const val DAY = 24 * HOUR
 /** A little larger than the app's standard sizes, so the guide reads easily from the sofa. */
 private val GuideChannelText = AppType.title.copy(fontSize = 15.sp)
 private val GuideCellText = AppType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium)
+
+/** The guide's sizes (Settings › Appearance › TV guide). */
+private data class GuideLook(
+    val rowHeight: androidx.compose.ui.unit.Dp,
+    val channelText: androidx.compose.ui.text.TextStyle,
+    val cellText: androidx.compose.ui.text.TextStyle,
+    val logos: Boolean,
+    val details: Boolean,
+) {
+    companion object {
+        fun of(size: Int, logos: Boolean, details: Boolean) = when (size) {
+            0 -> GuideLook(38.dp, GuideChannelText.copy(fontSize = 13.sp), GuideCellText.copy(fontSize = 13.sp), logos, details)
+            2 -> GuideLook(58.dp, GuideChannelText.copy(fontSize = 18.sp), GuideCellText.copy(fontSize = 18.sp), logos, details)
+            else -> GuideLook(RowHeight, GuideChannelText, GuideCellText, logos, details)
+        }
+    }
+}
 private val GuideTitleText = AppType.headline.copy(fontSize = 26.sp, lineHeight = 30.sp)
 private val GuideMetaText = AppType.label.copy(fontSize = 14.sp, lineHeight = 18.sp)
 private val GuideBodyText = AppType.body.copy(fontSize = 15.sp, lineHeight = 21.sp)
@@ -143,10 +160,17 @@ fun GuideScreen(
     watching: String? = null,
     /** The category last used, kept while Skyfall is open so the guide comes back to it. */
     memory: GuideMemory = remember { GuideMemory() },
+    /** For the guide's sizes (Settings › Appearance › TV guide). */
+    settings: app.tvplayer.data.SettingsRepository? = null,
 ) {
     val colors = AppTheme.colors
     val now = remember { System.currentTimeMillis() }
     val liveStart = remember { now - now % HALF_HOUR }
+    // Sizes from Settings › Appearance › TV guide.
+    val textSize by (settings?.guideTextSize ?: kotlinx.coroutines.flow.flowOf(1)).collectAsStateWithLifecycle(initialValue = 1)
+    val showLogos by (settings?.guideLogos ?: kotlinx.coroutines.flow.flowOf(true)).collectAsStateWithLifecycle(initialValue = true)
+    val showDetails by (settings?.guideDetails ?: kotlinx.coroutines.flow.flowOf(true)).collectAsStateWithLifecycle(initialValue = true)
+    val look = remember(textSize, showLogos, showDetails) { GuideLook.of(textSize, showLogos, showDetails) }
     // Programmes already read for this visit, so a row that comes back (or a category changed to)
     // shows them straight away instead of drawing empty and filling in a moment later.
     val programmeCache = remember { ProgrammeCache() }
@@ -408,7 +432,9 @@ fun GuideScreen(
             .graphicsLayer { translationX = categoriesShown.value * categoryWidth.toPx() }
             .onFocusChanged { if (it.hasFocus) listings = true },
     ) {
-        Header(focusedState = focusedState, reminders = reminders, favourites = favourites, modifier = Modifier.padding(horizontal = SideMargin))
+        if (look.details) {
+            Header(focusedState = focusedState, reminders = reminders, favourites = favourites, modifier = Modifier.padding(horizontal = SideMargin))
+        }
         DayBar(
             earliest = earliest,
             now = now,
@@ -479,6 +505,7 @@ fun GuideScreen(
         ) {
             itemsIndexed(rows, key = { _, channel -> channel.key }) { index, channel ->
                 GuideRow(
+                    look = look,
                     channel = channel,
                     channels = channels,
                     window = window,
@@ -761,6 +788,7 @@ private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> 
 
 @Composable
 private fun GuideRow(
+    look: GuideLook = GuideLook.of(1, logos = true, details = true),
     channel: LineupChannel,
     channels: ChannelsRepository,
     /** Where the grid is (read only when needed, so moving it doesn't rebuild the row). */
@@ -802,7 +830,7 @@ private fun GuideRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(RowHeight)
+            .height(look.rowHeight)
             // Lets the walkthrough check no row is ever shown waiting for its programmes after a change.
             .then(if (programmes == null) Modifier.testTag("guide-row-waiting") else Modifier),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -823,9 +851,9 @@ private fun GuideRow(
                 color = colors.textDim,
                 modifier = Modifier.width(32.dp),
             )
-            Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 28.dp))
-            if (favourite) Label(text = "★", style = GuideChannelText, color = colors.accent)
-            Label(text = channel.name, style = GuideChannelText)
+            if (look.logos) Logo(url = channel.logo, modifier = Modifier.size(width = 38.dp, height = 28.dp))
+            if (favourite) Label(text = "★", style = look.channelText, color = colors.accent)
+            Label(text = channel.name, style = look.channelText)
             // Didn't respond in the last channel check.
             if (notWorking) Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFFFF5A5F)))
         }
@@ -856,6 +884,7 @@ private fun GuideRow(
         ) {
             if (programmes != null && list.isEmpty()) {
                 GuideCell(
+                    textStyle = look.cellText,
                     title = "No programme information",
                     past = false,
                     live = false,
@@ -887,6 +916,7 @@ private fun GuideRow(
                         val catchup = !live && Catchup.available(channel.catchupDays, programme.start, programme.stop, now)
                         key(programme.id) {
                             GuideCell(
+                                textStyle = look.cellText,
                                 title = programme.title,
                                 past = programme.stop <= now,
                                 live = live,
@@ -996,6 +1026,7 @@ private fun StripCells(
 
 @Composable
 private fun GuideCell(
+    textStyle: androidx.compose.ui.text.TextStyle = GuideCellText,
     title: String,
     past: Boolean,
     live: Boolean,
@@ -1064,7 +1095,7 @@ private fun GuideCell(
             // Past programmes that can be watched again carry a replay mark.
             if (catchup) ReplayMark(tint = if (focused) colors.onAccent else colors.accent, modifier = Modifier.size(13.dp))
             if (reminder) BellMark(tint = if (focused) colors.onAccent else colors.accent, modifier = Modifier.size(13.dp))
-            Label(text = title, style = GuideCellText, color = tint)
+            Label(text = title, style = textStyle, color = tint)
         }
     }
 }

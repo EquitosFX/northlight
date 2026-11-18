@@ -292,6 +292,36 @@ class PlaylistRepository(
     /** A plain-English reason for a failed download, for showing on screen. */
     fun explainError(e: Exception): String = explain(e)
 
+    /** An Xtream Codes account as the provider reports it: when it ends, and how many streams it allows. */
+    data class Subscription(
+        val endsAt: Long?,
+        val status: String?,
+        val maxConnections: Int?,
+        val activeConnections: Int?,
+        val trial: Boolean,
+    )
+
+    private val subscriptions = HashMap<Long, Pair<Long, Subscription>>()
+
+    /** What the provider says about [playlist]'s account (Xtream Codes only), asked at most every few minutes. */
+    suspend fun subscription(playlist: PlaylistEntity, maxAgeMillis: Long = 5 * 60_000L): Subscription? = withContext(Dispatchers.IO) {
+        if (playlist.type != PlaylistEntity.TYPE_XTREAM) return@withContext null
+        val cached = synchronized(subscriptions) { subscriptions[playlist.id] }
+        if (cached != null && System.currentTimeMillis() - cached.first < maxAgeMillis) return@withContext cached.second
+        val account = XtreamAccount(playlist.address, playlist.username.orEmpty(), playlist.password.orEmpty())
+        val auth = runCatching { XtreamParser.parseAuth(fetchText(XtreamUrls.api(account))) }.getOrNull()
+            ?: return@withContext cached?.second
+        val found = Subscription(
+            endsAt = auth.expiresAtSeconds?.takeIf { it > 0 }?.times(1000),
+            status = auth.status,
+            maxConnections = auth.maxConnections,
+            activeConnections = auth.activeConnections,
+            trial = auth.isTrial,
+        )
+        synchronized(subscriptions) { subscriptions[playlist.id] = System.currentTimeMillis() to found }
+        found
+    }
+
     /** Clears a finished or failed message once the user has moved on. */
     fun acknowledge() {
         if (state.value !is ImportState.Working) state.value = ImportState.Idle

@@ -1,5 +1,9 @@
 package app.tvplayer.ui.settings
 
+import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.verticalScroll
 import app.tvplayer.ui.theme.snows
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,12 +31,13 @@ import app.tvplayer.ui.theme.paletteFor
 
 /** Settings › Appearance: pick one of the colour themes. The whole app re-colours as soon as one is chosen. */
 @Composable
-fun AppearancePane(themeId: ThemeId, onThemeChange: (ThemeId) -> Unit) {
+fun AppearancePane(themeId: ThemeId, onThemeChange: (ThemeId) -> Unit, settings: app.tvplayer.data.SettingsRepository? = null) {
     val colors = AppTheme.colors
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
             .padding(horizontal = 6.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -54,6 +59,55 @@ fun AppearancePane(themeId: ThemeId, onThemeChange: (ThemeId) -> Unit) {
                 )
             }
         }
+        if (settings != null) GuideLookOptions(settings)
+    }
+}
+
+/** Settings › Appearance › TV guide: text size, logos, and the programme details at the top. */
+@Composable
+private fun GuideLookOptions(settings: app.tvplayer.data.SettingsRepository) {
+    val colors = AppTheme.colors
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val size by settings.guideTextSize.collectAsStateWithLifecycle(initialValue = 1)
+    val logos by settings.guideLogos.collectAsStateWithLifecycle(initialValue = true)
+    val details by settings.guideDetails.collectAsStateWithLifecycle(initialValue = true)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)) {
+        Label(text = "TV guide", style = AppType.headline)
+        Label(text = "Text size (smaller fits more channels)", style = AppType.body, color = colors.textDim)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((value, name) in listOf(0 to "Smaller", 1 to "Standard", 2 to "Larger")) {
+                OptionChip(name, size == value) { scope.launch { settings.setGuideTextSize(value) } }
+            }
+        }
+        Label(text = "Channel logos", style = AppType.body, color = colors.textDim)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OptionChip("Show", logos) { scope.launch { settings.setGuideLogos(true) } }
+            OptionChip("Hide", !logos) { scope.launch { settings.setGuideLogos(false) } }
+        }
+        Label(text = "Programme details at the top (hide them to fit more channels)", style = AppType.body, color = colors.textDim)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OptionChip("Show", details) { scope.launch { settings.setGuideDetails(true) } }
+            OptionChip("Hide", !details) { scope.launch { settings.setGuideDetails(false) } }
+        }
+    }
+}
+
+@Composable
+private fun OptionChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier.height(36.dp),
+        shape = RoundedCornerShape(18.dp),
+        container = if (selected) colors.glassStrong else colors.glass,
+        outlined = false,
+    ) { focused ->
+        Label(
+            text = if (selected) "✓ $label" else label,
+            style = AppType.label,
+            color = if (focused || selected) colors.text else colors.textDim,
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
+        )
     }
 }
 

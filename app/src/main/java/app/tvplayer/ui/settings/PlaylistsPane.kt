@@ -89,8 +89,13 @@ fun PlaylistsPane(repo: PlaylistRepository) {
         }
         val busy = importState is ImportState.Working
         playlists.forEach { playlist ->
+            // The account's end date and streams in use, asked of the provider when the pane opens.
+            val subscription by androidx.compose.runtime.produceState<PlaylistRepository.Subscription?>(null, playlist.id) {
+                value = repo.subscription(playlist)
+            }
             PlaylistRow(
                 playlist = playlist,
+                subscription = subscription,
                 busy = busy,
                 onRefresh = { repo.refresh(playlist.id) },
                 onRemove = { repo.remove(playlist.id) },
@@ -143,7 +148,13 @@ private fun StatusLine(state: ImportState) {
 }
 
 @Composable
-private fun PlaylistRow(playlist: PlaylistEntity, busy: Boolean, onRefresh: () -> Unit, onRemove: () -> Unit) {
+private fun PlaylistRow(
+    playlist: PlaylistEntity,
+    subscription: PlaylistRepository.Subscription? = null,
+    busy: Boolean,
+    onRefresh: () -> Unit,
+    onRemove: () -> Unit,
+) {
     val colors = AppTheme.colors
     val shape = RoundedCornerShape(10.dp)
     var confirming by remember(playlist.id) { mutableStateOf(false) }
@@ -184,6 +195,11 @@ private fun PlaylistRow(playlist: PlaylistEntity, busy: Boolean, onRefresh: () -
                 style = AppType.caption,
                 color = colors.textDim,
             )
+            if (subscription != null) {
+                val text = subscriptionText(subscription)
+                val soon = subscription.endsAt?.let { it - System.currentTimeMillis() < SUBSCRIPTION_WARN_MILLIS } == true
+                Label(text = text, style = AppType.caption, color = if (soon) colors.accent else colors.textDim, maxLines = 2)
+            }
         }
         if (!busy) {
             SmallButton(text = "Refresh", onClick = onRefresh)
@@ -294,4 +310,34 @@ private fun AddForm(
             SmallButton(text = "Cancel", onClick = onCancel)
         }
     }
+}
+
+/** How soon before an account ends Skyfall starts to say so. */
+const val SUBSCRIPTION_WARN_MILLIS = 7L * 24 * 60 * 60 * 1000
+
+/** "Subscription ends Tue 3 Mar 2027 (in 105 days) · 1 of 2 streams in use". */
+fun subscriptionText(subscription: PlaylistRepository.Subscription): String {
+    val parts = ArrayList<String>()
+    val ends = subscription.endsAt
+    parts += when {
+        ends == null -> "Subscription: no end date given"
+        else -> {
+            val date = java.time.Instant.ofEpochMilli(ends).atZone(java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM yyyy", java.util.Locale.UK))
+            val days = Math.floorDiv(ends - System.currentTimeMillis(), 24L * 60 * 60 * 1000)
+            when {
+                days < 0 -> "Subscription ended $date"
+                days == 0L -> "Subscription ends today ($date)"
+                days == 1L -> "Subscription ends tomorrow ($date)"
+                else -> "Subscription ends $date (in $days days)"
+            }
+        }
+    }
+    if (subscription.trial) parts += "trial"
+    val max = subscription.maxConnections
+    if (max != null && max > 0) {
+        parts += "${subscription.activeConnections ?: 0} of $max ${if (max == 1) "stream" else "streams"} in use"
+    }
+    subscription.status?.takeIf { !it.equals("Active", ignoreCase = true) }?.let { parts += it }
+    return parts.joinToString(" · ")
 }

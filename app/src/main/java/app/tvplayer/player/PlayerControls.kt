@@ -1,5 +1,6 @@
 package app.tvplayer.player
 
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.focus.FocusDirection
@@ -336,7 +337,11 @@ fun PlayerControls(
                         extra = if (live) null else "Find on OpenSubtitles…" to { panel = Panel.FIND },
                         onDone = { panel = Panel.NONE },
                     )
-                    Panel.AUDIO -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // Scrolls: the tracks, lip sync and the volume boost don't all fit at once.
+                    Panel.AUDIO -> Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
                         TrackPanel(
                             heading = "Audio",
                             controller = controller,
@@ -745,7 +750,19 @@ private fun AudioSyncRows(controller: LivePlayerController) {
         )
         PanelRow(text = "Sound earlier (− 50 ms)", selected = false) { controller.changeAudioDelay(-50) }
         PanelRow(text = "Sound later (+ 50 ms)", selected = false) { controller.changeAudioDelay(+50) }
-        if (ms != 0) PanelRow(text = "Reset", selected = false) { controller.setAudioDelay(0) }
+        if (controller.soundIsOwn) PanelRow(text = "Back to the usual setting", selected = false) { controller.resetAudioDelay() }
+
+        // Louder, for a quiet channel or film.
+        Label(text = "Volume boost", style = AppType.title, modifier = Modifier.padding(top = 8.dp))
+        for ((db, name) in listOf(0 to "Off", 4 to "A little louder", 8 to "Louder", 12 to "Loudest")) {
+            PanelRow(text = name, selected = controller.boostDb == db) { controller.setBoost(db) }
+        }
+        Label(
+            text = if (controller.vod != null) "Kept for this film or series, with the audio and subtitles chosen." else "Kept for this channel, with the audio and subtitles chosen.",
+            style = AppType.caption,
+            color = colors.textFaint,
+            maxLines = 2,
+        )
     }
 }
 

@@ -220,9 +220,44 @@ class LivePlayerController(
         cues = emptyList()
         frameRate = null
         frameProbe.reset()
+        applyTitleSound()
     }
 
-    /** Sound moved against the picture, in milliseconds (positive: later), for lip sync. Kept in settings. */
+    // ---- Choices kept for each channel, film or series ----
+
+    /** Lip sync, volume boost and the audio and subtitle tracks chosen, for each channel, film and series (on this box). */
+    private val titlePrefs = context.getSharedPreferences("per_title", Context.MODE_PRIVATE)
+
+    /**
+     * What's playing, for keeping choices against: the channel, the film, or the series (so every episode
+     * shares them). Catch-up goes with its channel's name.
+     */
+    private fun titleKey(): String? {
+        val item = vod
+        if (item != null) return "v|" + item.title.substringBefore(" · ").trim().lowercase()
+        return current?.key?.let { "c|$it" }
+    }
+
+    /** Whether lip sync and the boost are set for what's playing (rather than the everyday setting). */
+    var soundIsOwn by mutableStateOf(false)
+        private set
+
+    private var globalAudioDelay = 0
+    private val tracksApplied = HashSet<Int>()
+
+    private fun applyTitleSound() {
+        val key = titleKey()
+        val own = key?.let { titlePrefs.getInt(DELAY + it, Int.MIN_VALUE) }?.takeIf { it != Int.MIN_VALUE }
+        soundIsOwn = own != null
+        val delay = own ?: globalAudioDelay
+        audioDelayMs = delay
+        audioDelay.micros = delay * 1_000L
+        boostDb = key?.let { titlePrefs.getInt(BOOST + it, 0) } ?: 0
+        applyBoost()
+        tracksApplied.clear()
+    }
+
+    /** Sound moved against the picture, in milliseconds (positive: later), for lip sync. */
     var audioDelayMs by mutableIntStateOf(0)
         private set
 
@@ -230,11 +265,110 @@ class LivePlayerController(
         setAudioDelay(audioDelayMs + byMs)
     }
 
+    /** Lip sync for what's playing, kept for it from now on. */
     fun setAudioDelay(ms: Int) {
         val value = ms.coerceIn(-SettingsRepository.MAX_AUDIO_DELAY_MS, SettingsRepository.MAX_AUDIO_DELAY_MS)
         audioDelayMs = value
         audioDelay.micros = value * 1_000L
-        scope.launch { settings.setAudioDelayMs(value) }
+        val key = titleKey()
+        if (key != null) {
+            titlePrefs.edit().putInt(DELAY + key, value).apply()
+            soundIsOwn = true
+        } else {
+            scope.launch { settings.setAudioDelayMs(value) }
+        }
+    }
+
+    /** Back to the everyday lip sync (Settings › Player) for what's playing. */
+    fun resetAudioDelay() {
+        titleKey()?.let { titlePrefs.edit().remove(DELAY + it).apply() }
+        soundIsOwn = false
+        audioDelayMs = globalAudioDelay
+        audioDelay.micros = globalAudioDelay * 1_000L
+    }
+
+    /** Extra loudness for a quiet channel or film, in decibels (0 is off); kept for it from now on. */
+    var boostDb by mutableIntStateOf(0)
+        private set
+    private var enhancer: android.media.audiofx.LoudnessEnhancer? = null
+
+    fun setBoost(db: Int) {
+        boostDb = db.coerceIn(0, MAX_BOOST_DB)
+        titleKey()?.let { key ->
+            if (boostDb == 0) titlePrefs.edit().remove(BOOST + key).apply() else titlePrefs.edit().putInt(BOOST + key, boostDb).apply()
+        }
+        applyBoost()
+    }
+
+    /** Turns the boost on the player's sound up or off. (Sound sent straight to an amplifier as Dolby or DTS isn't changed.) */
+    private fun applyBoost() {
+        runCatching {
+            val session = player.audioSessionId
+            if (boostDb <= 0 || session == C.AUDIO_SESSION_ID_UNSET) {
+                enhancer?.enabled = false
+                return
+            }
+            val effect = enhancer ?: android.media.audiofx.LoudnessEnhancer(session).also { enhancer = it }
+            effect.setTargetGain(boostDb * 100)
+            effect.enabled = true
+        }
+    }
+
+    private fun releaseBoost() {
+        runCatching { enhancer?.release() }
+        enhancer = null
+    }
+
+    /** Keeps the audio or subtitle track chosen for what's playing, to choose it again next time. */
+    private fun rememberTrack(type: Int, option: TrackOption?) {
+        val key = titleKey() ?: return
+        val name = if (type == C.TRACK_TYPE_AUDIO) AUDIO else SUBS
+        val format = option?.group?.getTrackFormat(option.index)
+        val value = if (format == null) OFF else format.language.orEmpty() + SEP + format.label.orEmpty()
+        titlePrefs.edit().putString(name + key, value).apply()
+    }
+
+    /** Chooses the audio and subtitles kept for what's playing, as each kind of track turns up. */
+    private fun applyRememberedTracks(tracks: Tracks) {
+        val key = titleKey() ?: return
+        val params = player.trackSelectionParameters.buildUpon()
+        var changed = false
+        for ((type, name) in listOf(C.TRACK_TYPE_AUDIO to AUDIO, C.TRACK_TYPE_TEXT to SUBS)) {
+            if (type in tracksApplied) continue
+            val groups = tracks.groups.filter { it.type == type }
+            if (groups.isEmpty()) continue
+            tracksApplied += type
+            val saved = titlePrefs.getString(name + key, null) ?: continue
+            if (saved == OFF) {
+                if (type == C.TRACK_TYPE_TEXT) {
+                    params.setTrackTypeDisabled(type, true)
+                    changed = true
+                }
+                continue
+            }
+            val language = saved.substringBefore(SEP)
+            val label = saved.substringAfter(SEP, "")
+            var best: Pair<Tracks.Group, Int>? = null
+            var bestScore = 0
+            for (group in groups) {
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSupported(i)) continue
+                    val format = group.getTrackFormat(i)
+                    var score = 0
+                    if (language.isNotEmpty() && format.language.equals(language, ignoreCase = true)) score += 2
+                    if (label.isNotEmpty() && format.label == label) score += 1
+                    if (score > bestScore) {
+                        bestScore = score
+                        best = group to i
+                    }
+                }
+            }
+            val (group, index) = best ?: continue
+            if (group.isTrackSelected(index)) continue
+            params.setTrackTypeDisabled(type, false).setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
+            changed = true
+        }
+        if (changed) player.trackSelectionParameters = params.build()
     }
 
     /** Minutes the sleep timer was set for; 0 when it's off. */
@@ -286,7 +420,7 @@ class LivePlayerController(
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setRenderersFactory(DelayedAudioRenderersFactory(context, audioDelay).setEnableDecoderFallback(true))
         // Start playing after one second of video rather than the default two and a half.
-        .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 50_000, 1_000, 2_000).build())
+        .setLoadControl(bufferFor(context))
         // Plays as a film/TV app: pauses for the voice assistant and other apps' sound, then carries on.
         .setAudioAttributes(
             androidx.media3.common.AudioAttributes.Builder()
@@ -302,8 +436,11 @@ class LivePlayerController(
             // Follows the setting, whether it's changed here or in Settings › Player.
             scope.launch {
                 settings.audioDelayMs.collect { saved ->
-                    audioDelayMs = saved
-                    audioDelay.micros = saved * 1_000L
+                    globalAudioDelay = saved
+                    if (!soundIsOwn) {
+                        audioDelayMs = saved
+                        audioDelay.micros = saved * 1_000L
+                    }
                 }
             }
             exo.playWhenReady = true
@@ -589,6 +726,7 @@ class LivePlayerController(
                 .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, option.index))
         }
         player.trackSelectionParameters = params.build()
+        rememberTrack(type, option)
         controlsToken++
     }
 
@@ -846,6 +984,7 @@ class LivePlayerController(
 
     fun release() {
         close()
+        releaseBoost()
         player.release()
     }
 
@@ -1263,6 +1402,12 @@ class LivePlayerController(
 
         override fun onTracksChanged(tracks: Tracks) {
             updateStreamInfo()
+            applyRememberedTracks(tracks)
+        }
+
+        override fun onAudioSessionIdChanged(audioSessionId: Int) {
+            releaseBoost()
+            applyBoost()
         }
 
         override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
@@ -1280,6 +1425,13 @@ class LivePlayerController(
     }
 
     private companion object {
+        const val DELAY = "delay|"
+        const val BOOST = "boost|"
+        const val AUDIO = "audio|"
+        const val SUBS = "subs|"
+        const val OFF = "off"
+        const val SEP = "\u0001"
+        const val MAX_BOOST_DB = 12
         const val PICK = "pick|"
         const val SEEN = "seen|"
         const val STALL_MILLIS = 15_000L
@@ -1301,3 +1453,36 @@ class LivePlayerController(
 }
 
 private const val MINUTE = 60_000L
+
+/**
+ * How much of a stream is loaded ahead (Settings › Player › Buffer). More rides out a weak connection
+ * but takes longer to start; read when Skyfall opens.
+ */
+private fun bufferFor(context: Context): DefaultLoadControl {
+    val builder = DefaultLoadControl.Builder()
+    when (BufferSize.saved(context)) {
+        BufferSize.LARGER -> builder.setBufferDurationsMs(30_000, 90_000, 2_000, 4_000)
+        BufferSize.LARGEST -> builder.setBufferDurationsMs(50_000, 150_000, 3_000, 6_000)
+        // Starts playing after one second of video rather than the default two and a half.
+        BufferSize.STANDARD -> builder.setBufferDurationsMs(15_000, 50_000, 1_000, 2_000)
+    }
+    return builder.build()
+}
+
+/** The buffer sizes offered in Settings › Player. */
+enum class BufferSize(val label: String, val detail: String) {
+    STANDARD("Standard", "Starts quickest"),
+    LARGER("Larger", "For a slower connection"),
+    LARGEST("Largest", "For a weak connection; channels take a little longer to start");
+
+    companion object {
+        private const val PREFS = "player_buffer"
+
+        fun saved(context: Context): BufferSize =
+            entries.getOrNull(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("size", 0)) ?: STANDARD
+
+        fun save(context: Context, size: BufferSize) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("size", size.ordinal).apply()
+        }
+    }
+}

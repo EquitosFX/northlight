@@ -113,7 +113,7 @@ fun SettingsScreen(
             when (section) {
                 SettingsSection.PLAYLISTS -> PlaylistsPane(repo = playlists)
                 SettingsSection.FILM_INFO -> TmdbPane(settings = settings, metadata = metadata)
-                SettingsSection.APPEARANCE -> AppearancePane(themeId = themeId, onThemeChange = onThemeChange)
+                SettingsSection.APPEARANCE -> AppearancePane(themeId = themeId, onThemeChange = onThemeChange, settings = settings)
                 SettingsSection.PLAYER -> PlayerPane(settings = settings, subtitles = subtitles)
                 SettingsSection.MAINTENANCE -> if (channels != null && check != null) MaintenancePane(settings, channels, check)
                 SettingsSection.BACKUP -> backup?.let { BackupPane(it) }

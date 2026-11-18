@@ -25,6 +25,9 @@ class SettingsRepository(private val context: Context) {
     private val autoRefreshKey = intPreferencesKey("auto_refresh_hours")
     private val backupPlayerKey = androidx.datastore.preferences.core.booleanPreferencesKey("backup_player")
     private val audioDelayKey = intPreferencesKey("audio_delay_ms")
+    private val guideTextKey = intPreferencesKey("guide_text_size")
+    private val guideLogosKey = androidx.datastore.preferences.core.booleanPreferencesKey("guide_logos")
+    private val guideDetailsKey = androidx.datastore.preferences.core.booleanPreferencesKey("guide_details")
     private val matchFrameRateKey = androidx.datastore.preferences.core.booleanPreferencesKey("match_frame_rate")
     private val subtitleLanguageKey = stringPreferencesKey("subtitle_language")
     private val subtitleLookKey = stringPreferencesKey("subtitle_look")
@@ -78,6 +81,27 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setMatchFrameRate(on: Boolean) {
         context.settingsStore.edit { prefs -> prefs[matchFrameRateKey] = on }
+    }
+
+    /** TV guide text and row size: 0 smaller (more channels), 1 standard, 2 larger. */
+    val guideTextSize: Flow<Int> = context.settingsStore.data.map { prefs -> prefs[guideTextKey] ?: 1 }
+
+    suspend fun setGuideTextSize(size: Int) {
+        context.settingsStore.edit { prefs -> prefs[guideTextKey] = size.coerceIn(0, 2) }
+    }
+
+    /** Whether the TV guide shows channel logos. */
+    val guideLogos: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[guideLogosKey] ?: true }
+
+    suspend fun setGuideLogos(on: Boolean) {
+        context.settingsStore.edit { prefs -> prefs[guideLogosKey] = on }
+    }
+
+    /** Whether the TV guide shows the highlighted programme's details at the top (off fits more channels). */
+    val guideDetails: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[guideDetailsKey] ?: true }
+
+    suspend fun setGuideDetails(on: Boolean) {
+        context.settingsStore.edit { prefs -> prefs[guideDetailsKey] = on }
     }
 
     /** Sound moved against the picture, in milliseconds: positive is later. */

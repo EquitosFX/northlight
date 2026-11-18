@@ -538,6 +538,29 @@ fun AppRoot(
         }
     }
 
+    // An Xtream account ending within a week: said once a day (Settings › Playlists always shows the date).
+    val reminderContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        delay(20_000)
+        val prefs = reminderContext.getSharedPreferences("subscription_reminder", android.content.Context.MODE_PRIVATE)
+        while (true) {
+            val today = java.time.LocalDate.now().toString()
+            if (prefs.getString("day", null) != today) {
+                val ending = runCatching { container.playlists.playlists.first() }.getOrDefault(emptyList()).mapNotNull { playlist ->
+                    val sub = runCatching { container.playlists.subscription(playlist, maxAgeMillis = 0) }.getOrNull()
+                    val ends = sub?.endsAt ?: return@mapNotNull null
+                    if (ends - System.currentTimeMillis() < app.tvplayer.ui.settings.SUBSCRIPTION_WARN_MILLIS) playlist to sub else null
+                }
+                if (ending.isNotEmpty()) {
+                    val (playlist, sub) = ending.first()
+                    notice = "${playlist.name}: " + app.tvplayer.ui.settings.subscriptionText(sub).substringBefore(" · ") + ". Details in Settings › Playlists."
+                    prefs.edit().putString("day", today).apply()
+                }
+            }
+            delay(6 * 60 * 60 * 1000L)
+        }
+    }
+
     // My list on Home: the saved films and series, found in the playlists.
     val watchlist by container.myList.watchlist.collectAsStateWithLifecycle()
     val savedRail by produceState(initialValue = emptyList<Tile>(), watchlist, playlistList, newEpisodes) {
@@ -812,6 +835,7 @@ fun AppRoot(
                             // Opens on the channel playing in the small picture, in the category last used.
                             watching = controller.current?.key?.takeIf { controller.vod == null && mode != PlayerMode.NONE },
                             memory = guideMemory,
+                            settings = container.settings,
                             onCatchup = { channel, programme ->
                                 scope.launch {
                                     try {

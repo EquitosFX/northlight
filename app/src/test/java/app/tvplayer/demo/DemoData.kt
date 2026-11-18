@@ -116,7 +116,9 @@ object DemoData {
             // The account check, which catch-up uses for the server's time zone.
             url.host == "demo.invalid" && path.endsWith("/player_api.php") && url.queryParameter("action") == null -> reply(
                 200,
-                """{"user_info":{"auth":1,"status":"Active"},"server_info":{"timezone":"Europe/London"}}""",
+                // A month left on the account, with one of its two streams in use.
+                """{"user_info":{"auth":1,"status":"Active","exp_date":"${System.currentTimeMillis() / 1000 + 30L * 24 * 3600}",""" +
+                    """"max_connections":"2","active_cons":"1"},"server_info":{"timezone":"Europe/London"}}""",
             )
             // The demo channels and films never finish loading, so the player stays on "Tuning…"
             // and its controls can be opened the same way every time.
