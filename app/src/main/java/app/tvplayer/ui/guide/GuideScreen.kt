@@ -1,5 +1,8 @@
 package app.tvplayer.ui.guide
 
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
@@ -180,6 +183,14 @@ fun GuideScreen(
     }
     val windowState = remember { mutableLongStateOf(liveStart) }
     var windowStart by windowState
+    // The time now, for the line through the listings: kept up to date while the guide is open.
+    val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(15_000)
+            clock.longValue = System.currentTimeMillis()
+        }
+    }
     // Read lazily by the rows, so moving the window doesn't rebuild them.
     val window: () -> Long = remember { { windowState.longValue } }
     // Read only by the header (and when sliding the grid), so moving around the grid doesn't redraw every row.
@@ -414,7 +425,7 @@ fun GuideScreen(
                 moveWindow(target.coerceIn(earliest, liveStart + 7 * 24 * HOUR - WINDOW))
             },
         )
-        TimeRuler(windowStart = windowStart, origin = origin, now = now, window = window, slide = slide)
+        TimeRuler(windowStart = windowStart, origin = origin, now = now, window = window, slide = slide, clock = { clock.longValue })
         if (rows.isEmpty()) {
             Label(
                 text = if (group == FAVOURITES) "No favourites yet. Hold OK on a channel's programme in the guide, or press OK while watching and choose Add to Favourites." else "No channels in this group.",
@@ -424,11 +435,24 @@ fun GuideScreen(
                 modifier = Modifier.padding(horizontal = SideMargin, vertical = 12.dp),
             )
         }
+        val nowLineColor = colors.accent
         LazyColumn(
             contentPadding = PaddingValues(start = SideMargin, end = ListingsEndMargin, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
                 .weight(1f)
+                // A line down through every channel at the time now, so it's easy to see how far into each
+                // programme it is. Drawn over the listings (and only redrawn as the grid slides or the minute changes).
+                .drawWithContent {
+                    drawContent()
+                    val left = (SideMargin + ChannelColumn + 4.dp).toPx()
+                    val right = size.width - ListingsEndMargin.toPx()
+                    val shown = window() + slide()
+                    val x = left + (clock.longValue - shown) * (right - left) / WINDOW
+                    if (x in left..right) {
+                        drawLine(nowLineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
+                    }
+                }
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if (event.key != Key.DirectionUp && event.key != Key.DirectionDown) return@onPreviewKeyEvent false
@@ -677,8 +701,10 @@ private fun Header(
 }
 
 @Composable
-private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> Long, slide: () -> Float) {
+private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> Long, slide: () -> Float, clock: () -> Long) {
     val colors = AppTheme.colors
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val pillStyle = AppType.label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = colors.onAccent)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -696,10 +722,27 @@ private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> 
         }
         // The times for the hours either side too, laid out once and slid along with the grid.
         val times = remember(origin) { (0 until (SPAN / HALF_HOUR).toInt()).map { origin + it * HALF_HOUR } }
-        val spans = remember(origin, now) {
-            times.map { it to it + HALF_HOUR } + listOfNotNull((now to now + MINUTE).takeIf { now in origin until origin + SPAN })
-        }
-        Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+        val spans = remember(origin) { times.map { it to it + HALF_HOUR } }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .clipToBounds()
+                // "NOW 20:31" over the time now, at the top of the line down through the listings.
+                .drawWithContent {
+                    drawContent()
+                    val at = clock()
+                    val x = (at - (window() + slide())) * size.width / WINDOW
+                    if (x < 0f || x > size.width) return@drawWithContent
+                    val text = measurer.measure("NOW " + clockTime(at), pillStyle)
+                    val padX = 8.dp.toPx()
+                    val w = text.size.width + padX * 2
+                    val h = size.height
+                    val pillLeft = (x - w / 2).coerceIn(0f, (size.width - w).coerceAtLeast(0f))
+                    drawRoundRect(colors.accent, Offset(pillLeft, 0f), androidx.compose.ui.geometry.Size(w, h), androidx.compose.ui.geometry.CornerRadius(h / 2))
+                    drawText(text, topLeft = Offset(pillLeft + padX, (h - text.size.height) / 2))
+                },
+        ) {
             ProgrammeStrip(spans = spans, origin = origin, window = window, slide = slide) {
                 for (at in times) {
                     Box(Modifier.fillMaxSize()) {
@@ -708,16 +751,6 @@ private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> 
                             style = AppType.label,
                             color = colors.textDim,
                             modifier = Modifier.align(Alignment.CenterStart),
-                        )
-                    }
-                }
-                if (now in origin until origin + SPAN) {
-                    Box(Modifier.fillMaxSize()) {
-                        Box(
-                            modifier = Modifier
-                                .width(2.dp)
-                                .fillMaxHeight()
-                                .background(colors.accent),
                         )
                     }
                 }
