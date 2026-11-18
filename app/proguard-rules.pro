@@ -2,6 +2,8 @@
 
 # Keep names: crash notes and the crash log stay readable, and nothing found by name is renamed.
 -dontobfuscate
+# ...and line numbers, so a crash note says where.
+-keepattributes SourceFile,LineNumberTable
 
 # The backup player's VLC engine calls into its Java side by name from native code.
 -keep class org.videolan.** { *; }
