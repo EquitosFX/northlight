@@ -476,7 +476,11 @@ fun GuideScreen(
                     val shown = window() + slide()
                     val x = left + (clock.longValue - shown) * (right - left) / WINDOW
                     if (x in left..right) {
-                        drawLine(nowLineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
+                        // Down to the last channel shown (not on into the empty space below a short list).
+                        val info = rowsList.layoutInfo
+                        val last = info.visibleItemsInfo.lastOrNull()
+                        val bottom = if (last == null) 0f else (last.offset + last.size - info.viewportStartOffset).toFloat().coerceAtMost(size.height)
+                        if (bottom > 0f) drawLine(nowLineColor, Offset(x, 0f), Offset(x, bottom), strokeWidth = 2.dp.toPx())
                     }
                 }
                 .onPreviewKeyEvent { event ->
