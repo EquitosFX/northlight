@@ -966,6 +966,17 @@ class ScreenshotTest {
         shot("18-search-titles")
         // Finishing typing remembers the search.
         press("back")
+        // Results start at the top, with films and series.
+        expectShown("Films and series", "Search results start at the top, with films and series")
+        // Opening a result and coming back returns to the search, on that result.
+        press("down")
+        val openedResult = focusedText()
+        press("ok")
+        expectHidden("Recent searches", "A search result opens its page")
+        press("back")
+        expectShown("Films and series", "Back from a result returns to the search")
+        expectFocus(openedResult, "Back from a result highlights it again")
+        press("up")
         press("ok")
         type("priya")
         expectShown("Priya Desai", "Searching a name finds the person")

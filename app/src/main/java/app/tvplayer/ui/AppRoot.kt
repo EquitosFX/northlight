@@ -196,6 +196,8 @@ fun AppRoot(
     var backHeld by remember { mutableStateOf(false) }
 
     var voiceToken by remember { mutableIntStateOf(0) }
+    // The search in progress, kept while one of its results is open.
+    val searchMemory = remember { app.tvplayer.ui.search.SearchMemory() }
     // The guide's category, kept while Skyfall is open.
     val guideMemory = remember { app.tvplayer.ui.guide.GuideMemory() }
 
@@ -820,6 +822,7 @@ fun AppRoot(
                         channels = container.channels,
                         metadata = container.metadata,
                         voiceToken = voiceToken,
+                        memory = searchMemory,
                         onPerson = { chosen ->
                             holdFocus()
                             person = chosen
@@ -828,12 +831,15 @@ fun AppRoot(
                             holdFocus()
                             when {
                                 row.kind == ChannelEntity.KIND_LIVE -> play(row.id)
+                                // Back from the series or film page returns to the search, not its category.
                                 row.kind == ChannelEntity.KIND_SERIES -> {
                                     seriesState.series = ChannelsRepository.asShow(row)
+                                    seriesState.returnTo = Dest.SEARCH
                                     dest = Dest.SERIES
                                 }
                                 row.kind == ChannelEntity.KIND_MOVIE -> {
                                     filmsState.film = row
+                                    filmsState.returnTo = Dest.SEARCH
                                     dest = Dest.FILMS
                                 }
                                 else -> playVod(VodItem(row.url, row.name, row.logo, row.userAgent, row.referrer))

@@ -57,13 +57,22 @@ fun SearchScreen(
     onOpen: (VodRow) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
     voiceToken: Int = 0,
+    /** The search kept while a result is open, so coming back finds it as it was. */
+    memory: SearchMemory = remember { SearchMemory() },
 ) {
     val colors = AppTheme.colors
-    var query by rememberSaveable { mutableStateOf("") }
+    var query by remember { mutableStateOf(memory.query) }
+    LaunchedEffect(query) { memory.query = query }
+    // Back from a result: highlight it again (once the results are back), rather than the search box.
+    val returnKey = remember { memory.opened.also { memory.opened = null } }
     val fieldFocus = remember { FocusRequester() }
-    EntryPoint(fieldFocus)
+    val returnFocus = remember { FocusRequester() }
+    if (returnKey == null) EntryPoint(fieldFocus)
     val autoFocus = LocalAutoFocus.current
-    LaunchedEffect(Unit) { if (autoFocus()) runCatching { fieldFocus.requestFocus() } }
+    LaunchedEffect(Unit) { if (returnKey == null && autoFocus()) runCatching { fieldFocus.requestFocus() } }
+    fun opened(key: String) {
+        memory.opened = key
+    }
 
     // Listens in the app through the remote's mic; the words fill the search box as they're heard.
     // Searches asked for (typed and finished, said, or a result opened), most recent first, kept on this box.
@@ -174,7 +183,38 @@ fun SearchScreen(
         // Results as tiles: films and series as posters (OK opens their page), people, then live channels.
         val titles = list.orEmpty().filter { it.kind != ChannelEntity.KIND_LIVE }
         val liveChannels = list.orEmpty().filter { it.kind == ChannelEntity.KIND_LIVE }
+        val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+        // The grid's items in order, to find a result's place in it.
+        val keys = remember(titles, people, liveChannels) {
+            buildList {
+                if (titles.isNotEmpty()) { add("h-titles"); titles.forEach { add("t${it.id}") } }
+                if (people.isNotEmpty()) { add("h-people"); people.forEach { add("p${it.id}") } }
+                if (liveChannels.isNotEmpty()) { add("h-live"); liveChannels.forEach { add("c${it.id}") } }
+            }
+        }
+        // New results always start at the top (films and series first), not wherever the grid had got to.
+        var returned by remember { mutableStateOf(returnKey == null) }
+        LaunchedEffect(keys) {
+            if (keys.isEmpty()) return@LaunchedEffect
+            if (!returned) {
+                val at = keys.indexOf(returnKey)
+                if (at < 0) {
+                    if (list != null) returned = true
+                    return@LaunchedEffect
+                }
+                returned = true
+                gridState.scrollToItem((at - 1).coerceAtLeast(0))
+                repeat(30) {
+                    androidx.compose.runtime.withFrameNanos { }
+                    if (runCatching { returnFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                }
+                return@LaunchedEffect
+            }
+            gridState.scrollToItem(0)
+        }
+        fun tileFocus(key: String) = if (key == returnKey) Modifier.focusRequester(returnFocus) else Modifier
         LazyVerticalGrid(
+            state = gridState,
             columns = GridCells.Adaptive(minSize = 118.dp),
             contentPadding = PaddingValues(bottom = 24.dp, start = 2.dp, end = 2.dp, top = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -187,7 +227,15 @@ fun SearchScreen(
                 item(key = "h-titles", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("Films and series") }
                 items(titles, key = { "t${it.id}" }) { row ->
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        PosterCard(row = row, onClick = { history.add(text); onOpen(row) }, modifier = Modifier.fillMaxWidth())
+                        PosterCard(
+                            row = row,
+                            onClick = {
+                                history.add(text)
+                                opened("t${row.id}")
+                                onOpen(row)
+                            },
+                            modifier = Modifier.fillMaxWidth().then(tileFocus("t${row.id}")),
+                        )
                         Label(
                             text = if (row.kind == ChannelEntity.KIND_MOVIE) "Film" else "Series",
                             style = AppType.caption,
@@ -205,11 +253,26 @@ fun SearchScreen(
             if (liveChannels.isNotEmpty()) {
                 item(key = "h-live", span = { GridItemSpan(maxLineSpan) }) { SectionHeading("Live channels") }
                 items(liveChannels, key = { "c${it.id}" }) { row ->
-                    ChannelTile(row = row, onClick = { history.add(text); onOpen(row) })
+                    ChannelTile(
+                        row = row,
+                        onClick = {
+                            history.add(text)
+                            opened("c${row.id}")
+                            onOpen(row)
+                        },
+                        modifier = tileFocus("c${row.id}"),
+                    )
                 }
             }
         }
     }
+}
+
+/** The search in progress, kept while a result is open (the search screen itself is rebuilt each time). */
+class SearchMemory {
+    var query: String = ""
+    /** The result opened, to highlight again on coming back. */
+    var opened: String? = null
 }
 
 /** The searches made before, kept on this box (the most recent twelve). */
@@ -346,12 +409,12 @@ private fun PersonTile(person: TmdbPerson, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ChannelTile(row: VodRow, onClick: () -> Unit) {
+private fun ChannelTile(row: VodRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = AppTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FocusSurface(
             onClick = onClick,
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 10f),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
