@@ -559,20 +559,20 @@ class ScreenshotTest {
         shot("09c-subtitles-menu")
         press("back", "back")
         expectHidden("Subtitles", "Back closes the menu, then the controls")
+        // Back from full-screen TV goes straight into the guide, on the channel playing and what's on now.
         press("back")
-        expectPanel(open = true, step = "Back from full-screen TV")
-        expectFocus("TV guide", "Back from full-screen TV lands on the menu")
-        shot("10-picture-in-panel")
-        // The guide behind already shows the channel playing, in its category; OK goes straight to it.
+        expectPanel(open = false, step = "Back from full-screen TV")
         expectHidden("Favourites", "Back from TV: the guide shows the playing channel's listings")
-        press("ok")
-        expectShown("· Atlas News", "OK on TV guide lands on the channel playing")
-        expectShown("On now", "OK on TV guide lands on what's on now")
+        expectShown("· Atlas News", "Back from TV lands on the channel playing")
+        expectShown("On now", "Back from TV lands on what's on now")
+        if (isCategory(focusedText())) problems += "Back from TV should land in the listings, not on \"${focusedText()}\""
         shot("10b-guide-on-playing-channel")
         press("back")
         expectFocus("News", "Back from there goes to the playing channel's category")
         press("back")
         expectFocus("TV guide", "Back from the categories goes to the menu")
+        expectPanel(open = true, step = "Back to the menu with the picture showing")
+        shot("10-picture-in-panel")
         press("down")
         expectFocus("Recents", "Down the menu with the picture showing")
     }

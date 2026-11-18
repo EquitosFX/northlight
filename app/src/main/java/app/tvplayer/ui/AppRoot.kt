@@ -315,6 +315,8 @@ fun AppRoot(
 
     // The side panel is open while the menu or the live picture has focus, and tucks away while browsing content.
     var menuFocused by remember { mutableStateOf(false) }
+    // Whether focus is somewhere in the open screen.
+    var contentFocused by remember { mutableStateOf(false) }
     var pictureFocused by remember { mutableStateOf(false) }
     var startupPending by remember { mutableStateOf(true) }
     val onMenuSide = menuFocused || pictureFocused
@@ -348,7 +350,19 @@ fun AppRoot(
         // Focus can't be on the menu or picture while they're not on screen.
         if (mode == PlayerMode.FULL) menuFocused = false
         if (mode != PlayerMode.MINI) pictureFocused = false
-        if (mode == PlayerMode.MINI) focusMenu()
+        if (mode == PlayerMode.MINI) {
+            if (controller.vod == null && controller.current != null) {
+                // Back from live TV: straight into the TV guide, on the channel playing and what's on now.
+                // (The guide puts focus there itself once it has read its channels; the menu if it can't.)
+                person = null
+                dest = Dest.GUIDE
+                repeat(90) {
+                    withFrameNanos { }
+                    if (contentFocused || menuFocused) return@LaunchedEffect
+                }
+            }
+            focusMenu()
+        }
     }
 
     // From the menu, Back goes Home, then stops playback, then leaves the app.
@@ -661,6 +675,7 @@ fun AppRoot(
                     // Moving in from the menu lands on the screen's starting point, if it has named one.
                     .focusProperties { enter = { entryFocus.usableTarget() } }
                     .focusRequester(contentFocus)
+                    .onFocusChanged { contentFocused = it.hasFocus }
                     .focusGroup(),
             ) {
                 Box(
