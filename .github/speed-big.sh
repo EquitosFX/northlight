@@ -6,6 +6,15 @@ PKG=app.tvplayer
 ACT=app.tvplayer/.MainActivity
 key() { for k in "$@"; do adb shell input keyevent "$k"; done; }
 repeat_key() { for i in $(seq 1 "$2"); do adb shell input keyevent "$1"; done; }
+# Taps the middle of the first thing on screen showing exactly this text.
+tap_text() {
+  timeout 60 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  local b want=$1
+  b=$(adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep "text=\"$1\"" | grep -o 'bounds="[^"]*"' | head -1 | grep -o '[0-9]\+' | tr '\n' ' ')
+  set -- $b
+  if [ $# -lt 4 ]; then echo "couldn't find \"$want\" on screen"; return 1; fi
+  adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
+}
 python3 .github/bigplaylist.py big
 (cd big && python3 -m http.server 8000 >/dev/null 2>&1 &)
 sleep 2
@@ -18,13 +27,11 @@ for variant in after; do
   adb shell cmd package compile -f -m speed-profile $PKG >/dev/null 2>&1
   timeout 60 adb shell am start -W -n $ACT >/dev/null
   sleep 6
-  # Settings (Up from Home), into its list, down to Backup and restore, open it.
-  key 19
-  sleep 2
-  key 22
-  repeat_key 20 5
-  key 23
+  # Settings › Backup and restore, by tapping their names on screen.
+  tap_text "Settings"
   sleep 3
+  tap_text "Backup and restore"
+  sleep 4
   echo "$variant: reading the restore page"
   timeout 60 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
   address=$(adb shell cat /sdcard/ui.xml | grep -o 'http://[0-9.]*:8686/[a-z0-9]*' | head -1)
