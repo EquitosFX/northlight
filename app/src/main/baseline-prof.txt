@@ -1,0 +1,7 @@
+# Skyfall's startup profile: the code Android compiles ahead of time when the app is installed,
+# instead of interpreting it the first times it runs (which is what makes screens slow to open and
+# scroll at first). Compose, Media3 and the other libraries bring their own profiles as well.
+#
+# Everything in the app itself: it's small next to the libraries, and all of it is used on a TV.
+HSPLapp/tvplayer/**;->**(**)**
+Lapp/tvplayer/**;

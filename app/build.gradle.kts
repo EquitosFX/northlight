@@ -37,8 +37,12 @@ android {
     }
 
     buildTypes {
+        // The build that's published: not "debuggable", so Android runs it at full speed (a debug build
+        // runs the app's code, and especially its screens, several times slower), with the startup
+        // profile below. Signed with the same key as before, so it installs over the copy already there.
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -111,6 +115,10 @@ dependencies {
     implementation(libs.tv.material)
     implementation(libs.androidx.tvprovider)
     implementation(libs.libvlc)
+
+    // Installs the startup profile (src/main/baseline-prof.txt, plus the ones Compose and the other
+    // libraries bring) when Skyfall is installed from an APK, so Android compiles that code ahead of time.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
