@@ -38,7 +38,15 @@ profile_contents() {
 }
 adb install -r skyfall.apk >/dev/null && measure "APK alone"
 adb uninstall $PKG >/dev/null
-if [ -f skyfall.dm ]; then
-  adb install-multiple -r skyfall.apk skyfall.dm && measure "APK with profile"
-  profile_contents
-fi
+for n in 0 1; do
+  cp app/build/outputs/apk/release/baselineProfiles/$n/app-release.dm skyfall.dm || continue
+  adb uninstall $PKG >/dev/null
+  adb logcat -c
+  adb install-multiple -r skyfall.apk skyfall.dm && measure "APK with profile $n"
+  echo "Android's notes while installing (profile $n):"
+  adb logcat -d | grep -iE "dexopt|profman|artd|dex2oat|\.dm" | grep -iE "tvplayer|base\.dm|profile|error|fail" | head -15 | sed 's/^/    /'
+done
+# Compiling by hand with the profile already on the box, as Android does overnight.
+adb shell cmd package compile -f -m speed-profile $PKG
+echo "After compiling by hand:"; adb shell dumpsys package dexopt | tr -d '\r' | grep -A3 "\[$PKG\]" | sed 's/^/    /'
+profile_contents
