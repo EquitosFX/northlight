@@ -181,6 +181,9 @@ fun AppRoot(
                 guideMemory.warmUp(container.channels)
                 container.channels.groups(ChannelEntity.KIND_SERIES)
                 container.channels.groups(ChannelEntity.KIND_MOVIE)
+                // Recently added, where Films and Series open.
+                container.channels.inGroup(ChannelEntity.KIND_MOVIE, app.tvplayer.data.ChannelsRepository.RECENTLY_ADDED)
+                container.channels.inGroup(ChannelEntity.KIND_SERIES, app.tvplayer.data.ChannelsRepository.RECENTLY_ADDED)
                 container.channels.sport()
             }
             delay(10 * 60_000L)
