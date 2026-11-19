@@ -1,5 +1,7 @@
 package app.tvplayer.demo
 
+import app.tvplayer.data.AddedDatesStore
+import app.tvplayer.data.ChannelsRepository
 import app.tvplayer.ui.guide.GuideMemory
 import androidx.test.core.app.ApplicationProvider
 import app.tvplayer.NorthlightApp
@@ -67,6 +69,16 @@ class LoadTimes {
             )
         }
         rows.chunked(5_000).forEach { db.channels().insertAllBlocking(it) }
+        // Each film and series added some time in the last two years, as an Xtream server says.
+        val saveDates = System.nanoTime()
+        app.container.addedDates.save(
+            pid,
+            rows.filter { it.kind != ChannelEntity.KIND_LIVE }.map {
+                AddedDatesStore.key(it.kind, it.remoteId, it.url) to now / 1000 - random.nextLong(0, 2 * 365 * 86_400L)
+            },
+            now,
+        )
+        println("Saving the added dates: ${(System.nanoTime() - saveDates) / 1_000_000} ms")
         val guide = ArrayList<ProgrammeEntity>()
         for (i in 0 until 8_000) {
             if (i % 4 == 0) continue
@@ -111,7 +123,9 @@ class LoadTimes {
         time("Films: categories") { channels.groups(ChannelEntity.KIND_MOVIE) }
         time("Films: all films (\"All\")") { channels.inGroup(ChannelEntity.KIND_MOVIE, null) }
         time("Films: one category") { channels.inGroup(ChannelEntity.KIND_MOVIE, "Films 7") }
+        time("Films: recently added") { channels.inGroup(ChannelEntity.KIND_MOVIE, ChannelsRepository.RECENTLY_ADDED) }
         time("Series: categories") { channels.groups(ChannelEntity.KIND_SERIES) }
+        time("Series: recently added") { channels.inGroup(ChannelEntity.KIND_SERIES, ChannelsRepository.RECENTLY_ADDED) }
         time("Series: all series (\"All\")") { channels.inGroup(ChannelEntity.KIND_SERIES, null) }
         time("Sport: matches on now and soon") { channels.sport() }
         time("Search: \"the\"") { channels.search("the") }
