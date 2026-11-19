@@ -491,8 +491,9 @@ fun GuideScreen(
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if (event.key != Key.DirectionUp && event.key != Key.DirectionDown) return@onPreviewKeyEvent false
-                    val time = android.os.SystemClock.uptimeMillis()
                     val native = event.nativeKeyEvent
+                    // When the remote sent it, so a busy moment doesn't swallow repeats.
+                    val time = native.eventTime
                     // Held down: every repeat the remote sends moves on (about 20 channels a second), and
                     // after a second and a half of holding, two channels at a time, then three. Each move
                     // carries on from where the last one is heading, so nothing waits for focus to land.
