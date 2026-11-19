@@ -24,6 +24,16 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun getBlocking(id: Long): PlaylistEntity?
 
+    /**
+     * Changes whenever a playlist is added, removed, refreshed or has its TV guide downloaded again (the
+     * only times the channels change). Reading the few playlists is instant, unlike counting channels.
+     */
+    @Query(
+        "SELECT COUNT(*) AS count, COALESCE(SUM(id * 1000003 + COALESCE(refreshedAt, 0) + COALESCE(guideRefreshedAt, 0) * 7), 0) AS maxId " +
+            "FROM playlists",
+    )
+    fun stampBlocking(): LiveStamp
+
     @Insert
     fun insertBlocking(playlist: PlaylistEntity): Long
 

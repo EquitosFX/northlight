@@ -31,12 +31,23 @@ jobs:
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Name the APK
-        run: cp app/build/outputs/apk/release/app-release.apk northlight.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk northlight.apk
+          # The startup profile as separate files (one per range of Android versions: folder 0 is for
+          # Android 9-11, folder 1 for Android 12 and later). Installed alongside the APK, they let
+          # Android compile Skyfall for speed while installing, instead of overnight.
+          find app/build/outputs -name "*.dm" -print
+          [ -f app/build/outputs/apk/release/baselineProfiles/0/app-release.dm ] && cp app/build/outputs/apk/release/baselineProfiles/0/app-release.dm northlight-28.dm
+          [ -f app/build/outputs/apk/release/baselineProfiles/1/app-release.dm ] && cp app/build/outputs/apk/release/baselineProfiles/1/app-release.dm northlight-31.dm
+          ls -la northlight*
+          for f in northlight-*.dm; do [ -f "$f" ] && unzip -l "$f"; done; true
 
       - uses: actions/upload-artifact@v4
         with:
           name: northlight-apk
-          path: northlight.apk
+          path: |
+            northlight.apk
+            northlight-*.dm
 
       - name: Publish as the latest release
         if: github.ref == 'refs/heads/main'
@@ -44,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --cleanup-tag --yes || true
-          gh release create latest northlight.apk \
+          gh release create latest northlight.apk $(ls northlight-*.dm 2>/dev/null) \
             --target "$GITHUB_SHA" \
             --title "Skyfall build $GITHUB_RUN_NUMBER" \
             --notes "Automatic build $GITHUB_RUN_NUMBER. Install northlight.apk on the Shield; it updates the copy already installed."

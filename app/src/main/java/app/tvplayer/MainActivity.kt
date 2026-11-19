@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        app.tvplayer.ui.components.Timing.activityCreatedAt = android.os.SystemClock.uptimeMillis()
         super.onCreate(savedInstanceState)
         val container = (application as NorthlightApp).container
         val settings = container.settings

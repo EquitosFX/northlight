@@ -347,10 +347,12 @@ fun AppRoot(
     // How long Skyfall took to open, from the system starting it to its first screen drawn.
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        app.tvplayer.ui.components.Timing.record(
-            "Start-up",
-            android.os.SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis(),
-        )
+        // From the process starting, unless it was started earlier for something else (an update being
+        // installed, a reminder): then from the screen being opened.
+        val process = android.os.Process.getStartUptimeMillis()
+        val opened = app.tvplayer.ui.components.Timing.activityCreatedAt
+        val from = if (opened > 0 && opened - process > 3_000) opened else process
+        app.tvplayer.ui.components.Timing.record("Start-up", android.os.SystemClock.uptimeMillis() - from)
     }
     // The app opens with the menu focused on Home.
     LaunchedEffect(Unit) {

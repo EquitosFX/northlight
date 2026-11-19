@@ -34,6 +34,16 @@ class UpdatesTest {
     }
 
     @Test
+    fun findsTheStartupProfileForEachAndroidVersion() {
+        val b = ReleaseParser.parse(release(assets = apk() + "," + apk(name = "northlight-28.dm") + "," + apk(name = "northlight-31.dm")))
+        assertEquals(2, b.profiles.size)
+        assertTrue(b.profileFor(34)!!.endsWith("northlight-31.dm"))
+        assertTrue(b.profileFor(30)!!.endsWith("northlight-28.dm"))
+        assertNull(b.profileFor(26))
+        assertNull(ReleaseParser.parse(release()).profileFor(34))
+    }
+
+    @Test
     fun fallsBackToTheNotesForTheBuildNumber() {
         assertEquals(88, ReleaseParser.parse(release(name = "Latest", body = "Automatic build 88.")).build)
     }

@@ -71,7 +71,7 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
     }
 
     suspend fun lineup(): Lineup = withContext(Dispatchers.IO) {
-        val stamp = db.channels().liveStampBlocking()
+        val stamp = db.playlists().stampBlocking()
         cached?.let { (seen, lineup) -> if (seen == stamp) return@withContext lineup }
         val rows = db.channels().liveRowsBlocking()
         val built = Lineup.build(
@@ -144,7 +144,8 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
     /** Changes whenever a playlist is added, removed or refreshed. */
     private suspend fun currentStamp(): Long = withContext(Dispatchers.IO) {
         val playlists = db.playlists().getAllBlocking()
-        (playlists.sumOf { (it.refreshedAt ?: 0L) % 1_000_000_007L } * 31 + playlists.size) * 1_000_003L + db.channels().vodCount()
+        (playlists.sumOf { (it.refreshedAt ?: 0L) % 1_000_000_007L } * 31 + playlists.size) * 1_000_003L +
+            playlists.sumOf { it.id }
     }
 
     // After a playlist changes, the lists from before are still shown while the new ones are worked out.

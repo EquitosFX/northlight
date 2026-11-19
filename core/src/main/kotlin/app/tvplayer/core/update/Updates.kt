@@ -17,7 +17,15 @@ data class AvailableBuild(
     val sizeBytes: Long,
     /** Lower-case hex SHA-256 of the APK, when GitHub reports one. */
     val sha256: String?,
-)
+    /**
+     * The startup profile to install beside the APK, so Android compiles it for speed while installing:
+     * the download address for each oldest Android version (API level) it suits.
+     */
+    val profiles: Map<Int, String> = emptyMap(),
+) {
+    /** The profile for a TV box on Android [sdk], if there is one. */
+    fun profileFor(sdk: Int): String? = profiles.filterKeys { it <= sdk }.maxByOrNull { it.key }?.value
+}
 
 class UpdateException(message: String) : Exception(message)
 
@@ -27,6 +35,7 @@ object ReleaseParser {
     const val APK_NAME = "northlight.apk"
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val profilePattern = Regex("""northlight-(\d+)\.dm""")
     private val buildPattern = Regex("""build\s*[=#:]?\s*(\d+)""", RegexOption.IGNORE_CASE)
 
     fun parse(text: String): AvailableBuild {
@@ -57,7 +66,17 @@ object ReleaseParser {
             ?.lowercase()
             ?.takeIf { it.length == 64 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }
 
-        return AvailableBuild(build = build, apkUrl = url, sizeBytes = size, sha256 = sha)
+        // "northlight-31.dm": the profile for Android 12 (API 31) and later.
+        val profiles = (root["assets"] as? JsonArray).orEmpty()
+            .filterIsInstance<JsonObject>()
+            .mapNotNull { item ->
+                val sdk = profilePattern.matchEntire(item.string("name").orEmpty())?.groupValues?.get(1)?.toIntOrNull()
+                val link = item.string("browser_download_url")?.takeIf { it.startsWith("https://") }
+                if (sdk != null && link != null) sdk to link else null
+            }
+            .toMap()
+
+        return AvailableBuild(build = build, apkUrl = url, sizeBytes = size, sha256 = sha, profiles = profiles)
     }
 
     /** Whether [available] is newer than the installed [currentBuild]. */

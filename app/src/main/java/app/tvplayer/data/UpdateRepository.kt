@@ -176,17 +176,43 @@ class UpdateRepository(
         return file
     }
 
+    /**
+     * The startup profile for this TV box's Android version, if the release has one. Installed beside
+     * the APK, Android compiles Skyfall for speed while installing rather than overnight, so a new
+     * build runs at full speed straight away. Without it, the update installs as before.
+     */
+    private fun downloadProfile(update: AvailableBuild, dir: File): File? = runCatching {
+        val url = update.profileFor(Build.VERSION.SDK_INT) ?: return null
+        val file = File(dir, "skyfall.dm")
+        http.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = response.body ?: return null
+            file.outputStream().use { out -> body.byteStream().use { it.copyTo(out) } }
+        }
+        file.takeIf { it.length() in 1..(20L * 1024 * 1024) }
+    }.getOrNull()
+
     private fun install(file: File, update: AvailableBuild) {
         val installer = context.packageManager.packageInstaller
+        val profile = downloadProfile(update, file.parentFile ?: context.cacheDir)
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
-            setSize(file.length())
+            setSize(file.length() + (profile?.length() ?: 0L))
         }
         val sessionId = installer.createSession(params)
         installer.openSession(sessionId).use { session ->
             session.openWrite("skyfall.apk", 0, file.length()).use { out ->
                 file.inputStream().use { it.copyTo(out) }
                 session.fsync(out)
+            }
+            // Named to match the APK ("skyfall.apk" and "skyfall.dm"), as Android expects.
+            if (profile != null) {
+                runCatching {
+                    session.openWrite("skyfall.dm", 0, profile.length()).use { out ->
+                        profile.inputStream().use { it.copyTo(out) }
+                        session.fsync(out)
+                    }
+                }
             }
             val intent = Intent(context, InstallResultReceiver::class.java).putExtra(EXTRA_BUILD, update.build)
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)

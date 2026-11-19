@@ -16,6 +16,9 @@ import androidx.compose.runtime.withFrameNanos
 object Timing {
     /** The most recent time for each screen this session, in milliseconds, with the first time too. */
     val latest = mutableStateMapOf<String, Long>()
+
+    /** When the main screen was created (uptime), for the start-up time. */
+    @Volatile var activityCreatedAt = 0L
     val first = mutableStateMapOf<String, Long>()
 
     fun record(name: String, millis: Long) {
