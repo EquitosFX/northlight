@@ -1,5 +1,6 @@
 package app.tvplayer.demo
 
+import app.tvplayer.ui.guide.GuideMemory
 import androidx.test.core.app.ApplicationProvider
 import app.tvplayer.NorthlightApp
 import app.tvplayer.core.live.LineupChannel
@@ -99,7 +100,7 @@ class LoadTimes {
         val channels = app.container.channels
         val lineup = time("TV guide: channel list (lineup)") { channels.lineup() }
         time("TV guide: checking for a new guide (stamp)") { channels.programmeStamp() }
-        val memory = app.tvplayer.ui.guide.GuideMemory()
+        val memory = GuideMemory()
         time("TV guide: background warm-up") { memory.warmUp(channels) }
         val group = lineup.groups.first()
         time("TV guide: one category") { lineup.inGroup(group) }
