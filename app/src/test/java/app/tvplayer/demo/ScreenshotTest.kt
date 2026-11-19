@@ -241,6 +241,10 @@ class ScreenshotTest {
         if (!now.contains(text, ignoreCase = true)) problems += "$step: expected focus on \"$text\", but it was on \"$now\""
     }
 
+    private fun expectChannel(now: String, wanted: String, step: String) {
+        if (now.trim() != wanted && !now.startsWith("$wanted ")) problems += "$step: expected \"$wanted\", but it was \"$now\""
+    }
+
     private fun isShown(text: String) =
         rule.onAllNodesWithText(text, substring = true, ignoreCase = true).fetchSemanticsNodes().isNotEmpty()
 
@@ -609,6 +613,27 @@ class ScreenshotTest {
         expectFocus("Sport", "A moment later, still there")
     }
 
+    /** The channel on the guide row that has focus, read from the channel names beside the listings. */
+    private fun focusedChannel(): String {
+        val focused = rule.onAllNodes(isFocused()).fetchSemanticsNodes().firstOrNull() ?: return "(nothing focused)"
+        val y = focused.boundsInRoot.center.y
+        return rule.onAllNodesWithText("Channel", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
+            .firstOrNull { it.boundsInRoot.left < focused.boundsInRoot.left && y in it.boundsInRoot.top..it.boundsInRoot.bottom }
+            ?.let { textOf(it) } ?: "(no channel beside it)"
+    }
+
+    /** Holds Up or Down for the given number of the remote's repeats (one every 50 ms), then lets go. */
+    private fun holdKey(code: Int, repeats: Int) {
+        rule.runOnUiThread {
+            val t = android.os.SystemClock.uptimeMillis()
+            for (repeat in 0..repeats) {
+                sendKey(android.view.KeyEvent(t, t + repeat * 50L, android.view.KeyEvent.ACTION_DOWN, code, repeat))
+            }
+            sendKey(android.view.KeyEvent(t, t + repeats * 50L + 20, android.view.KeyEvent.ACTION_UP, code, 0))
+        }
+        settle()
+    }
+
     /** A big, untidy guide: opening it, moving around, sliding in time and changing category mustn't crash. */
     @Test fun largeGuide() {
         runBlocking(Dispatchers.IO) { DemoData.fillLarge(app.container) }
@@ -620,6 +645,22 @@ class ScreenshotTest {
         press("down", "down", "down", "down", "down", "down", "down", "down", "down", "down", "down", "down")
         press("left", "left", "left", "right", "right", "right", "right", "right")
         shot("07d-large-guide")
+        // Holding Down runs through a long list quickly: every repeat of the remote moves on, and
+        // after a second and a half, two channels at a time. Two seconds held: 1 + 30 + 2×10 = 51 channels.
+        holdKey(android.view.KeyEvent.KEYCODE_DPAD_DOWN, 8)
+        val before = focusedChannel()
+        val start = Regex("Extra Channel (\\d+)").find(before)?.groupValues?.get(1)?.toInt()
+        if (start == null) problems += "Holding Down: expected to be on an extra channel first, but it was \"$before\""
+        holdKey(android.view.KeyEvent.KEYCODE_DPAD_DOWN, 40)
+        val after = focusedChannel()
+        println("  held Down for 2 seconds: from \"$before\" to \"$after\"")
+        if (start != null) expectChannel(after, "Extra Channel ${start + 51}", "Holding Down for 2 seconds moves 51 channels")
+        shot("07k-guide-held-down")
+        // And back up the same way, a shorter hold: 1 + 20 = 21 channels.
+        holdKey(android.view.KeyEvent.KEYCODE_DPAD_UP, 20)
+        val back = focusedChannel()
+        println("  held Up for 1 second: to \"$back\"")
+        if (start != null) expectChannel(back, "Extra Channel ${start + 30}", "Holding Up for 1 second moves 21 channels")
         press("back")
         // Moved to another time: the first Back returns to now; the next, to the categories.
         if (!focusedText().startsWith("Group") && !isCategory(focusedText())) press("back")
