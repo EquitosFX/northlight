@@ -44,7 +44,10 @@ class AddedDatesStore(private val dir: File) {
     fun has(playlistId: Long): Boolean = forPlaylist(playlistId).size > 0
 
     /** When [row] was added, in seconds since 1970, if known. */
-    fun dateOf(row: VodRow): Long? = forPlaylist(row.playlistId).dateOf(key(row.kind, row.remoteId, row.url))
+    fun dateOf(row: VodRow): Long? = dateOf(row.playlistId, row.kind, row.remoteId, row.url)
+
+    fun dateOf(playlistId: Long, kind: String, remoteId: Long?, url: String): Long? =
+        forPlaylist(playlistId).dateOf(key(kind, remoteId, url))
 
     companion object {
         /** The provider's id where there is one (it stays put if the file type changes), else the address. */

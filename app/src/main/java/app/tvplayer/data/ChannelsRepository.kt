@@ -209,25 +209,32 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
     /** The newest films or series, newest first. */
     private suspend fun recentlyAdded(kind: String): List<VodRow> {
         val store = added ?: return emptyList()
-        val rows = db.channels().allOfKind(kind)
-        // Each title's date looked up once, then sorted newest first (titles added together keep the
-        // playlist's order). Sorting plain numbers rather than titles keeps this quick with 100,000 films.
-        val dates = LongArray(rows.size) { store.dateOf(rows[it]) ?: 0L }
-        val order = LongArray(rows.size)
+        // Only ids and keys are read for every title (a hundred thousand full rows would take seconds
+        // on a TV box); each date is looked up once and sorted as plain numbers, newest first.
+        val keys = db.channels().addedKeys(kind)
+        val dates = LongArray(keys.size) { i -> keys[i].let { store.dateOf(it.playlistId, it.kind, it.remoteId, it.url) } ?: 0L }
+        val order = LongArray(keys.size)
         sortNewestFirst(order, dates)
-        // M3U episodes are gathered under their show (dated by its newest episode, which comes first).
+        // Then the full rows of the newest, a batch at a time. M3U episodes are gathered under their
+        // show (dated by its newest episode, which comes first), so a batch may give fewer shows.
         val result = ArrayList<VodRow>(RECENT_LIMIT)
         val seenShows = HashSet<String>()
-        for (index in order) {
-            val row = rows[index.toInt()]
-            if (row.kind == ChannelEntity.KIND_SERIES && row.remoteId == null) {
-                val show = asShow(row)
-                if (!seenShows.add("${row.playlistId}|${EpisodeNames.showKey(show.name)}")) continue
-                result += show
-            } else {
-                result += row
+        var next = 0
+        while (result.size < RECENT_LIMIT && next < order.size) {
+            val ids = (next until minOf(next + RECENT_BATCH, order.size)).map { keys[order[it].toInt()].id }
+            next += ids.size
+            val byId = db.channels().vodRows(ids).associateBy { it.id }
+            for (id in ids) {
+                val row = byId[id] ?: continue
+                if (row.kind == ChannelEntity.KIND_SERIES && row.remoteId == null) {
+                    val show = asShow(row)
+                    if (!seenShows.add("${row.playlistId}|${EpisodeNames.showKey(show.name)}")) continue
+                    result += show
+                } else {
+                    result += row
+                }
+                if (result.size >= RECENT_LIMIT) break
             }
-            if (result.size >= RECENT_LIMIT) break
         }
         return result
     }
@@ -269,6 +276,7 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
 
         /** How many titles "Recently added" shows. */
         const val RECENT_LIMIT = 200
+        private const val RECENT_BATCH = 400
 
         private const val HOUR = 3_600_000L
         private const val SPORT_FRESH_MILLIS = 15 * 60_000L

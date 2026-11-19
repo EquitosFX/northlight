@@ -68,6 +68,9 @@ data class VodRow(
 
 data class GroupCount(val groupName: String?, val count: Int)
 
+/** A film or series' id and what its added date is kept under. */
+data class AddedKeyRow(val id: Long, val playlistId: Long, val kind: String, val remoteId: Long?, val url: String)
+
 /** A film or series with its group, for reading a whole section in one go. */
 data class GroupedVodRow(
     val id: Long,
@@ -126,11 +129,18 @@ interface ChannelDao {
     )
     suspend fun inGroup(kind: String, group: String?): List<VodRow>
 
+    /**
+     * Just enough of every film or series to look up when it was added: the provider's id, or the address
+     * where there's no id. In the order they were stored (the playlist's), which needs no sorting.
+     */
     @Query(
-        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
-            "WHERE kind = :kind ORDER BY playlistId, position",
+        "SELECT id, playlistId, kind, remoteId, CASE WHEN remoteId IS NULL THEN url ELSE '' END AS url FROM channels " +
+            "WHERE kind = :kind ORDER BY id",
     )
-    suspend fun allOfKind(kind: String): List<VodRow>
+    suspend fun addedKeys(kind: String): List<AddedKeyRow>
+
+    @Query("SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels WHERE id IN (:ids)")
+    suspend fun vodRows(ids: List<Long>): List<VodRow>
 
     /** Every film or series of [kind] with its group, in one read rather than one per group. */
     @Query(
