@@ -254,7 +254,12 @@ fun VodScreen(
                             .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Label(text = group.groupName ?: "Other", style = AppType.label, modifier = Modifier.weight(1f))
+                        val label = when (group.groupName) {
+                            ChannelsRepository.RECENTLY_ADDED -> "Recently added"
+                            null -> "Other"
+                            else -> group.groupName
+                        }
+                        Label(text = label, style = AppType.label, modifier = Modifier.weight(1f))
                         Label(text = group.count.toString(), style = AppType.caption, color = colors.textDim)
                     }
                 }
@@ -263,7 +268,9 @@ fun VodScreen(
 
         val rows = items.orEmpty()
         Column(modifier = Modifier.weight(1f)) {
-        HighlightHeader(row = shown, info = highlightInfo)
+        // In "Recently added", when each title was added.
+        val addedOn = if (state.group == ChannelsRepository.RECENTLY_ADDED) shown?.let { channels.addedDate(it) } else null
+        HighlightHeader(row = shown, info = highlightInfo, addedOn = addedOn)
         LazyVerticalGrid(
             // Posters stay a readable size: about three across with the side panel open, five with it tucked away.
             columns = GridCells.Adaptive(minSize = 118.dp),
@@ -299,9 +306,24 @@ fun VodScreen(
     }
 }
 
+/** "Added today", "Added yesterday", "Added 3 days ago", then "Added 12 Nov". */
+private fun addedText(seconds: Long): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val day = java.time.Instant.ofEpochSecond(seconds).atZone(zone).toLocalDate()
+    val today = java.time.LocalDate.now(zone)
+    val days = java.time.temporal.ChronoUnit.DAYS.between(day, today)
+    return when {
+        days <= 0L -> "Added today"
+        days == 1L -> "Added yesterday"
+        days < 7L -> "Added $days days ago"
+        day.year == today.year -> "Added " + day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.UK))
+        else -> "Added " + day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.UK))
+    }
+}
+
 /** The highlighted title's details, above the posters. */
 @Composable
-private fun HighlightHeader(row: VodRow?, info: MetadataEntity?) {
+private fun HighlightHeader(row: VodRow?, info: MetadataEntity?, addedOn: Long? = null) {
     val colors = AppTheme.colors
     Column(
         modifier = Modifier
@@ -313,6 +335,7 @@ private fun HighlightHeader(row: VodRow?, info: MetadataEntity?) {
         if (row == null) return@Column
         Label(text = info?.title ?: row.name, style = AppType.headline, maxLines = 1)
         val meta = listOfNotNull(
+            addedOn?.let(::addedText),
             info?.year?.toString(),
             info?.runtimeMinutes?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
             info?.rating?.let { "★ %.1f".format(it) },

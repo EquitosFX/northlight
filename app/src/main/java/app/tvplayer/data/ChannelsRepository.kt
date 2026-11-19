@@ -22,7 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Read-only access to the live channels and their TV guide, for the player and the guide screen. */
-class ChannelsRepository(private val db: AppDatabase) {
+class ChannelsRepository(private val db: AppDatabase, private val added: AddedDatesStore? = null) {
 
     @Volatile private var cached: Pair<LiveStamp, Lineup>? = null
 
@@ -188,14 +188,44 @@ class ChannelsRepository(private val db: AppDatabase) {
                 }
             }
         }
-        listCache["g|$kind"] = result
-        result
+        // "Recently added" first, when there are dates to go by.
+        val withRecent = if (result.isNotEmpty() && hasDates()) {
+            listOf(GroupCount(RECENTLY_ADDED, result.sumOf { it.count }.coerceAtMost(RECENT_LIMIT))) + result
+        } else {
+            result
+        }
+        listCache["g|$kind"] = withRecent
+        withRecent
+    }
+
+    private suspend fun hasDates(): Boolean {
+        val store = added ?: return false
+        return db.playlists().getAllBlocking().any { store.has(it.id) }
+    }
+
+    /** When [row] was added, in seconds since 1970, if known. */
+    fun addedDate(row: VodRow): Long? = added?.dateOf(row)
+
+    /** The newest films or series, newest first. */
+    private suspend fun recentlyAdded(kind: String): List<VodRow> {
+        val store = added ?: return emptyList()
+        // Newest first; titles added together stay in the playlist's order.
+        val rows = db.channels().allOfKind(kind)
+            .withIndex()
+            .sortedWith(compareByDescending<IndexedValue<VodRow>> { store.dateOf(it.value) ?: 0L }.thenBy { it.index })
+            .map { it.value }
+        // M3U episodes are gathered under their show (dated by its newest episode, which comes first).
+        val shown = if (kind == ChannelEntity.KIND_SERIES) showsIn(rows) else rows
+        return shown.take(RECENT_LIMIT)
     }
 
     @Suppress("UNCHECKED_CAST")
     suspend fun inGroup(kind: String, group: String?): List<VodRow> = withContext(Dispatchers.IO) {
         checkStamp()
         (listCache["i|$kind|$group"] as? List<VodRow>)?.let { return@withContext it }
+        if (group == RECENTLY_ADDED) {
+            return@withContext recentlyAdded(kind).also { listCache["i|$kind|$group"] = it }
+        }
         val rows = db.channels().inGroup(kind, group)
         val result = if (kind == ChannelEntity.KIND_SERIES) showsIn(rows) else rows
         listCache["i|$kind|$group"] = result
@@ -212,6 +242,12 @@ class ChannelsRepository(private val db: AppDatabase) {
     }
 
     companion object {
+        /** The "Recently added" category in Films and Series (a name no playlist will use). */
+        const val RECENTLY_ADDED = "\u0001recently-added"
+
+        /** How many titles "Recently added" shows. */
+        const val RECENT_LIMIT = 200
+
         private const val HOUR = 3_600_000L
         private const val SPORT_FRESH_MILLIS = 15 * 60_000L
 

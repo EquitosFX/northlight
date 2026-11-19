@@ -1,5 +1,6 @@
 package app.tvplayer.demo
 
+import app.tvplayer.data.AddedDatesStore
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.source
 import okio.buffer
@@ -298,6 +299,16 @@ object DemoData {
             }
         }
         db.channels().insertAllBlocking(rows)
+        // When each film and series was added, as an Xtream server says: the first listed is the newest.
+        val day = 86_400L
+        container.addedDates.save(
+            pid,
+            rows.filter { it.kind != ChannelEntity.KIND_LIVE }.map { row ->
+                val age = if (row.kind == ChannelEntity.KIND_MOVIE) row.position - 100 else (row.position - 200) / 4
+                AddedDatesStore.key(row.kind, row.remoteId, row.url) to (now / 1000 - age * day - 3600)
+            },
+            now,
+        )
 
         // A guide running from a day ago (for catch-up) to six hours ahead.
         val guide = ArrayList<ProgrammeEntity>()

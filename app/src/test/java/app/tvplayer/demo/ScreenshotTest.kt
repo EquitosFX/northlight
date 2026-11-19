@@ -888,13 +888,17 @@ class ScreenshotTest {
         shot("11-films-menu")
 
         press("right")
-        expectFocus("New releases", "Right from the menu into Films")
+        // Films open on what's been added most recently, newest first, with the playlist's own categories below.
+        expectFocus("Recently added", "Right from the menu into Films lands on Recently added")
+        expectShown("New releases", "The playlist's own categories are still listed")
         press("right")
         expectFocus("The Lantern Coast", "Right into the posters")
+        expectShown("Added today", "Recently added says when the highlighted film was added")
         expectPanel(open = false, step = "Browsing films")
         press("right")
         expectFocus("Harbour of Glass", "Next poster")
         expectShown("estranged sisters", "Header follows the highlighted poster")
+        expectShown("Added yesterday", "The next film was added the day before")
         shot("12-films-browsing")
 
         press("ok")
@@ -942,7 +946,12 @@ class ScreenshotTest {
         shot("15-back-to-films")
 
         press("left", "left")
-        expectFocus("New releases", "Left from the posters returns to the open category")
+        expectFocus("Recently added", "Left from the posters returns to the open category")
+        // Down to a category of the playlist's own: its films, without the dates.
+        press("down")
+        expectFocus("New releases", "Down from Recently added to the playlist's first category")
+        expectHidden("Added today", "Only Recently added shows the dates")
+        press("up")
         press("left")
         expectFocus("Films", "Left back to the menu")
         expectPanel(open = true, step = "Back in the menu from Films")

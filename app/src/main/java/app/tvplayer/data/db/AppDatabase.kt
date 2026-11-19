@@ -126,6 +126,12 @@ interface ChannelDao {
     )
     suspend fun inGroup(kind: String, group: String?): List<VodRow>
 
+    @Query(
+        "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +
+            "WHERE kind = :kind ORDER BY playlistId, position",
+    )
+    suspend fun allOfKind(kind: String): List<VodRow>
+
     /** Every film or series of [kind] with its group, in one read rather than one per group. */
     @Query(
         "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer, groupName FROM channels " +

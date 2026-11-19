@@ -83,6 +83,8 @@ class PlaylistRepository(
     private val db: AppDatabase,
     private val http: OkHttpClient,
     private val scope: CoroutineScope,
+    /** When films and series were added, for "Recently added". */
+    private val added: AddedDatesStore? = null,
 ) {
     val playlists: Flow<List<PlaylistEntity>> = db.playlists().observeAll()
 
@@ -186,7 +188,10 @@ class PlaylistRepository(
     }
 
     fun remove(playlistId: Long) {
-        scope.launch(Dispatchers.IO) { db.playlists().deleteBlocking(playlistId) }
+        scope.launch(Dispatchers.IO) {
+            db.playlists().deleteBlocking(playlistId)
+            added?.remove(playlistId)
+        }
     }
 
     /** Re-downloads any TV guide not updated in the last 12 hours. Called when the app starts. */
@@ -353,6 +358,8 @@ class PlaylistRepository(
                     }
                     batch.flush()
                     if (batch.total == 0) throw IOException("Nothing was found at that address.")
+                    // When each film and series was added (kept beside the database, saved with it).
+                    runCatching { added?.save(playlistId, batch.dates) }
                     val updated = playlist.copy(
                         guideUrls = guideUrls,
                         refreshedAt = System.currentTimeMillis(),
@@ -564,6 +571,7 @@ class PlaylistRepository(
                         remoteId = film.streamId,
                         logo = film.icon,
                         group = filmGroups[film.categoryId],
+                        added = film.added,
                     )
                 }
             }
@@ -581,6 +589,7 @@ class PlaylistRepository(
                         remoteId = series.seriesId,
                         logo = series.cover,
                         group = seriesGroups[series.categoryId],
+                        added = series.added,
                     )
                 }
             }
@@ -641,6 +650,8 @@ class PlaylistRepository(
         var live = 0
         var movies = 0
         var series = 0
+        /** Each film and series' key and the provider's date for it, if any (see [AddedDatesStore]). */
+        val dates = ArrayList<Pair<String, Long?>>()
 
         fun add(
             kind: String,
@@ -656,8 +667,10 @@ class PlaylistRepository(
             catchupSource: String? = null,
             userAgent: String? = null,
             referrer: String? = null,
+            added: Long? = null,
         ) {
             val isLive = kind == ChannelEntity.KIND_LIVE
+            if (!isLive) dates += AddedDatesStore.key(kind, remoteId, url) to added
             val info = if (isLive) ChannelVariants.analyse(name) else null
             rows.add(
                 ChannelEntity(

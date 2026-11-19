@@ -57,6 +57,8 @@ data class XtreamStream(
     val guideChannelId: String? = null,
     val catchupDays: Int? = null,
     val containerExtension: String? = null,
+    /** When a film was added to the provider's library, in seconds since 1970, if it says. */
+    val added: Long? = null,
 )
 
 data class XtreamSeries(
@@ -64,6 +66,8 @@ data class XtreamSeries(
     val name: String,
     val cover: String? = null,
     val categoryId: String? = null,
+    /** When the series last had episodes added (or was added), in seconds since 1970, if the provider says. */
+    val added: Long? = null,
 )
 
 /** One episode of a series, from `get_series_info`. Season and episode count from 1. */
@@ -163,6 +167,7 @@ object XtreamParser {
                     guideChannelId = item.str("epg_channel_id"),
                     catchupDays = if (hasArchive) item.long("tv_archive_duration")?.toInt() else null,
                     containerExtension = item.str("container_extension"),
+                    added = item.long("added"),
                 ),
             )
             true
@@ -178,6 +183,7 @@ object XtreamParser {
                     name = item.str("name") ?: "Series $id",
                     cover = item.str("cover"),
                     categoryId = item.str("category_id"),
+                    added = item.long("last_modified") ?: item.long("added"),
                 ),
             )
             true

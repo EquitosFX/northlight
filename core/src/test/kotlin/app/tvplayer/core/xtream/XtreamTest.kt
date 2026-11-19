@@ -128,18 +128,21 @@ class XtreamTest {
     fun readsFilmsAndSeries() {
         val films = ArrayList<XtreamStream>()
         XtreamParser.parseStreams(
-            """[{"num":1,"name":"The Long Ferry","stream_id":55,"container_extension":"mkv","category_id":"3"}]"""
+            """[{"num":1,"name":"The Long Ferry","stream_id":55,"container_extension":"mkv","category_id":"3","added":"1763400000"}]"""
                 .byteInputStream(),
         ) { films.add(it) }
         assertEquals("mkv", films.single().containerExtension)
+        assertEquals(1_763_400_000L, films.single().added)
 
         val series = ArrayList<XtreamSeries>()
         val count = XtreamParser.parseSeries(
-            """[{"series_id":900,"name":"The Paper Round","cover":"http://l.example/pr.jpg","category_id":"9"}]"""
+            """[{"series_id":900,"name":"The Paper Round","cover":"http://l.example/pr.jpg","category_id":"9","last_modified":"1763300000"},
+                {"series_id":901,"name":"Low Tide","added":1763000000}]"""
                 .byteInputStream(),
         ) { series.add(it) }
-        assertEquals(1, count)
-        assertEquals(XtreamSeries(900, "The Paper Round", "http://l.example/pr.jpg", "9"), series.single())
+        assertEquals(2, count)
+        assertEquals(XtreamSeries(900, "The Paper Round", "http://l.example/pr.jpg", "9", 1_763_300_000L), series[0])
+        assertEquals(1_763_000_000L, series[1].added)
     }
 
     @Test

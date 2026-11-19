@@ -1,6 +1,7 @@
 package app.tvplayer
 
 import app.tvplayer.data.NewEpisodes
+import app.tvplayer.data.AddedDatesStore
 import app.tvplayer.data.HomeScreenRows
 import app.tvplayer.data.ChannelCheckRepository
 import app.tvplayer.data.BackupRepository
@@ -82,9 +83,11 @@ class AppContainer(context: Context) {
             .build()
     }
 
-    val playlists: PlaylistRepository by lazy { PlaylistRepository(database, http, scope) }
+    /** When films and series were added, for "Recently added". */
+    val addedDates: AddedDatesStore by lazy { AddedDatesStore(java.io.File(appContext.filesDir, "added")) }
+    val playlists: PlaylistRepository by lazy { PlaylistRepository(database, http, scope, addedDates) }
 
-    val channels: ChannelsRepository by lazy { ChannelsRepository(database) }
+    val channels: ChannelsRepository by lazy { ChannelsRepository(database, addedDates) }
 
     val metadata: MetadataRepository by lazy { MetadataRepository(database, http, settings) }
 
