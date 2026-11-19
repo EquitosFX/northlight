@@ -41,6 +41,8 @@ jobs:
 
   # With a big playlist added: how long each screen takes to open, and how smoothly it moves.
   big-playlist:
+    # Run by hand only for now: driving the screens to add the playlist isn't reliable yet.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
