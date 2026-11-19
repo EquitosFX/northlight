@@ -82,6 +82,11 @@ jobs:
   install-profile:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Android 11 (like the Shield) and Android 14 (like the Google TV Streamer).
+        api: [30, 34]
     steps:
       - uses: actions/checkout@v4
 
@@ -104,7 +109,7 @@ jobs:
       - name: Install and check
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: ${{ matrix.api }}
           arch: x86_64
           target: google_apis
           disable-animations: false

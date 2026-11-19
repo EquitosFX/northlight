@@ -33,16 +33,14 @@ jobs:
       - name: Name the APK
         run: |
           cp app/build/outputs/apk/release/app-release.apk northlight.apk
-          # The startup profile as separate files (one per range of Android versions: folder 0 is for
-          # Android 9-11, folder 1 for Android 12 and later). Installed alongside the APK, they let
-          # Android compile Skyfall for speed while installing, instead of overnight.
+          # The startup profile as separate files, one per range of Android versions (checked on an
+          # emulator: folder 0 is for Android 12 and later, folder 1 for Android 9-11). Installed beside
+          # the APK, they let Android compile Skyfall for speed while installing, instead of overnight.
           find app/build/outputs -name "*.dm" -print
-          [ -f app/build/outputs/apk/release/baselineProfiles/0/app-release.dm ] && cp app/build/outputs/apk/release/baselineProfiles/0/app-release.dm northlight-28.dm
-          [ -f app/build/outputs/apk/release/baselineProfiles/1/app-release.dm ] && cp app/build/outputs/apk/release/baselineProfiles/1/app-release.dm northlight-31.dm
+          [ -f app/build/outputs/apk/release/baselineProfiles/0/app-release.dm ] && cp app/build/outputs/apk/release/baselineProfiles/0/app-release.dm northlight-31.dm
+          [ -f app/build/outputs/apk/release/baselineProfiles/1/app-release.dm ] && cp app/build/outputs/apk/release/baselineProfiles/1/app-release.dm northlight-28.dm
           ls -la northlight*
           for f in northlight-*.dm; do [ -f "$f" ] && unzip -l "$f"; done; true
-          # What went into the profile (the readable list before it's packed for Android).
-          for f in $(find app/build/intermediates -path "*art_profile*" -type f); do echo "$f: $(wc -l < "$f") lines, $(grep -c 'androidx/compose' "$f" || true) Compose, $(grep -c 'app/tvplayer' "$f" || true) Skyfall"; done; true
 
       - uses: actions/upload-artifact@v4
         with:

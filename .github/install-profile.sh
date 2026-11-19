@@ -6,7 +6,6 @@ PKG=app.tvplayer
 ACT=app.tvplayer/.MainActivity
 adb wait-for-device
 cp app/build/outputs/apk/release/app-release.apk skyfall.apk
-cp app/build/outputs/apk/release/baselineProfiles/1/app-release.dm skyfall.dm 2>/dev/null || echo "No profile for Android 12+ was built"
 key() { for k in "$@"; do adb shell input keyevent "$k"; done; }
 measure() {
   echo "$1: how Android compiled it:"
@@ -38,15 +37,12 @@ profile_contents() {
 }
 adb install -r skyfall.apk >/dev/null && measure "APK alone"
 adb uninstall $PKG >/dev/null
-for n in 0 1; do
-  cp app/build/outputs/apk/release/baselineProfiles/$n/app-release.dm skyfall.dm || continue
-  adb uninstall $PKG >/dev/null
-  adb logcat -c
-  adb install-multiple -r skyfall.apk skyfall.dm && measure "APK with profile $n"
-  echo "Android's notes while installing (profile $n):"
-  adb logcat -d | grep -iE "dexopt|profman|artd|dex2oat|\.dm" | grep -iE "tvplayer|base\.dm|profile|error|fail" | head -15 | sed 's/^/    /'
-done
-# Compiling by hand with the profile already on the box, as Android does overnight.
-adb shell cmd package compile -f -m speed-profile $PKG
-echo "After compiling by hand:"; adb shell dumpsys package dexopt | tr -d '\r' | grep -A3 "\[$PKG\]" | sed 's/^/    /'
-profile_contents
+# The profile for this Android version, as the updater picks it (folder 0: Android 12+, folder 1: 9-11).
+sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+n=$([ "$sdk" -ge 31 ] && echo 0 || echo 1)
+echo "Android API $sdk: profile folder $n"
+cp app/build/outputs/apk/release/baselineProfiles/$n/app-release.dm skyfall.dm
+adb uninstall $PKG >/dev/null
+adb logcat -c
+adb install-multiple -r skyfall.apk skyfall.dm && measure "APK with profile"
+adb logcat -d | grep -E "Dexopt result|version mismatch" | grep -E "tvplayer|mismatch" | sed 's/^.*Dexopt result/    Dexopt result/' | head -3
