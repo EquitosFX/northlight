@@ -26,8 +26,19 @@ measure() {
   sleep 2
   adb shell dumpsys gfxinfo $PKG | tr -d '\r' | grep -E "Total frames rendered|Janky frames|90th percentile|99th percentile" | sed "s/^/$1: menu: /"
 }
+adb root >/dev/null 2>&1; sleep 2; adb wait-for-device
+echo "Profile inside the APK:"; unzip -l skyfall.apk | grep dexopt
+# What the profile holds, as Android reads it: how many classes and methods, from Skyfall and from Compose.
+profile_contents() {
+  adb shell cmd package dump-profiles $PKG >/dev/null 2>&1
+  f=$(adb shell ls /data/misc/profman/ 2>/dev/null | tr -d '\r' | grep "$PKG" | grep txt | head -1)
+  [ -z "$f" ] && { echo "    (couldn't read the profile)"; return; }
+  adb shell cat "/data/misc/profman/$f" > profile.txt
+  echo "    profile: $(wc -l < profile.txt) lines; Skyfall: $(grep -c 'app/tvplayer' profile.txt); Compose: $(grep -c 'androidx/compose' profile.txt); Media3: $(grep -c 'androidx/media3' profile.txt)"
+}
 adb install -r skyfall.apk >/dev/null && measure "APK alone"
 adb uninstall $PKG >/dev/null
 if [ -f skyfall.dm ]; then
   adb install-multiple -r skyfall.apk skyfall.dm && measure "APK with profile"
+  profile_contents
 fi
