@@ -209,14 +209,36 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
     /** The newest films or series, newest first. */
     private suspend fun recentlyAdded(kind: String): List<VodRow> {
         val store = added ?: return emptyList()
-        // Newest first; titles added together stay in the playlist's order.
         val rows = db.channels().allOfKind(kind)
-            .withIndex()
-            .sortedWith(compareByDescending<IndexedValue<VodRow>> { store.dateOf(it.value) ?: 0L }.thenBy { it.index })
-            .map { it.value }
+        // Each title's date looked up once, then sorted newest first (titles added together keep the
+        // playlist's order). Sorting plain numbers rather than titles keeps this quick with 100,000 films.
+        val dates = LongArray(rows.size) { store.dateOf(rows[it]) ?: 0L }
+        val order = LongArray(rows.size)
+        sortNewestFirst(order, dates)
         // M3U episodes are gathered under their show (dated by its newest episode, which comes first).
-        val shown = if (kind == ChannelEntity.KIND_SERIES) showsIn(rows) else rows
-        return shown.take(RECENT_LIMIT)
+        val result = ArrayList<VodRow>(RECENT_LIMIT)
+        val seenShows = HashSet<String>()
+        for (index in order) {
+            val row = rows[index.toInt()]
+            if (row.kind == ChannelEntity.KIND_SERIES && row.remoteId == null) {
+                val show = asShow(row)
+                if (!seenShows.add("${row.playlistId}|${EpisodeNames.showKey(show.name)}")) continue
+                result += show
+            } else {
+                result += row
+            }
+            if (result.size >= RECENT_LIMIT) break
+        }
+        return result
+    }
+
+    /** Fills [order] with the positions in [dates], newest first; equal dates stay in their order. */
+    private fun sortNewestFirst(order: LongArray, dates: LongArray) {
+        // Packed into one number each (date in the top bits, position below), so a plain sort does it.
+        val n = order.size
+        val packed = LongArray(n) { i -> ((dates[i].coerceIn(0L, 0x7FFFFFFFL)) shl 31) or ((0x7FFFFFFFL - i).coerceAtLeast(0L)) }
+        packed.sort()
+        for (i in 0 until n) order[i] = 0x7FFFFFFFL - (packed[n - 1 - i] and 0x7FFFFFFFL)
     }
 
     @Suppress("UNCHECKED_CAST")
