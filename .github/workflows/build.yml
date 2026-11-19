@@ -41,6 +41,8 @@ jobs:
           [ -f app/build/outputs/apk/release/baselineProfiles/1/app-release.dm ] && cp app/build/outputs/apk/release/baselineProfiles/1/app-release.dm northlight-31.dm
           ls -la northlight*
           for f in northlight-*.dm; do [ -f "$f" ] && unzip -l "$f"; done; true
+          # What went into the profile (the readable list before it's packed for Android).
+          for f in $(find app/build/intermediates -path "*art_profile*" -type f); do echo "$f: $(wc -l < "$f") lines, $(grep -c 'androidx/compose' "$f" || true) Compose, $(grep -c 'app/tvplayer' "$f" || true) Skyfall"; done; true
 
       - uses: actions/upload-artifact@v4
         with:
