@@ -152,7 +152,7 @@ private fun SpeedReport() {
         color = colors.textDim,
         maxLines = 2,
     )
-    val order = listOf("Start-up", "TV guide", "Films", "Series", "Series page", "Sport")
+    val order = listOf("Start-up", "TV guide", "TV guide: channel list", "TV guide: programmes", "Channel start", "Channel start: recording ready", "Films", "Series", "Series page", "Sport")
     for (name in order.filter { it in first } + first.keys.filter { it !in order }.sorted()) {
         val a = first[name] ?: continue
         val b = latest[name] ?: a
@@ -162,6 +162,24 @@ private fun SpeedReport() {
             color = if (a > 1500) colors.accent else colors.text,
         )
     }
+    for ((name, text) in app.tvplayer.ui.components.Timing.notes.toSortedMap()) {
+        Label(text = "$name: $text", style = AppType.body, color = colors.text)
+    }
+    // Whether Android has compiled Skyfall ahead of time yet. After an update it runs slower (partly
+    // interpreted) until the box does this, usually overnight while it's idle.
+    val compiled by androidx.compose.runtime.produceState<String?>(initialValue = null) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val status = androidx.profileinstaller.ProfileVerifier.getCompilationStatusAsync().get(3, java.util.concurrent.TimeUnit.SECONDS)
+                when {
+                    status.isCompiledWithProfile -> "yes"
+                    status.hasProfileEnqueuedForCompilation() -> "not yet: the TV box will do it when idle (usually overnight), then it runs quicker"
+                    else -> "not yet (code ${status.profileInstallResultCode})"
+                }
+            }.getOrNull()
+        }
+    }
+    compiled?.let { Label(text = "Compiled for speed: $it", style = AppType.body, color = if (it == "yes") colors.text else colors.accent, maxLines = 2) }
 }
 
 private fun seconds(millis: Long) = if (millis < 1000) "$millis ms" else "%.1f s".format(millis / 1000.0)

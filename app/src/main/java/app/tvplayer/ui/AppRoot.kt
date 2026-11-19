@@ -169,12 +169,16 @@ fun AppRoot(
         delay(6_000)
         container.playlists.refreshStaleGuides()
     }
+    // Where the TV guide was, and what it has read, kept while Skyfall is open.
+    val guideMemory = remember { app.tvplayer.ui.guide.GuideMemory() }
     // Get Series, Films and Sport ready in the background shortly after opening (and again after a
     // playlist refresh), so they open straight away rather than loading when first chosen.
     LaunchedEffect(Unit) {
         delay(3_000)
         while (true) {
             runCatching {
+                // The TV guide first: its channel list and first screenful of programmes.
+                guideMemory.warmUp(container.channels)
                 container.channels.groups(ChannelEntity.KIND_SERIES)
                 container.channels.groups(ChannelEntity.KIND_MOVIE)
                 container.channels.sport()
@@ -199,7 +203,6 @@ fun AppRoot(
     // The search in progress, kept while one of its results is open.
     val searchMemory = remember { app.tvplayer.ui.search.SearchMemory() }
     // The guide's category, kept while Skyfall is open.
-    val guideMemory = remember { app.tvplayer.ui.guide.GuideMemory() }
 
     fun play(channelId: Long?) {
         controller.open(channelId)

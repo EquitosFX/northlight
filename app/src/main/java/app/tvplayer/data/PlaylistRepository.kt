@@ -179,7 +179,7 @@ class PlaylistRepository(
             for (playlist in stale) {
                 if (state.value is ImportState.Working) return@launch
                 state.value = ImportState.Working(playlist.name, "Refreshing", 0)
-                runCatching { importInto(playlist.id, isNew = false) }
+                runCatching { quietly { importInto(playlist.id, isNew = false) } }
                 state.value = ImportState.Idle
             }
         }
@@ -201,7 +201,7 @@ class PlaylistRepository(
             }
             for (playlist in stale) {
                 if (state.value is ImportState.Working) return@launch
-                runCatching { importGuide(playlist) }
+                runCatching { quietly { importGuide(playlist) } }
                 // A quiet background refresh: no message unless something is already showing.
                 if (state.value is ImportState.Working) state.value = ImportState.Idle
             }
@@ -390,9 +390,36 @@ class PlaylistRepository(
      * and stores programmes from a day ago to a week ahead for the channels that matched.
      * Returns the number of programmes stored.
      */
+    /**
+     * Runs a background refresh at low priority, so the guide, menus and the channel playing get the
+     * TV box first and the refresh takes what's left. (Blocking work only: it stays on this thread.)
+     */
+    private inline fun <T> quietly(block: () -> T): T {
+        val tid = android.os.Process.myTid()
+        val before = runCatching { android.os.Process.getThreadPriority(tid) }.getOrDefault(android.os.Process.THREAD_PRIORITY_DEFAULT)
+        runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND) }
+        try {
+            return block()
+        } finally {
+            runCatching { android.os.Process.setThreadPriority(before) }
+        }
+    }
+
     private fun importGuide(playlist: PlaylistEntity): Int {
         val urls = playlist.guideUrls.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (urls.isEmpty()) return 0
+        val began = android.os.SystemClock.uptimeMillis()
+        try {
+            return readGuide(playlist, urls)
+        } finally {
+            // For Settings › Refresh and check › Speed: everything else is slower while this runs.
+            val took = (android.os.SystemClock.uptimeMillis() - began) / 1000
+            val at = java.time.LocalTime.now().withNano(0).withSecond(0)
+            app.tvplayer.ui.components.Timing.note("TV guide download", "took ${took} s, finished at $at")
+        }
+    }
+
+    private fun readGuide(playlist: PlaylistEntity, urls: List<String>): Int {
         val channels = db.channels().matchRowsBlocking(playlist.id)
         val now = System.currentTimeMillis()
         // A week of past programmes is kept, for catch-up.

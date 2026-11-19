@@ -121,6 +121,9 @@ class ChannelsRepository(private val db: AppDatabase) {
 
     suspend fun row(id: Long): ChannelEntity? = withContext(Dispatchers.IO) { db.channels().getBlocking(id) }
 
+    /** Changes whenever a TV guide is downloaded again. */
+    suspend fun programmeStamp(): Long = withContext(Dispatchers.IO) { runCatching { db.programmes().stampBlocking() }.getOrDefault(0L) }
+
     /** Programmes on [channel] that overlap the time from [from] to [to]; empty when it has no guide. */
     suspend fun programmes(channel: LineupChannel, from: Long, to: Long): List<ProgrammeEntity> {
         val guideId = channel.guideId ?: return emptyList()

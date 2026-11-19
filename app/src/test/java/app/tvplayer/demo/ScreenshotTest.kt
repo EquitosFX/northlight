@@ -1061,6 +1061,24 @@ class ScreenshotTest {
         expectShown("Priya Desai", "OK on an earlier search searches again")
     }
 
+    /** The Speed report shows how long the guide's parts took, once the guide has been opened. */
+    @Test fun speedReport() {
+        open(Dest.GUIDE)
+        press("right", "ok")
+        press("down", "down", "down", "up")
+        // Back: the top channel, the categories, then the side menu.
+        press("back", "back", "back")
+        expectFocus("TV guide", "Back three times from the listings reaches the side menu")
+        moveTo("Settings", "down", max = 14, step = "Down the menu to Settings")
+        press("right")
+        repeat(4) { press("down", "ok") }
+        expectShown("Keep playlists up to date", "Into Refresh and check")
+        expectShown("TV guide: channel list", "The Speed report shows how long the guide's channel list took")
+        expectShown("TV guide: programmes", "The Speed report shows how long the guide's programmes took")
+        println("  Speed report: " + rule.onAllNodesWithText(":", substring = true).fetchSemanticsNodes().map { textOf(it) }.filter { "ms" in it || "Compiled" in it || "frames" in it }.joinToString(" | "))
+        shot("22e-settings-speed")
+    }
+
     @Test fun settings() {
         open(Dest.SETTINGS)
         press("right")

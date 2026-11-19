@@ -134,6 +134,23 @@ class GuideMemory {
     var group: String? = null
     /** Whether the guide has read its channels (and so can put focus on one). */
     var loaded by mutableStateOf(false)
+    /** Programmes already read, kept while Skyfall is open (until the TV guide is downloaded again). */
+    internal val programmes = ProgrammeCache()
+    /** How smoothly the guide moves, for Settings › Refresh and check › Speed. */
+    internal val frames = app.tvplayer.ui.components.FrameWatch("TV guide moving")
+
+    /**
+     * Reads the channel list and the first screenful of the last-used category's programmes in the
+     * background, so the guide opens straight away the first time too.
+     */
+    suspend fun warmUp(channels: ChannelsRepository) {
+        val loaded = channels.lineup()
+        programmes.checkStamp(channels.programmeStamp())
+        val favs = runCatching { channels.favouriteKeys.first() }.getOrDefault(emptySet())
+        val start = group?.takeIf { it == FAVOURITES || it in loaded.groups }
+        val now = System.currentTimeMillis()
+        programmes.prefetch(channels, channelsIn(loaded, start, favs).take(PREFETCH_ROWS), originFor(now - now % HALF_HOUR))
+    }
 }
 
 /** The programme the viewer is on, for the header. A null programme means the channel has no guide data. */
@@ -174,16 +191,20 @@ fun GuideScreen(
     val showLogos by (settings?.guideLogos ?: kotlinx.coroutines.flow.flowOf(true)).collectAsStateWithLifecycle(initialValue = true)
     val showDetails by (settings?.guideDetails ?: kotlinx.coroutines.flow.flowOf(true)).collectAsStateWithLifecycle(initialValue = true)
     val look = remember(textSize, showLogos, showDetails) { GuideLook.of(textSize, showLogos, showDetails) }
-    // Programmes already read for this visit, so a row that comes back (or a category changed to)
-    // shows them straight away instead of drawing empty and filling in a moment later.
-    val programmeCache = remember { ProgrammeCache() }
+    // Programmes already read (this visit, an earlier one, or in the background), so a row that comes
+    // back (or a category changed to) shows them straight away instead of drawing empty and filling in.
+    val programmeCache = memory.programmes
     // The category list on the left: Favourites, All channels, then the playlist's groups.
     var group by remember { mutableStateOf<String?>(null) }
     var pendingGroup by remember { mutableStateOf<String?>(null) }
     // Opening while a channel plays: straight to its listings, on that channel.
     var startInListings by remember { mutableStateOf(false) }
     val lineup by produceState<Lineup?>(initialValue = null) {
+        val began = android.os.SystemClock.uptimeMillis()
         val loaded = channels.lineup()
+        // A TV guide downloaded since the programmes were read: read them afresh.
+        programmeCache.checkStamp(channels.programmeStamp())
+        val read = android.os.SystemClock.uptimeMillis()
         val favs = runCatching { channels.favouriteKeys.first() }.getOrDefault(emptySet())
         val watched = watching?.let { loaded.findByKey(it) }
         // The category last used (if it's still there), unless what's playing isn't in it: then the
@@ -200,6 +221,9 @@ fun GuideScreen(
         val firstRows = channelsIn(loaded, start, favs)
         val at = watched?.let { w -> firstRows.indexOfFirst { it.key == w.key } }?.coerceAtLeast(0) ?: 0
         programmeCache.prefetch(channels, firstRows.drop((at - 2).coerceAtLeast(0)).take(PREFETCH_ROWS), originFor(liveStart))
+        val done = android.os.SystemClock.uptimeMillis()
+        app.tvplayer.ui.components.Timing.record("TV guide: channel list", read - began)
+        app.tvplayer.ui.components.Timing.record("TV guide: programmes", done - read)
         value = loaded
     }
     // The guide goes back as far as the longest catch-up any channel has.
@@ -426,9 +450,15 @@ fun GuideScreen(
     val hadFocus = remember { booleanArrayOf(false) }
     // In the listings, moving in from the side menu lands on the entry channel's programme on now.
     if (listings) EntryPoint(entryFocus)
+    app.tvplayer.ui.components.WatchFrames(memory.frames)
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // Every key pressed in the guide: the frames drawn as it moves are timed (Speed report).
+            .onPreviewKeyEvent {
+                if (it.type == KeyEventType.KeyDown) memory.frames.poke()
+                false
+            }
             .padding(start = 34.dp)
             // Once anything in the guide has focus, it never jumps to the first programme by itself.
             // Leaving the guide altogether (to the side menu) brings the categories back for next time.
@@ -1290,9 +1320,20 @@ private fun channelsIn(lineup: Lineup, group: String?, favourites: Set<String>):
 }
 
 /** Programmes read during one visit to the guide, by channel guide and laid-out hours (the most recent few hundred). */
-private class ProgrammeCache {
+internal class ProgrammeCache {
     private val map = object : LinkedHashMap<String, List<ProgrammeEntity>>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<ProgrammeEntity>>?) = size > 600
+    }
+    private var stamp = Long.MIN_VALUE
+
+    /** Forgets everything read once the TV guide has been downloaded again ([now] changes when it is). */
+    fun checkStamp(now: Long) {
+        synchronized(map) {
+            if (now != stamp) {
+                map.clear()
+                stamp = now
+            }
+        }
     }
 
     private fun key(channel: LineupChannel, origin: Long) = "${channel.playlistId}|${channel.guideId}|$origin"

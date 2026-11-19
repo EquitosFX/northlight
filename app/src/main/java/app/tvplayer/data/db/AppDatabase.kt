@@ -193,6 +193,10 @@ interface ProgrammeDao {
     @Query("DELETE FROM programmes WHERE playlistId = :playlistId")
     fun deleteForPlaylistBlocking(playlistId: Long)
 
+    /** Changes whenever a TV guide is downloaded again (ids are never reused). */
+    @Query("SELECT COALESCE(MAX(id), 0) FROM programmes")
+    fun stampBlocking(): Long
+
     /** Programmes on one guide channel that overlap the time from [from] to [to]. */
     @Query(
         "SELECT * FROM programmes WHERE playlistId = :playlistId AND channelGuideId = :guideId " +

@@ -485,6 +485,8 @@ class LivePlayerController(
     fun tune(channel: LineupChannel) {
         leaveVod()
         cancelRecovery()
+        // For Settings › Refresh and check › Speed: from choosing a channel to its picture showing.
+        tunedAt = android.os.SystemClock.uptimeMillis()
         current = channel
         variantIndex = 0
         // A copy chosen to play first (in the controls' Stream list) goes to the front once its name is read.
@@ -991,6 +993,7 @@ class LivePlayerController(
     /** Channels (this session) whose streams only show a picture when played directly, not recorded. */
     private val directOnly = HashSet<String>()
     private var firstFrameSeen = false
+    private var tunedAt = 0L
     private var pictureJob: Job? = null
 
     private fun playVariant(showing: PlaybackStatus) {
@@ -1080,7 +1083,11 @@ class LivePlayerController(
             onFailed = { scope.launch(Dispatchers.Main) { onTimeshiftFailed() } },
         )
         timeshift = session
+        val asked = android.os.SystemClock.uptimeMillis()
         val started = withTimeoutOrNull(TIMESHIFT_START_MILLIS) { runCatching { session.ready.await() }.isSuccess } ?: false
+        if (started && tunedAt > 0) {
+            app.tvplayer.ui.components.Timing.record("Channel start: recording ready", android.os.SystemClock.uptimeMillis() - asked)
+        }
         if (!started || timeshift !== session) {
             session.stop()
             if (timeshift === session) timeshift = null
@@ -1415,6 +1422,10 @@ class LivePlayerController(
         }
 
         override fun onRenderedFirstFrame() {
+            if (tunedAt > 0 && vod == null) {
+                app.tvplayer.ui.components.Timing.record("Channel start", android.os.SystemClock.uptimeMillis() - tunedAt)
+            }
+            tunedAt = 0L
             firstFrameSeen = true
             pictureJob?.cancel()
         }
