@@ -492,20 +492,35 @@ fun GuideScreen(
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if (event.key != Key.DirectionUp && event.key != Key.DirectionDown) return@onPreviewKeyEvent false
                     val time = android.os.SystemClock.uptimeMillis()
-                    // Held down: a steady pace. Pressed quickly: one move at a time, each landing before the next.
-                    if (event.nativeKeyEvent.repeatCount > 0 && time - lastMove[0] < HELD_MOVE_MILLIS) return@onPreviewKeyEvent true
-                    if (jumpState.value != null && time - lastMove[0] < JUMP_TIMEOUT_MILLIS) return@onPreviewKeyEvent true
+                    val native = event.nativeKeyEvent
+                    // Held down: every repeat the remote sends moves on (about 20 channels a second), and
+                    // after a second and a half of holding, two channels at a time, then three. Each move
+                    // carries on from where the last one is heading, so nothing waits for focus to land.
+                    if (native.repeatCount > 0 && time - lastMove[0] < HELD_MOVE_MILLIS) return@onPreviewKeyEvent true
+                    val pending = jumpState.value
+                    if (pending != null && time - lastMove[0] > JUMP_TIMEOUT_MILLIS) jumpState.value = null
                     lastMove[0] = time
-                    val from = focusedRow[0]
-                    val to = from + if (event.key == Key.DirectionDown) 1 else -1
+                    val heldFor = if (native.repeatCount > 0) native.eventTime - native.downTime else 0L
+                    val step = when {
+                        heldFor > 3_000 -> 3
+                        heldFor > 1_500 -> 2
+                        else -> 1
+                    }
+                    val from = jumpState.value?.row ?: focusedRow[0]
                     // Off the top: the day bar above, as usual.
-                    if (from < 0 || to !in rows.indices) return@onPreviewKeyEvent false
+                    if (from < 0) return@onPreviewKeyEvent false
+                    val down = event.key == Key.DirectionDown
+                    val to = (from + if (down) step else -step).coerceIn(0, rows.lastIndex)
+                    if (to == from) return@onPreviewKeyEvent from != 0 || down
                     movingVertically[0] = true
-                    jumpState.value = Jump(to, anchor[0])
-                    // A row just off screen is scrolled in first; on screen, landing on it brings it fully into view.
-                    if (rowsList.layoutInfo.visibleItemsInfo.none { it.index == to }) {
+                    jumpState.value = Jump(to, jumpState.value?.time ?: anchor[0])
+                    // A row off screen is scrolled in first (to the bottom going down, the top going up);
+                    // on screen, landing on it brings it fully into view.
+                    val visible = rowsList.layoutInfo.visibleItemsInfo
+                    if (visible.none { it.index == to }) {
+                        val shown = visible.size.coerceAtLeast(2)
                         gridScope.launch {
-                            if (to > from) rowsList.scrollToItem(rowsList.firstVisibleItemIndex + 1) else rowsList.scrollToItem(to)
+                            rowsList.scrollToItem(if (down) (to - shown + 2).coerceAtLeast(0) else to)
                         }
                     }
                     true
@@ -1288,13 +1303,13 @@ private class ProgrammeCache {
 /** How long the grid takes to slide along an hour. */
 private const val SLIDE_MILLIS = 320
 
-/** The quickest the guide moves between channels with the button held down. */
-private const val HELD_MOVE_MILLIS = 120L
+/** The quickest the guide moves between channels with the button held down (a remote repeats about every 50 ms). */
+private const val HELD_MOVE_MILLIS = 40L
 
 /** How long a move up or down (or Back to now) is given to land before it's abandoned. */
 private const val JUMP_GIVE_UP_MILLIS = 1_500L
 
-/** How long a move up or down may take to land before another press is taken anyway. */
+/** How long a move up or down may take to land before the next press starts afresh from the highlighted channel. */
 private const val JUMP_TIMEOUT_MILLIS = 600L
 
 /**
