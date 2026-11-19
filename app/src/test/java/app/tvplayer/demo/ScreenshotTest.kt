@@ -691,8 +691,8 @@ class ScreenshotTest {
         // A category far down the list, then back to it.
         repeat(29) { press("down") }
         expectFocus("Group 23", "Far down the categories")
-        press("ok", "down", "back")
-        expectFocus("Group 23", "Back from a far-down category's listings returns to it")
+        press("ok", "down", "back", "back")
+        expectFocus("Group 23", "Back from a far-down category's listings returns to it (via its top channel)")
         press("back")
         expectFocus("TV guide", "Back again goes to the side menu")
         press("right")
@@ -858,6 +858,9 @@ class ScreenshotTest {
         expectHidden("Favourites", "Back to now stays in the listings")
         shot("07i-guide-back-to-now")
         if (channel.isEmpty()) problems += "No programme was highlighted before moving back in time"
+        // Then (on the second channel) Back goes to the top channel, and Back again to the categories.
+        press("back")
+        expectHidden("Favourites", "Back on the second channel goes to the top channel, still in the listings")
         press("back")
         expectShown("Favourites", "Back again goes to the categories")
     }
