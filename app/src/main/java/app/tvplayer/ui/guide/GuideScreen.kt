@@ -308,16 +308,12 @@ fun GuideScreen(
     val onShift: (Long) -> Unit = remember { { by -> latestShift(by) } }
 
     // Once a category is chosen the categories step aside and the listings fill the screen.
-    // Back brings them back with the chosen one highlighted; Back again goes to the side menu.
+    // Back (from the top channel) brings them back with the chosen one highlighted; Back again goes to the side menu.
     var listings by remember { mutableStateOf(startInListings) }
     var backToCategories by remember { mutableStateOf(false) }
     val categoryFocus = remember { FocusRequester() }
     // Kept here, so the category list is still scrolled to the chosen category when it comes back.
     val categoryList = rememberLazyListState()
-    BackHandler(enabled = listings) {
-        listings = false
-        backToCategories = true
-    }
     LaunchedEffect(backToCategories) {
         if (!backToCategories) return@LaunchedEffect
         withFrameNanos { }
@@ -389,6 +385,22 @@ fun GuideScreen(
     val autoFocusGuide = LocalAutoFocus.current
     LaunchedEffect(Unit) { if (listings && autoFocusGuide()) openAfterSwitch++ }
     val favouriteScope = rememberCoroutineScope()
+
+    // Back, down the list: straight to the top channel, at the same time. Back on the top channel
+    // brings the categories back.
+    BackHandler(enabled = listings) {
+        val row = jumpState.value?.row ?: focusedRow[0]
+        if (row > 0 && rows.isNotEmpty()) {
+            holdingForJump = true
+            holdFocus()
+            movingVertically[0] = true
+            jumpState.value = Jump(0, anchor[0].takeIf { it > 0 } ?: System.currentTimeMillis())
+            gridScope.launch { rowsList.scrollToItem(0) }
+        } else {
+            listings = false
+            backToCategories = true
+        }
+    }
 
     // Back, after moving to another time or day: back to now, on the same channel's programme on now.
     BackHandler(enabled = listings && windowStart != liveStart && focusedRow[0] >= 0) {

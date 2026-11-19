@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
@@ -242,7 +243,7 @@ class ScreenshotTest {
     }
 
     private fun expectChannel(now: String, wanted: String, step: String) {
-        if (now.trim() != wanted && !now.startsWith("$wanted ")) problems += "$step: expected \"$wanted\", but it was \"$now\""
+        if (!Regex("(^|\\s)${Regex.escape(wanted)}(\\s|$)").containsMatchIn(now)) problems += "$step: expected \"$wanted\", but it was \"$now\""
     }
 
     private fun isShown(text: String) =
@@ -439,7 +440,15 @@ class ScreenshotTest {
         press("down", "down")
         shot("07-guide-listings")
 
-        // Back once: the categories, with the one in use highlighted.
+        // Back down the list: the top channel, still on what's on now.
+        val third = focusedChannel()
+        press("back")
+        val topChannel = focusedChannel()
+        println("  Back from \"$third\" went to \"$topChannel\"")
+        if (topChannel == third || isCategory(focusedText())) problems += "Back down the list should go to the top channel, but focus was on \"${focusedText()}\" ($topChannel)"
+        expectShown("On now", "Back to the top channel lands on what's on now")
+        expectHidden("Favourites", "Back to the top channel keeps the listings full width")
+        // Back again, on the top channel: the categories, with the one in use highlighted.
         press("back")
         expectFocus("All channels", "Back from the listings goes to the categories")
         expectShown("Favourites", "The categories come back")
@@ -617,9 +626,11 @@ class ScreenshotTest {
     private fun focusedChannel(): String {
         val focused = rule.onAllNodes(isFocused()).fetchSemanticsNodes().firstOrNull() ?: return "(nothing focused)"
         val y = focused.boundsInRoot.center.y
-        return rule.onAllNodesWithText("Channel", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
-            .firstOrNull { it.boundsInRoot.left < focused.boundsInRoot.left && y in it.boundsInRoot.top..it.boundsInRoot.bottom }
-            ?.let { textOf(it) } ?: "(no channel beside it)"
+        return rule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes()
+            .filter { it.boundsInRoot.right <= focused.boundsInRoot.left && y in it.boundsInRoot.top..it.boundsInRoot.bottom }
+            .sortedBy { it.boundsInRoot.left }
+            .joinToString(" ") { textOf(it) }
+            .ifBlank { "(no channel beside it)" }
     }
 
     /** Holds Up or Down for the given number of the remote's repeats (one every 50 ms), then lets go. */
@@ -642,6 +653,8 @@ class ScreenshotTest {
         press("down", "ok")
         expectShown("All channels", "OK on TV guide opens the guide")
         press("ok")
+        val top = focusedChannel()
+        println("  top of the guide: \"$top\"")
         press("down", "down", "down", "down", "down", "down", "down", "down", "down", "down", "down", "down")
         press("left", "left", "left", "right", "right", "right", "right", "right")
         shot("07d-large-guide")
@@ -661,9 +674,16 @@ class ScreenshotTest {
         val back = focusedChannel()
         println("  held Up for 1 second: to \"$back\"")
         if (start != null) expectChannel(back, "Extra Channel ${start + 30}", "Holding Up for 1 second moves 21 channels")
+        // Back, far down the list: moved to another time, the first Back returns to now; then the next
+        // jumps to the top channel; and Back there, to the categories.
         press("back")
-        // Moved to another time: the first Back returns to now; the next, to the categories.
-        if (!focusedText().startsWith("Group") && !isCategory(focusedText())) press("back")
+        if (focusedChannel() != top) press("back")
+        val atTop = focusedChannel()
+        println("  Back from far down the list: \"$atTop\"")
+        if (atTop != top) problems += "Back far down the list should jump to the top channel \"$top\", but it was on \"$atTop\""
+        shot("07l-guide-back-to-top")
+        press("back")
+        if (!isCategory(focusedText())) problems += "Back on the top channel should go to the categories, but focus was on \"${focusedText()}\""
         // After scrolling down the listings, hovering another category (one with lots of channels)
         // shows its listings at now.
         moveTo("Entertainment", "down", max = 4, step = "Down the categories to Entertainment")
