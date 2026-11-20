@@ -23,6 +23,17 @@ internal fun rememberTrailer(metadata: MetadataRepository, info: MetadataEntity?
  * Plays a trailer inside Skyfall (set by the app's main screen): the YouTube id, and what to do once it
  * closes (put focus back on the Trailer button). Without it, [openTrailer].
  */
+/**
+ * Puts focus back on [button] after a trailer. Focus comes back into the page from outside it, which
+ * would normally land on the page's first button, so for this one move the page is entered at [button].
+ */
+internal fun refocus(entry: app.tvplayer.ui.components.EntryFocus, button: androidx.compose.ui.focus.FocusRequester) {
+    val before = entry.target
+    entry.target = button
+    runCatching { button.requestFocus() }
+    entry.target = before
+}
+
 internal val LocalPlayTrailer = androidx.compose.runtime.staticCompositionLocalOf<((String, () -> Unit) -> Unit)?> { null }
 
 /**

@@ -141,8 +141,9 @@ internal fun FilmPane(
                 if (trailer != null) {
                     val playTrailer = LocalPlayTrailer.current
                     val trailerButton = remember { FocusRequester() }
+                    val entry = app.tvplayer.ui.components.LocalEntryFocus.current
                     PageButton(text = "Trailer", modifier = Modifier.focusRequester(trailerButton)) {
-                        playTrailer?.invoke(trailer) { runCatching { trailerButton.requestFocus() } } ?: openTrailer(context, trailer)
+                        playTrailer?.invoke(trailer) { refocus(entry, trailerButton) } ?: openTrailer(context, trailer)
                     }
                 }
                 val watched = LocalWatched.current
