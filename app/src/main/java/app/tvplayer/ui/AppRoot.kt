@@ -1021,12 +1021,18 @@ fun AppRoot(
             }
             app.tvplayer.ui.vod.TrailerPlayer(
                 youtubeId = id,
-                onClose = {
-                    trailerId = null
-                    afterTrailer?.invoke()
-                    afterTrailer = null
-                },
+                onClose = { trailerId = null },
             )
+        }
+        // Once it has gone, focus back on the Trailer button (a frame later, so nothing else takes it).
+        LaunchedEffect(trailerId) {
+            if (trailerId == null) {
+                val closed = afterTrailer ?: return@LaunchedEffect
+                afterTrailer = null
+                withFrameNanos { }
+                withFrameNanos { }
+                closed()
+            }
         }
     }
 }
