@@ -310,6 +310,9 @@ object DemoData {
             now,
         )
 
+        // Harbour of Glass has a trailer, as if TMDB had given it.
+        container.metadata.knowTrailer(5001L, isSeries = false, youtubeId = "Tr41lerDemo")
+
         // A guide running from a day ago (for catch-up) to six hours ahead.
         val guide = ArrayList<ProgrammeEntity>()
         val first = now - now % HALF_HOUR - 48 * HALF_HOUR

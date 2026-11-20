@@ -921,7 +921,17 @@ class ScreenshotTest {
         expectFocus("+ My list", "Next to Play, + My list")
         press("ok")
         expectShown("In My list", "The film is on My list")
-        press("left")
+        // Its trailer plays inside Skyfall, over everything; Back closes it and returns to the button.
+        press("right")
+        expectFocus("Trailer", "Next along, the trailer")
+        press("ok")
+        expectShown("Loading trailer", "The trailer opens inside Skyfall")
+        expectHidden("CARRY ON WATCHING", "The trailer stays on the film's page")
+        shot("13a-trailer")
+        press("back")
+        expectHidden("Loading trailer", "Back closes the trailer")
+        expectFocus("Trailer", "Back from the trailer returns to its button")
+        press("left", "left")
         expectFocus("Play", "Back to Play")
 
         // Play the film and open its controls; subtitles offer OpenSubtitles.

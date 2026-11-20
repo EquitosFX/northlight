@@ -139,6 +139,12 @@ class MetadataRepository(
 
     private val trailers = HashMap<Pair<Long, Boolean>, String?>()
 
+    /** For the walkthrough: a trailer as if TMDB had given it. */
+    @androidx.annotation.VisibleForTesting
+    fun knowTrailer(tmdbId: Long, isSeries: Boolean, youtubeId: String) {
+        trailers[tmdbId to isSeries] = youtubeId
+    }
+
     /** The YouTube id of a film's or series' trailer, or null. Needs a TMDB key. */
     suspend fun trailer(tmdbId: Long, isSeries: Boolean): String? = withContext(Dispatchers.IO) {
         if (trailers.containsKey(tmdbId to isSeries)) return@withContext trailers[tmdbId to isSeries]

@@ -139,7 +139,11 @@ internal fun FilmPane(
                     }
                 }
                 if (trailer != null) {
-                    PageButton(text = "Trailer") { openTrailer(context, trailer) }
+                    val playTrailer = LocalPlayTrailer.current
+                    val trailerButton = remember { FocusRequester() }
+                    PageButton(text = "Trailer", modifier = Modifier.focusRequester(trailerButton)) {
+                        playTrailer?.invoke(trailer) { runCatching { trailerButton.requestFocus() } } ?: openTrailer(context, trailer)
+                    }
                 }
                 val watched = LocalWatched.current
                 val seen = film.url in watched

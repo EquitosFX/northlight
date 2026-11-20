@@ -298,7 +298,15 @@ internal fun SeriesPane(
                                 }
                             }
                             if (trailer != null) {
-                                RoundIconButton(icon = { tint -> PlayGlyph(tint, Modifier.fillMaxSize()) }, label = "Trailer") { openTrailer(context, trailer) }
+                                val playTrailer = LocalPlayTrailer.current
+                                val trailerButton = remember { FocusRequester() }
+                                RoundIconButton(
+                                    icon = { tint -> PlayGlyph(tint, Modifier.fillMaxSize()) },
+                                    label = "Trailer",
+                                    modifier = Modifier.focusRequester(trailerButton),
+                                ) {
+                                    playTrailer?.invoke(trailer) { runCatching { trailerButton.requestFocus() } } ?: openTrailer(context, trailer)
+                                }
                             }
                         }
                         val label = when {
@@ -581,12 +589,12 @@ private fun WideButton(
 }
 
 @Composable
-private fun RoundIconButton(icon: @Composable (Color) -> Unit, label: String, onClick: () -> Unit) {
+private fun RoundIconButton(icon: @Composable (Color) -> Unit, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = AppTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FocusSurface(
             onClick = onClick,
-            modifier = Modifier.size(34.dp),
+            modifier = modifier.size(34.dp),
             shape = CircleShape,
             container = Color.Black.copy(alpha = 0.35f),
             focusedContainer = colors.accent,

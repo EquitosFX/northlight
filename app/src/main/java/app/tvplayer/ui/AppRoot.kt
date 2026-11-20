@@ -169,6 +169,9 @@ fun AppRoot(
         delay(6_000)
         container.playlists.refreshStaleGuides()
     }
+    // A trailer playing inside Skyfall (full screen, over everything), and what to do when it closes.
+    var trailerId by remember { mutableStateOf<String?>(null) }
+    var afterTrailer by remember { mutableStateOf<(() -> Unit)?>(null) }
     // Where the TV guide was, and what it has read, kept while Skyfall is open.
     val guideMemory = remember { app.tvplayer.ui.guide.GuideMemory() }
     // Get Series, Films and Sport ready in the background shortly after opening, and again as soon as
@@ -724,6 +727,7 @@ fun AppRoot(
                     LocalAutoFocus provides autoFocusAllowed,
                     LocalHoldFocus provides { holdFocus() },
                     LocalEntryFocus provides entryFocus,
+                    app.tvplayer.ui.vod.LocalPlayTrailer provides { id, closed -> afterTrailer = closed; trailerId = id },
                 ) {
                 // Each screen fades in as it opens, so it never flashes up half-drawn while its contents load.
                 val shownPerson = person
@@ -1005,6 +1009,22 @@ fun AppRoot(
                         .size(width = SidebarPictureWidth, height = SidebarPictureHeight)
                         .border(width = 1.dp, color = colors.glassBorder)
                         .onFocusChanged { pictureFocused = it.hasFocus }
+                },
+            )
+        }
+        // A trailer, over everything; the channel behind goes quiet while it plays.
+        trailerId?.let { id ->
+            DisposableEffect(id) {
+                val before = controller.player.volume
+                controller.player.volume = 0f
+                onDispose { controller.player.volume = before }
+            }
+            app.tvplayer.ui.vod.TrailerPlayer(
+                youtubeId = id,
+                onClose = {
+                    trailerId = null
+                    afterTrailer?.invoke()
+                    afterTrailer = null
                 },
             )
         }
