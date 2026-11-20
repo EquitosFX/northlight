@@ -130,6 +130,7 @@ class LoadTimes {
         time("Sport: matches on now and soon") { channels.sport() }
         time("Search: \"the\"") { channels.search("the") }
         time("Search: \"channel 77\"") { channels.search("channel 77") }
+        time("Search: \"channel77\" (no space)") { channels.search("channel77") }
         println()
         println("%-44s %10s %10s".format("Load", "First", "Again"))
         results.forEach(::println)

@@ -28,10 +28,12 @@ import androidx.core.content.ContextCompat
 
 /**
  * Listens through the remote's microphone inside the app, so the words land in the search box rather
- * than in Android's own search. Words appear as they're heard; [onFinal] gets the finished phrase.
+ * than in Android's own search. Words appear as they're heard; [onFinal] gets the finished phrase, as
+ * each of the ways it might have been heard, most likely first (so search can pick the one that finds
+ * something).
  */
 @Stable
-class VoiceInput(private val context: Context, private val onWords: (String) -> Unit, private val onFinal: (String) -> Unit = {}) {
+class VoiceInput(private val context: Context, private val onWords: (String) -> Unit, private val onFinal: (List<String>) -> Unit = {}) {
     var listening by mutableStateOf(false)
         private set
     var problem by mutableStateOf<String?>(null)
@@ -69,9 +71,10 @@ class VoiceInput(private val context: Context, private val onWords: (String) -> 
             }
             override fun onResults(results: Bundle?) {
                 listening = false
-                words(results)?.let {
+                val heard = allHeard(results)
+                heard.firstOrNull()?.let {
                     onWords(it)
-                    onFinal(it)
+                    onFinal(heard)
                 }
             }
             override fun onError(error: Int) {
@@ -84,10 +87,7 @@ class VoiceInput(private val context: Context, private val onWords: (String) -> 
                 }
             }
         })
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        val intent = recognitionIntent(context).putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         listening = true
         runCatching { r.startListening(intent) }.onFailure {
             listening = false
@@ -104,12 +104,29 @@ class VoiceInput(private val context: Context, private val onWords: (String) -> 
         listening = false
     }
 
-    private fun words(bundle: Bundle?): String? =
-        bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() }
+    private fun words(bundle: Bundle?): String? = allHeard(bundle).firstOrNull()
+
+    private fun allHeard(bundle: Bundle?): List<String> =
+        bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty().filter { it.isNotBlank() }
 }
 
+/**
+ * What to listen for, for both Google's voice screen and listening in the app: the box's own language
+ * (so British names and accents are expected), several guesses rather than one (search picks the one
+ * that finds something), and time to pause between words before it decides you've finished.
+ */
+fun recognitionIntent(context: Context): Intent =
+    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault().toLanguageTag())
+        .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+        .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+        .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a channel, film, series or person")
+        .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
+        .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1_000L)
+
 @Composable
-fun rememberVoiceInput(onWords: (String) -> Unit, onFinal: (String) -> Unit = {}): VoiceInput {
+fun rememberVoiceInput(onWords: (String) -> Unit, onFinal: (List<String>) -> Unit = {}): VoiceInput {
     val context = LocalContext.current
     val voice = remember { VoiceInput(context, onWords, onFinal) }
     DisposableEffect(voice) { onDispose { voice.stop() } }

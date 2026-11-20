@@ -78,6 +78,9 @@ data class VodRow(
 
 data class GroupCount(val groupName: String?, val count: Int)
 
+/** A channel, film or series name, for searching. */
+data class SearchName(val id: Long, val kind: String, val name: String)
+
 /** A film or series' id and what its added date is kept under. */
 data class AddedKeyRow(val id: Long, val playlistId: Long, val kind: String, val remoteId: Long?, val url: String)
 
@@ -173,6 +176,10 @@ interface ChannelDao {
             "ORDER BY CASE kind WHEN 'live' THEN 0 WHEN 'movie' THEN 1 ELSE 2 END, LENGTH(name) LIMIT 300",
     )
     suspend fun search(pattern: String): List<VodRow>
+
+    /** Every name, for searching in memory (see ChannelsRepository.search). In the order they were stored. */
+    @Query("SELECT id, kind, name FROM channels ORDER BY id")
+    fun searchNamesBlocking(): List<SearchName>
 
     @Query(
         "SELECT id, playlistId, kind, name, variantKey, logo, url, remoteId, userAgent, referrer FROM channels " +

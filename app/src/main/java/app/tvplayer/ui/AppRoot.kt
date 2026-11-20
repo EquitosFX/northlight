@@ -190,6 +190,8 @@ fun AppRoot(
                 container.channels.inGroup(ChannelEntity.KIND_MOVIE, app.tvplayer.data.ChannelsRepository.RECENTLY_ADDED)
                 container.channels.inGroup(ChannelEntity.KIND_SERIES, app.tvplayer.data.ChannelsRepository.RECENTLY_ADDED)
                 container.channels.sport()
+                // Every name, ready for searching.
+                container.channels.prepareSearch()
             }
             // Checked every 15 seconds (an instant look at the playlists); at least every 10 minutes.
             val since = android.os.SystemClock.uptimeMillis()
@@ -855,6 +857,7 @@ fun AppRoot(
                         channels = container.channels,
                         metadata = container.metadata,
                         voiceToken = voiceToken,
+                        settings = container.settings,
                         memory = searchMemory,
                         onPerson = { chosen ->
                             holdFocus()

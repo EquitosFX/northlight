@@ -1,5 +1,7 @@
 package app.tvplayer.ui.search
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import app.tvplayer.ui.components.entersAt
 import androidx.compose.ui.graphics.Color
 import app.tvplayer.ui.vod.PosterCard
@@ -57,6 +59,7 @@ fun SearchScreen(
     onOpen: (VodRow) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
     voiceToken: Int = 0,
+    settings: app.tvplayer.data.SettingsRepository? = null,
     /** The search kept while a result is open, so coming back finds it as it was. */
     memory: SearchMemory = remember { SearchMemory() },
 ) {
@@ -74,16 +77,37 @@ fun SearchScreen(
         memory.opened = key
     }
 
-    // Listens in the app through the remote's mic; the words fill the search box as they're heard.
     // Searches asked for (typed and finished, said, or a result opened), most recent first, kept on this box.
     val history = rememberSearchHistory()
-    val voice = rememberVoiceInput(onWords = { words -> query = words }, onFinal = { words -> history.add(words) })
+    // What was said, as each way it might have been heard: the one that finds the most is searched for.
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun heard(guesses: List<String>) {
+        if (guesses.isEmpty()) return
+        scope.launch {
+            val best = channels.bestHeard(guesses) ?: return@launch
+            query = best
+            history.add(best)
+        }
+    }
+    // Listens in the app through the remote's mic; the words fill the search box as they're heard.
+    val voice = rememberVoiceInput(onWords = { words -> query = words }, onFinal = { guesses -> heard(guesses) })
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) voice.start() else voice.problem = "Allow the microphone to search by voice."
+    }
+    // Or Google's own voice screen, as Google TV's search and YouTube use (Settings › Appearance).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val useGoogle by (settings?.voiceGoogle ?: kotlinx.coroutines.flow.flowOf(true)).collectAsStateWithLifecycle(initialValue = true)
+    val googleVoice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val guesses = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS).orEmpty()
+        if (result.resultCode == android.app.Activity.RESULT_OK && guesses.isNotEmpty()) heard(guesses)
     }
     fun listen() {
         if (voice.listening) {
             voice.stop()
+        } else if (useGoogle && recognitionIntent(context).resolveActivity(context.packageManager) != null &&
+            runCatching { googleVoice.launch(recognitionIntent(context)) }.isSuccess
+        ) {
+            voice.problem = null
         } else if (voice.hasPermission()) {
             voice.start()
         } else {

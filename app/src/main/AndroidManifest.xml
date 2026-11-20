@@ -18,6 +18,10 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <!-- Google's voice screen, for voice search. -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
         <intent>
             <action android:name="android.settings.MANAGE_UNKNOWN_APP_SOURCES" />
         </intent>

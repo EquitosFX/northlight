@@ -1,5 +1,6 @@
 package app.tvplayer.data
 
+import app.tvplayer.core.search.SearchText
 import kotlinx.coroutines.flow.distinctUntilChanged
 import app.tvplayer.core.sport.SportKind
 import app.tvplayer.core.sport.SportFinder
@@ -280,6 +281,9 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
 
         /** How many titles "Recently added" shows. */
         const val RECENT_LIMIT = 200
+
+        /** How many matches are read before quality copies and episodes are gathered up. */
+        private const val SEARCH_LIMIT = 300
         private const val RECENT_BATCH = 400
 
         private const val HOUR = 3_600_000L
@@ -328,14 +332,71 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
 
     suspend fun clearProgress(url: String) = db.progress().delete(url)
 
-    /** Channels, films and series whose names contain [text]. Quality copies of a channel appear once. */
-    suspend fun search(text: String): List<VodRow> {
-        val escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        return db.channels().search("%$escaped%")
+    /** Every name, condensed for matching (see [SearchText]), kept until a playlist changes. */
+    private class SearchIndex(val stamp: app.tvplayer.data.db.LiveStamp, val ids: LongArray, val kinds: ByteArray, val names: Array<String>)
+
+    @Volatile private var searchIndex: SearchIndex? = null
+
+    private fun searchIndex(): SearchIndex {
+        val stamp = db.playlists().stampBlocking()
+        searchIndex?.let { if (it.stamp == stamp) return it }
+        val rows = db.channels().searchNamesBlocking()
+        val built = SearchIndex(
+            stamp = stamp,
+            ids = LongArray(rows.size) { rows[it].id },
+            // Live channels first, then films, then series, as results are listed.
+            kinds = ByteArray(rows.size) { when (rows[it].kind) { ChannelEntity.KIND_LIVE -> 0; ChannelEntity.KIND_MOVIE -> 1; else -> 2 } },
+            names = Array(rows.size) { SearchText.condense(rows[it].name) },
+        )
+        searchIndex = built
+        return built
+    }
+
+    /** Gets the names ready for searching in the background, so the first search is quick. */
+    suspend fun prepareSearch() = withContext(Dispatchers.IO) { runCatching { searchIndex() }; Unit }
+
+    /**
+     * Channels, films and series matching [text], however it's spaced or punctuated ("spiderman" finds
+     * "Spider-Man"; see [SearchText]). Live channels first, then films, then series; within each, names
+     * starting with the search first, then shorter names. Quality copies of a channel appear once.
+     */
+    suspend fun search(text: String): List<VodRow> = withContext(Dispatchers.IO) {
+        val query = SearchText.Query(text)
+        if (!query.usable) return@withContext emptyList()
+        val index = searchIndex()
+        val found = ArrayList<Long>()
+        for (i in index.ids.indices) {
+            val rank = SearchText.rank(index.names[i], query)
+            if (rank == 0) continue
+            // Packed for sorting: kind, then how well it matched, then length, then where it was stored.
+            val order = (index.kinds[i].toLong() shl 60) or ((3L - rank) shl 56) or (index.names[i].length.toLong().coerceAtMost(0xFFFF) shl 40) or i.toLong()
+            found += order
+        }
+        val chosen = found.sorted().take(SEARCH_LIMIT).map { index.ids[(it and 0xFFFFFFFFFFL).toInt()] }
+        val rows = chosen.chunked(500).flatMap { db.channels().vodRows(it) }.associateBy { it.id }
+        chosen.mapNotNull { rows[it] }
             .distinctBy { if (it.kind == ChannelEntity.KIND_LIVE) "${it.playlistId}|${it.variantKey}" else it.id.toString() }
             // M3U episodes of one show appear once, as the show.
             .let { showsIn(it) }
             .take(100)
+    }
+
+    /**
+     * Of the ways voice search heard something (most likely first), the one that finds the most in the
+     * playlists: "the wire" over "the why are", say. If none finds anything, the most likely.
+     */
+    suspend fun bestHeard(heard: List<String>): String? {
+        val choices = heard.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (choices.size <= 1) return choices.firstOrNull()
+        // The first with something starting with it, else the first with anything at all.
+        var anything: String? = null
+        for (choice in choices) {
+            val results = search(choice)
+            if (results.isEmpty()) continue
+            if (results.any { SearchText.condense(it.name).startsWith(SearchText.condense(choice)) }) return choice
+            if (anything == null) anything = choice
+        }
+        return anything ?: choices.first()
     }
 
     val favouriteKeys: Flow<Set<String>> = db.favourites().observeKeys().map { it.toSet() }
