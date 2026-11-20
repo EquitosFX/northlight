@@ -1028,6 +1028,59 @@ class ScreenshotTest {
         shot("17e-series-resume")
     }
 
+    /**
+     * Opening a search result and coming back never shows a mostly black screen for a frame: each frame
+     * drawn (as the TV would) is checked for how much of the screen is black.
+     */
+    @Test fun searchNoBlackFlashes() {
+        open(Dest.SEARCH)
+        press("right")
+        press("ok")
+        type("the")
+        press("back")
+        val resting = darkShare(pixelCopy())
+        println("  black share at rest on Search: $resting%")
+        for ((label, key) in listOf("open a film" to "down", "back to search" to "back", "open again" to "ok", "back again" to "back")) {
+            if (key == "down") { press("down"); watchFrames(label, "ok") } else watchFrames(label, key)
+        }
+    }
+
+    /** The share of the screen (in %) that's black or nearly. */
+    private fun darkShare(bitmap: Bitmap): Int {
+        var dark = 0
+        var all = 0
+        for (y in 0 until bitmap.height step 6) for (x in 0 until bitmap.width step 6) {
+            val c = bitmap.getPixel(x, y)
+            all++
+            if (maxOf(android.graphics.Color.red(c), android.graphics.Color.green(c), android.graphics.Color.blue(c)) < 16) dark++
+        }
+        return dark * 100 / all.coerceAtLeast(1)
+    }
+
+    /** Presses [key] and checks every frame for 0.8 s: none may be mostly black. */
+    private fun watchFrames(step: String, key: String) {
+        rule.mainClock.autoAdvance = false
+        val shares = ArrayList<Int>()
+        try {
+            if (key == "back") {
+                rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+            } else {
+                val target = if (focusCount() > 0) rule.onNode(isFocused()) else rule.onRoot()
+                target.performKeyInput { pressKey(keys.getValue(key)) }
+            }
+            repeat(50) {
+                rule.mainClock.advanceTimeBy(16)
+                shares += runCatching { darkShare(pixelCopy()) }.getOrDefault(-1)
+            }
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        settle()
+        println("  $step: black share per frame: ${shares.joinToString(" ")}; focus now \"${focusedText()}\"")
+        val worst = shares.maxOrNull() ?: 0
+        if (worst >= 60) problems += "$step: a frame was ${worst}% black"
+    }
+
     @Test fun search() {
         open(Dest.SEARCH)
         press("right")
