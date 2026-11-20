@@ -174,12 +174,15 @@ private fun SpeedReport() {
                 when {
                     status.isCompiledWithProfile -> "yes"
                     status.hasProfileEnqueuedForCompilation() -> "not yet: the TV box will do it when idle (usually overnight), then it runs quicker"
+                    // Android 11 (the Shield) doesn't say, but it compiles while installing.
+                    status.profileInstallResultCode == (4 shl 16) -> // "unsupported Android version"
+                        "done while installing (this Android version can't report it)"
                     else -> "not yet (code ${status.profileInstallResultCode})"
                 }
             }.getOrNull()
         }
     }
-    compiled?.let { Label(text = "Compiled for speed: $it", style = AppType.body, color = if (it == "yes") colors.text else colors.accent, maxLines = 2) }
+    compiled?.let { Label(text = "Compiled for speed: $it", style = AppType.body, color = if (it == "yes" || it.startsWith("done")) colors.text else colors.accent, maxLines = 2) }
 }
 
 private fun seconds(millis: Long) = if (millis < 1000) "$millis ms" else "%.1f s".format(millis / 1000.0)

@@ -171,11 +171,13 @@ fun AppRoot(
     }
     // Where the TV guide was, and what it has read, kept while Skyfall is open.
     val guideMemory = remember { app.tvplayer.ui.guide.GuideMemory() }
-    // Get Series, Films and Sport ready in the background shortly after opening (and again after a
-    // playlist refresh), so they open straight away rather than loading when first chosen.
+    // Get Series, Films and Sport ready in the background shortly after opening, and again as soon as
+    // a playlist or TV guide has been downloaded again (the channel list is rebuilt then, which takes a
+    // second or more on a TV box), so they open straight away rather than loading when first chosen.
     LaunchedEffect(Unit) {
         delay(3_000)
         while (true) {
+            val warmed = runCatching { container.channels.changeStamp() }.getOrNull()
             runCatching {
                 // The TV guide first: its channel list and first screenful of programmes.
                 guideMemory.warmUp(container.channels)
@@ -186,7 +188,12 @@ fun AppRoot(
                 container.channels.inGroup(ChannelEntity.KIND_SERIES, app.tvplayer.data.ChannelsRepository.RECENTLY_ADDED)
                 container.channels.sport()
             }
-            delay(10 * 60_000L)
+            // Checked every 15 seconds (an instant look at the playlists); at least every 10 minutes.
+            val since = android.os.SystemClock.uptimeMillis()
+            while (android.os.SystemClock.uptimeMillis() - since < 10 * 60_000L) {
+                delay(15_000)
+                if (runCatching { container.channels.changeStamp() }.getOrNull() != warmed) break
+            }
         }
     }
     // Playlists refresh by themselves as often as Settings › Refresh and check says (checked hourly).

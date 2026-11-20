@@ -70,6 +70,9 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
         row?.let { if (it.kind == ChannelEntity.KIND_SERIES) asShow(it) else it }
     }
 
+    /** Changes whenever a playlist or TV guide has been downloaded again (an instant check). */
+    suspend fun changeStamp(): app.tvplayer.data.db.LiveStamp = withContext(Dispatchers.IO) { db.playlists().stampBlocking() }
+
     suspend fun lineup(): Lineup = withContext(Dispatchers.IO) {
         val stamp = db.playlists().stampBlocking()
         cached?.let { (seen, lineup) -> if (seen == stamp) return@withContext lineup }
