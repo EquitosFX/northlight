@@ -716,6 +716,10 @@ class ScreenshotTest {
         press("right")
         expectFocus("Tomorrow", "Along the days to Tomorrow")
         press("ok")
+        // A programme on another day says so before its times.
+        val tomorrowTimes = rule.onAllNodesWithText("Tomorrow ", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
+            .any { Regex("Tomorrow \\d{2}:\\d{2}–").containsMatchIn(textOf(it)) }
+        if (!tomorrowTimes) problems += "A programme tomorrow should say Tomorrow before its times"
         shot("07g-guide-tomorrow")
     }
 
@@ -1251,6 +1255,8 @@ class ScreenshotTest {
         expectShown("No change", "Catch-up timing starts unchanged")
         expectShown("Backup player", "Player pane has the backup player setting")
         expectShown("Smooth resizing", "Player pane offers smooth resizing for the picture")
+        expectShown("When the picture stops", "Player pane has how long a stopped picture waits")
+        expectShown("15 seconds", "A stopped picture waits 15 seconds unless changed")
         expectShown("Netflix style", "Player pane has the subtitle look")
         expectShown("Match frame rate", "Player pane has frame-rate matching")
         expectShown("Buffer", "Player pane has the buffer size")

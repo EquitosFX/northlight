@@ -1270,8 +1270,11 @@ class LivePlayerController(
 
     private fun watchForStall() {
         stallJob?.cancel()
+        // How long a stopped picture waits before Skyfall tries again, then the channel's next copy
+        // (Settings › Player › Picture stops).
+        val wait = StallWait.saved(context).millis
         stallJob = scope.launch {
-            delay(STALL_MILLIS)
+            delay(wait)
             val state = player.playbackState
             if (state == Player.STATE_BUFFERING || state == Player.STATE_IDLE) recover()
         }
@@ -1451,7 +1454,6 @@ class LivePlayerController(
         const val MAX_BOOST_DB = 12
         const val PICK = "pick|"
         const val SEEN = "seen|"
-        const val STALL_MILLIS = 15_000L
         const val NO_PICTURE_MILLIS = 7_000L
         const val CATCHUP_SETTLE_MILLIS = 700L
         const val CATCHUP_GAP_MILLIS = 350L
@@ -1484,6 +1486,28 @@ private fun bufferFor(context: Context): DefaultLoadControl {
         BufferSize.STANDARD -> builder.setBufferDurationsMs(15_000, 50_000, 1_000, 2_000)
     }
     return builder.build()
+}
+
+/** How long a stopped (buffering) picture waits before Skyfall steps in, offered in Settings › Player. */
+enum class StallWait(val seconds: Int) {
+    SIX(6),
+    TEN(10),
+    FIFTEEN(15),
+    TWENTY(20);
+
+    val millis: Long get() = seconds * 1_000L
+
+    companion object {
+        private const val PREFS = "player_stall"
+
+        /** 15 seconds unless chosen otherwise (as before this was a setting). */
+        fun saved(context: Context): StallWait =
+            entries.firstOrNull { it.seconds == context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("seconds", 15) } ?: FIFTEEN
+
+        fun save(context: Context, wait: StallWait) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("seconds", wait.seconds).apply()
+        }
+    }
 }
 
 /** The buffer sizes offered in Settings › Player. */

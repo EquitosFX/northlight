@@ -105,7 +105,7 @@ fun PlayerHost(
     matchFrameRate: Boolean = false,
     subtitleLook: SubtitleLook = SubtitleLook(),
 ) {
-    MatchRefreshRate(fps = controller.frameRate, on = matchFrameRate && mode == PlayerMode.FULL)
+    MatchRefreshRate(fps = controller.frameRate, on = matchFrameRate && mode == PlayerMode.FULL, channelKey = controller.current?.key ?: controller.vod?.url)
     // The backup player takes over when the normal player gives up, once per channel or film.
     var backup by remember { mutableStateOf<BackupStream?>(null) }
     val triedBackup = remember { HashSet<String>() }
@@ -625,10 +625,14 @@ private fun SleepWarning(modifier: Modifier = Modifier) {
  * a moment as it switches.
  */
 @Composable
-private fun MatchRefreshRate(fps: Float?, on: Boolean) {
+private fun MatchRefreshRate(fps: Float?, on: Boolean, channelKey: String?) {
     val view = LocalView.current
     val window = remember(view) { view.context.findActivity()?.window }
-    LaunchedEffect(fps, on) {
+    // The channel the TV was last switched for. A channel that drops and comes back can measure a
+    // different rate for a moment while it restarts; switching the TV for that (and back) blanks the
+    // screen twice. So for the same channel, a different rate must hold for 10 seconds first.
+    val switchedFor = remember { arrayOfNulls<String>(1) }
+    LaunchedEffect(fps, on, channelKey) {
         if (!on || fps == null || window == null) return@LaunchedEffect
         val display = view.display ?: return@LaunchedEffect
         val current = display.mode
@@ -636,7 +640,17 @@ private fun MatchRefreshRate(fps: Float?, on: Boolean) {
             it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight
         }
         val index = FrameRateMatch.pick(modes.map { it.refreshRate }, current.refreshRate, fps) ?: return@LaunchedEffect
-        window.attributes = window.attributes.also { it.preferredDisplayModeId = modes[index].modeId }
+        val wanted = modes[index].modeId
+        val already = window.attributes.preferredDisplayModeId
+        if (already == wanted) {
+            switchedFor[0] = channelKey
+            return@LaunchedEffect
+        }
+        if (already != 0 && channelKey != null && switchedFor[0] == channelKey) {
+            kotlinx.coroutines.delay(10_000)
+        }
+        window.attributes = window.attributes.also { it.preferredDisplayModeId = wanted }
+        switchedFor[0] = channelKey
     }
     DisposableEffect(window) {
         onDispose {

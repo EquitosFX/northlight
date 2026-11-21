@@ -477,6 +477,21 @@ private fun Timeline(
             Label(text = "Rewind up to ${clock(duration)}", style = AppType.label, color = colors.textFaint)
         } else {
             Label(text = "${clock(position)} / ${if (duration > 0) clock(duration) else "--:--"}", style = AppType.label, color = colors.textDim)
+            // When it will finish, from now: it moves on while paused.
+            if (duration > 0 && duration > position) {
+                val now by androidx.compose.runtime.produceState(System.currentTimeMillis()) {
+                    while (true) {
+                        kotlinx.coroutines.delay(10_000)
+                        value = System.currentTimeMillis()
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Label(
+                    text = "Ends ${app.tvplayer.ui.components.clockTime(now + (duration - position))}",
+                    style = AppType.label,
+                    color = colors.textDim,
+                )
+            }
         }
     }
 }

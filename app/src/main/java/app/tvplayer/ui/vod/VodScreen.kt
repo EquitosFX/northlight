@@ -1,5 +1,6 @@
 package app.tvplayer.ui.vod
 
+import app.tvplayer.ui.components.fadeBottomEdge
 import app.tvplayer.ui.components.MeasureOpen
 import app.tvplayer.ui.components.LocalPosterLookup
 import app.tvplayer.ui.components.NewEpisodesBadge
@@ -280,7 +281,9 @@ fun VodScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                // The row cut off at the bottom fades away, so it's clear there's more below.
+                .fadeBottomEdge { gridState.canScrollForward },
         ) {
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 PosterCard(

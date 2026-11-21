@@ -85,7 +85,9 @@ class AppContainer(context: Context) {
 
     /** When films and series were added, for "Recently added". */
     val addedDates: AddedDatesStore by lazy { AddedDatesStore(java.io.File(appContext.filesDir, "added")) }
-    val playlists: PlaylistRepository by lazy { PlaylistRepository(database, http, scope, addedDates) }
+    val playlists: PlaylistRepository by lazy {
+        PlaylistRepository(database, http, scope, addedDates, guideDir = java.io.File(appContext.cacheDir, "guides"))
+    }
 
     val channels: ChannelsRepository by lazy { ChannelsRepository(database, addedDates) }
 

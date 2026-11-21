@@ -137,6 +137,24 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
             }
         }
 
+        Label(text = "When the picture stops", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
+        var stall by remember { mutableStateOf(app.tvplayer.player.StallWait.saved(context)) }
+        Label(
+            text = "How long a stopped picture waits before Skyfall reconnects, then tries the channel's other copies. " +
+                "Shorter gets going again sooner; longer rides out short breaks in the stream.",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 2,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (wait in app.tvplayer.player.StallWait.entries) {
+                Chip(label = "${wait.seconds} seconds", selected = stall == wait) {
+                    app.tvplayer.player.StallWait.save(context, wait)
+                    stall = wait
+                }
+            }
+        }
+
         Label(text = "Match frame rate", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
         Label(
             text = "Switches the TV to 50 Hz for UK channels (and 24 Hz for films) while watching, for smooth movement. " +

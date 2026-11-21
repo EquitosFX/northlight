@@ -85,7 +85,28 @@ class PlaylistRepository(
     private val scope: CoroutineScope,
     /** When films and series were added, for "Recently added". */
     private val added: AddedDatesStore? = null,
+    /** Where downloaded guides wait to be read, and what each guide was last time (to skip unchanged ones). */
+    private val guideDir: java.io.File? = null,
 ) {
+    /** Each playlist's guide fingerprint last stored, and when its guide was last checked. */
+    private val guideMarks = java.util.Properties()
+    private val guideMarksFile get() = guideDir?.let { java.io.File(it, "guides.properties") }
+
+    init {
+        runCatching { guideMarksFile?.takeIf { it.exists() }?.inputStream()?.use(guideMarks::load) }
+    }
+
+    private fun saveGuideMarks() = synchronized(guideMarks) {
+        runCatching {
+            guideDir?.mkdirs()
+            guideMarksFile?.outputStream()?.use { guideMarks.store(it, null) }
+        }
+    }
+
+    /** When [playlist]'s guide was last downloaded or found unchanged. */
+    private fun guideCheckedAt(playlist: PlaylistEntity): Long =
+        maxOf(playlist.guideRefreshedAt ?: 0L, guideMarks.getProperty("checked.${playlist.id}")?.toLongOrNull() ?: 0L)
+
     val playlists: Flow<List<PlaylistEntity>> = db.playlists().observeAll()
 
     /** Every playlist, read now (call off the main thread). */
@@ -205,7 +226,7 @@ class PlaylistRepository(
             val stale = db.playlists().getAllBlocking().filter { playlist ->
                 playlist.guideUrls.isNotBlank() &&
                     playlist.refreshedAt != null &&
-                    (playlist.guideRefreshedAt ?: 0L) < cutoff
+                    guideCheckedAt(playlist) < cutoff
             }
             for (playlist in stale) {
                 if (state.value is ImportState.Working) return@launch
@@ -419,17 +440,72 @@ class PlaylistRepository(
         val urls = playlist.guideUrls.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (urls.isEmpty()) return 0
         val began = android.os.SystemClock.uptimeMillis()
+        var unchanged = false
+        // Downloaded to files first (when there's room), so an unchanged guide can be recognised and
+        // left as it is: no reading it again and rewriting every programme, which is the slow part.
+        val files = downloadGuides(playlist, urls)
         try {
-            return readGuide(playlist, urls)
+            val fingerprint = files?.let { guideFingerprint(playlist, it) }
+            if (fingerprint != null && playlist.programmeCount > 0 && guideMarks.getProperty("hash.${playlist.id}") == fingerprint) {
+                unchanged = true
+                guideMarks.setProperty("checked.${playlist.id}", System.currentTimeMillis().toString())
+                saveGuideMarks()
+                return playlist.programmeCount
+            }
+            val stored = readGuide(playlist, urls, files?.map { it.first })
+            if (fingerprint != null) {
+                guideMarks.setProperty("hash.${playlist.id}", fingerprint)
+                guideMarks.remove("checked.${playlist.id}")
+                saveGuideMarks()
+            }
+            return stored
         } finally {
+            files?.forEach { it.first?.delete() }
             // For Settings › Refresh and check › Speed: everything else is slower while this runs.
             val took = (android.os.SystemClock.uptimeMillis() - began) / 1000
             val at = java.time.LocalTime.now().withNano(0).withSecond(0)
-            app.tvplayer.ui.components.Timing.note("TV guide download", "took ${took} s, finished at $at")
+            app.tvplayer.ui.components.Timing.note(
+                "TV guide download",
+                if (unchanged) "unchanged since last time, checked in ${took} s at $at" else "took ${took} s, finished at $at",
+            )
         }
     }
 
-    private fun readGuide(playlist: PlaylistEntity, urls: List<String>): Int {
+    /**
+     * Downloads each of [playlist]'s guides to a file, with its SHA-256; a guide that failed has no file.
+     * Null when there isn't room (then the guides are read straight from the internet, as before).
+     */
+    private fun downloadGuides(playlist: PlaylistEntity, urls: List<String>): List<Pair<java.io.File?, String?>>? {
+        val dir = guideDir ?: return null
+        if (!dir.exists() && !dir.mkdirs()) return null
+        if (dir.usableSpace < 500L * 1024 * 1024) return null
+        state.value = ImportState.Working(playlist.name, "TV guide", 0)
+        val result = urls.mapIndexed { index, url ->
+            val file = java.io.File(dir, "guide-${playlist.id}-$index.tmp")
+            runCatching {
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                fetch(url) { input ->
+                    java.security.DigestInputStream(input, digest).use { hashed -> file.outputStream().use { hashed.copyTo(it, 64 * 1024) } }
+                }
+                file to digest.digest().joinToString("") { "%02x".format(it) }
+            }.getOrElse {
+                file.delete()
+                // One broken guide out of several should not lose the others; a single one failing is an error.
+                if (urls.size == 1) throw it
+                null to null
+            }
+        }
+        return result
+    }
+
+    /** One fingerprint for all of a playlist's guides, and its channels as they were matched to them. */
+    private fun guideFingerprint(playlist: PlaylistEntity, files: List<Pair<java.io.File?, String?>>): String? {
+        if (files.any { it.second == null }) return null
+        return files.joinToString("|") { it.second.orEmpty() } + "|channels:" + (playlist.refreshedAt ?: 0L)
+    }
+
+    /** Reads [playlist]'s guides into the database: from [files] where downloaded already, else from the internet. */
+    private fun readGuide(playlist: PlaylistEntity, urls: List<String>, files: List<java.io.File?>? = null): Int {
         val channels = db.channels().matchRowsBlocking(playlist.id)
         val now = System.currentTimeMillis()
         // A week of past programmes is kept, for catch-up.
@@ -452,11 +528,17 @@ class PlaylistRepository(
                     state.value = ImportState.Working(playlist.name, "TV guide", stored)
                 }
 
-                for (url in urls) {
+                for ((index, url) in urls.withIndex()) {
                     val guideChannels = ArrayList<GuideChannel>()
                     var wanted: Set<String>? = null
+                    val file = files?.getOrNull(index)
+                    // Downloaded already but that guide failed: skip it, as reading it would fail again.
+                    if (files != null && file == null) continue
                     try {
-                        fetch(url) { input ->
+                        val open: ((InputStream) -> Unit) -> Unit = { read ->
+                            if (file != null) file.inputStream().buffered(64 * 1024).use { read(it) } else fetch(url, read)
+                        }
+                        open { input ->
                             XmltvParser.parse(
                                 input,
                                 onChannel = { guideChannels.add(it) },

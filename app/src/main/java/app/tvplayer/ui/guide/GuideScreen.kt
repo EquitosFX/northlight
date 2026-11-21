@@ -1,5 +1,6 @@
 package app.tvplayer.ui.guide
 
+import app.tvplayer.ui.components.fadeBottomEdge
 import app.tvplayer.ui.components.MeasureOpen
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.geometry.Offset
@@ -514,6 +515,8 @@ fun GuideScreen(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
                 .weight(1f)
+                // The row cut off at the bottom fades away, so it's clear there are more channels below.
+                .fadeBottomEdge(height = 40.dp) { rowsList.canScrollForward }
                 // A line down through every channel at the time now, so it's easy to see how far into each
                 // programme it is. Drawn over the listings (and only redrawn as the grid slides or the minute changes).
                 .drawWithContent {
@@ -771,7 +774,8 @@ private fun Header(
             null
         }
         val meta = listOfNotNull(
-            "${clockTime(programme.start)}–${clockTime(programme.stop)}",
+            // A programme not on today says which day it is: Yesterday, Tomorrow, or the date.
+            relativeDay(programme.start)?.let { "$it " }.orEmpty() + "${clockTime(programme.start)}–${clockTime(programme.stop)}",
             "${(programme.stop - programme.start) / MINUTE} min",
             episode,
             programme.subTitle,
@@ -840,10 +844,12 @@ private fun TimeRuler(windowStart: Long, origin: Long, now: Long, window: () -> 
             ProgrammeStrip(spans = spans, origin = origin, window = window, slide = slide) {
                 for (at in times) {
                     Box(Modifier.fillMaxSize()) {
+                        // Where a new day starts, its date instead of 00:00.
+                        val midnight = isMidnight(at)
                         Label(
-                            text = clockTime(at),
-                            style = AppType.label,
-                            color = colors.textDim,
+                            text = if (midnight) dayLabel(at) else clockTime(at),
+                            style = if (midnight) AppType.label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) else AppType.label,
+                            color = if (midnight) colors.text else colors.textDim,
                             modifier = Modifier.align(Alignment.CenterStart),
                         )
                     }
@@ -1205,6 +1211,25 @@ private fun ReplayMark(tint: Color, modifier: Modifier = Modifier) {
             close()
         }
         drawPath(head, tint)
+    }
+}
+
+/** Whether [millis] is midnight where the box is. */
+private fun isMidnight(millis: Long): Boolean {
+    val time = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault())
+    return time.hour == 0 && time.minute == 0
+}
+
+/** "Yesterday", "Tomorrow" or the date for a programme not on today; null for today. */
+internal fun relativeDay(millis: Long, now: Long = System.currentTimeMillis()): String? {
+    val zone = java.time.ZoneId.systemDefault()
+    val day = java.time.Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+    val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    return when (java.time.temporal.ChronoUnit.DAYS.between(today, day)) {
+        0L -> null
+        1L -> "Tomorrow"
+        -1L -> "Yesterday"
+        else -> dayLabel(millis)
     }
 }
 
