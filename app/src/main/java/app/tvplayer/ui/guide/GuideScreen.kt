@@ -1215,7 +1215,7 @@ private fun ReplayMark(tint: Color, modifier: Modifier = Modifier) {
 }
 
 /** Whether [millis] is midnight where the box is. */
-private fun isMidnight(millis: Long): Boolean {
+internal fun isMidnight(millis: Long): Boolean {
     val time = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault())
     return time.hour == 0 && time.minute == 0
 }

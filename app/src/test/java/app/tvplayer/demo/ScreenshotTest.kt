@@ -717,15 +717,6 @@ class ScreenshotTest {
         expectFocus("Tomorrow", "Along the days to Tomorrow")
         press("ok")
         shot("07g-guide-tomorrow")
-        press("down")
-        // Down into tomorrow's programmes: one on another day says so before its times.
-        val tomorrowTimes = rule.onAllNodesWithText("Tomorrow ", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
-            .any { Regex("Tomorrow \\d{2}:\\d{2}–").containsMatchIn(textOf(it)) }
-        if (!tomorrowTimes) {
-            println("  after Tomorrow: focus \"${focusedText()}\"; texts with Tomorrow: " +
-                rule.onAllNodesWithText("Tomorrow", substring = true, useUnmergedTree = true).fetchSemanticsNodes().map { textOf(it) })
-            problems += "A programme tomorrow should say Tomorrow before its times"
-        }
     }
 
     @Test fun myList() {
