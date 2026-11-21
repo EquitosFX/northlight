@@ -60,9 +60,31 @@ fun SportScreen(
     reminders: Set<String>,
     onWatch: (LineupChannel) -> Unit,
     onRemind: (SportEvent, LineupChannel) -> Unit,
+    /** Live scores (ESPN), for matches on now. */
+    scores: app.tvplayer.data.ScoresRepository? = null,
 ) {
     val colors = AppTheme.colors
     val events by produceState(initialValue = channels.cachedSport()) { value = channels.sport() }
+    // The live score of each match on now, read every half minute while any is on. Only for programmes on
+    // now whose match started while they're on: never a replay or catch-up.
+    var live by remember { mutableStateOf<Map<String, app.tvplayer.core.sport.LiveScore>>(emptyMap()) }
+    LaunchedEffect(events, scores) {
+        val repo = scores ?: return@LaunchedEffect
+        val all = events ?: return@LaunchedEffect
+        while (true) {
+            val time = System.currentTimeMillis()
+            val onNow = all.filter { time in it.start until it.stop }
+            val kinds = onNow.map { it.kind }.toSet().intersect(app.tvplayer.core.sport.LiveScores.feeds.keys)
+            if (kinds.isEmpty()) break
+            val found = runCatching { repo.scores(kinds) }.getOrDefault(emptyList())
+            live = onNow.mapNotNull { e ->
+                app.tvplayer.core.sport.LiveScores.forProgramme(e.title, e.start, e.stop, found)
+                    ?.takeIf { it.state != app.tvplayer.core.sport.LiveScore.State.BEFORE }
+                    ?.let { e.title + e.start to it }
+            }.toMap()
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
     MeasureOpen(name = "Sport", ready = events != null)
     var filter by remember { mutableStateOf<SportKind?>(null) }
     val first = remember { FocusRequester() }
@@ -142,6 +164,7 @@ fun SportScreen(
                             event = event,
                             now = now,
                             reminded = reminded,
+                            score = live[event.title + event.start],
                             onClick = {
                                 val channel = event.channels.first()
                                 if (now >= event.start) onWatch(channel) else onRemind(event, channel)
@@ -174,7 +197,13 @@ private fun FilterChip(text: String, selected: Boolean, modifier: Modifier = Mod
 }
 
 @Composable
-private fun EventCard(event: SportEvent, now: Long, reminded: Boolean, onClick: () -> Unit) {
+private fun EventCard(
+    event: SportEvent,
+    now: Long,
+    reminded: Boolean,
+    score: app.tvplayer.core.sport.LiveScore? = null,
+    onClick: () -> Unit,
+) {
     val colors = AppTheme.colors
     val onNow = now in event.start until event.stop
     FocusSurface(
@@ -196,11 +225,21 @@ private fun EventCard(event: SportEvent, now: Long, reminded: Boolean, onClick: 
                 if (reminded) Label(text = "REMINDER SET", style = AppType.caption.copy(letterSpacing = 1.sp), color = colors.accent)
             }
             Label(text = event.title, style = AppType.title.copy(fontSize = 16.sp, lineHeight = 20.sp), maxLines = 2)
-            Label(
-                text = if (onNow) "Until ${clockTime(event.stop)}" else "${clockTime(event.start)}–${clockTime(event.stop)}",
-                style = AppType.label,
-                color = if (onNow) colors.accent else colors.textDim,
-            )
+            if (score != null) {
+                // The live score: "HAR 2–1 KES · 63'", or "· FT" once it's over.
+                Label(
+                    text = score.line + (score.detail?.let { " · $it" } ?: ""),
+                    style = AppType.title.copy(fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                    color = if (score.state == app.tvplayer.core.sport.LiveScore.State.PLAYING) Color(0xFFFF5A5F) else colors.text,
+                    maxLines = 1,
+                )
+            } else {
+                Label(
+                    text = if (onNow) "Until ${clockTime(event.stop)}" else "${clockTime(event.start)}–${clockTime(event.stop)}",
+                    style = AppType.label,
+                    color = if (onNow) colors.accent else colors.textDim,
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 val channel = event.channels.first()
                 Logo(url = channel.logo, modifier = Modifier.size(width = 30.dp, height = 20.dp))

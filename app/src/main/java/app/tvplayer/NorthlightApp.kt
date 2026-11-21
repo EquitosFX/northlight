@@ -108,6 +108,8 @@ class AppContainer(context: Context) {
     val backup: BackupRepository by lazy { BackupRepository(appContext, database, settings, myList, playlists) }
 
     val channelCheck: ChannelCheckRepository by lazy { ChannelCheckRepository(appContext, database, http, scope) }
+    /** Live scores for Sport (ESPN's free feeds). */
+    val scores: app.tvplayer.data.ScoresRepository by lazy { app.tvplayer.data.ScoresRepository(http) }
 
     val homeRows: HomeScreenRows by lazy { HomeScreenRows(appContext) }
 

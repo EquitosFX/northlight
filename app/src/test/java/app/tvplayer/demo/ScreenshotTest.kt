@@ -757,6 +757,9 @@ class ScreenshotTest {
         press("ok")
         expectShown("Harbour City v Kestrel United", "Sport finds matches in the guide")
         expectHidden("Cricket: Second Test", "The Football filter shows only football")
+        // The live score from ESPN, on the match's card.
+        expectShown("HAR 2–1 KES", "A match on now shows its live score")
+        expectShown("20'", "The live score says how far into the match it is")
         shot("30-sport")
     }
 

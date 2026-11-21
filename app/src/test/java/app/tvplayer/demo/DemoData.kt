@@ -149,6 +149,20 @@ object DemoData {
                 """{"name":"Skyfall build 999","body":"Automatic build 999.","assets":[{"name":"northlight.apk","size":13915963,""" +
                     """"browser_download_url":"https://github.com/EquitosFX/northlight/releases/download/latest/northlight.apk"}]}""",
             )
+            // ESPN's scoreboard: the demo's Premier League match, 20 minutes in.
+            url.host == "site.api.espn.com" -> if (path.contains("/soccer/eng.1/")) {
+                val kickoff = java.time.Instant.ofEpochMilli(System.currentTimeMillis() - 20 * 60_000L)
+                    .truncatedTo(java.time.temporal.ChronoUnit.MINUTES).toString().replace(":00Z", "Z")
+                reply(
+                    200,
+                    """{"events":[{"id":"9","date":"$kickoff","status":{"displayClock":"20'","type":{"state":"in","shortDetail":"20'"}},""" +
+                        """"competitions":[{"competitors":[""" +
+                        """{"homeAway":"home","score":"2","team":{"displayName":"Harbour City","shortDisplayName":"Harbour City","abbreviation":"HAR"}},""" +
+                        """{"homeAway":"away","score":"1","team":{"displayName":"Kestrel United","shortDisplayName":"Kestrel Utd","abbreviation":"KES"}}]}]}]}""",
+                )
+            } else {
+                reply(200, """{"events":[]}""")
+            }
             url.host != "api.themoviedb.org" -> reply(404, "")
             // "Because you watched…": TMDB suggests three of the demo films.
             path.endsWith("/recommendations") -> reply(
