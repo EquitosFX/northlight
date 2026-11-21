@@ -1067,7 +1067,8 @@ class ScreenshotTest {
         press("back")
         press("down")
         println("  search result highlighted: \"${focusedText()}\"")
-        watchFrames("play the channel", "ok")
+        // Full screen, the video fills it (black here, with no real video), so that step isn't checked.
+        watchFrames("play the channel", "ok", check = false)
         for (step in listOf("Back to the guide", "Back to the top of the guide", "Back to the categories", "Back to the menu")) {
             watchFrames(step, "back")
         }
@@ -1121,8 +1122,11 @@ class ScreenshotTest {
         return dark * 100 / all.coerceAtLeast(1)
     }
 
-    /** Presses [key] and checks every frame for 0.8 s: none may be mostly black. */
-    private fun watchFrames(step: String, key: String) {
+    /**
+     * Presses [key] and checks every frame for 0.8 s: none may be mostly black (after the first, which
+     * can still show a full-screen video leaving).
+     */
+    private fun watchFrames(step: String, key: String, check: Boolean = true) {
         rule.mainClock.autoAdvance = false
         val shares = ArrayList<Int>()
         try {
@@ -1141,8 +1145,8 @@ class ScreenshotTest {
         }
         settle()
         println("  $step: black share per frame: ${shares.joinToString(" ")}; focus now \"${focusedText()}\"")
-        val worst = shares.maxOrNull() ?: 0
-        if (worst >= 60) problems += "$step: a frame was ${worst}% black"
+        val worst = shares.drop(1).maxOrNull() ?: 0
+        if (check && worst >= 60) problems += "$step: a frame was ${worst}% black"
     }
 
     @Test fun search() {
