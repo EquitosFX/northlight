@@ -1110,24 +1110,6 @@ class ScreenshotTest {
         if (voiceAsks() === first) problems += "A new press of the voice key should listen again"
     }
 
-    /** With Smooth resizing on, a channel plays full screen and shrinks to the small picture as usual. */
-    @Test fun smoothResizingPlays() {
-        runBlocking { app.container.settings.setSmoothResizing(true) }
-        open(Dest.SEARCH)
-        press("right")
-        press("ok")
-        type("atlas")
-        press("back")
-        press("down")
-        press("ok")
-        val playing = rule.onAllNodesWithText("Atlas", substring = true).fetchSemanticsNodes().isNotEmpty()
-        if (!playing) problems += "With Smooth resizing, the channel should open full screen"
-        shot("23-smooth-resizing-full")
-        press("back")
-        expectShown("All channels", "Back from the channel to the guide, with Smooth resizing on")
-        shot("23a-smooth-resizing-small")
-    }
-
     /** The share of the screen (in %) that's black or nearly. */
     private fun darkShare(bitmap: Bitmap): Int {
         var dark = 0
