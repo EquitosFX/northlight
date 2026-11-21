@@ -23,7 +23,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Walk through the app and draw the screens
-        run: ./gradlew :app:testDebugUnitTest --tests 'app.tvplayer.demo.ScreenshotTest' --stacktrace -i
+        run: ./gradlew :app:testDebugUnitTest --tests 'app.tvplayer.demo.ScreenshotTest' --tests 'app.tvplayer.data.GuideSkipTest' --stacktrace -i
 
       - uses: actions/upload-artifact@v4
         if: always()
