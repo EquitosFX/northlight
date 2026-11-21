@@ -88,6 +88,9 @@ class PlaylistRepository(
 ) {
     val playlists: Flow<List<PlaylistEntity>> = db.playlists().observeAll()
 
+    /** Every playlist, read now (call off the main thread). */
+    fun allBlocking(): List<PlaylistEntity> = db.playlists().getAllBlocking()
+
     /** A handful of live channels for the Home screen. */
     val firstLiveChannels: Flow<List<ChannelEntity>> = db.channels().observeFirstLive(60)
 

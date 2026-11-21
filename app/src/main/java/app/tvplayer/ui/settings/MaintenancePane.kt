@@ -34,10 +34,16 @@ import app.tvplayer.ui.theme.AppTheme
 import app.tvplayer.ui.theme.AppType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import app.tvplayer.core.live.LineupChannel
 
 /** Settings › Refresh and check: how often playlists refresh, and a check for channels that don't work. */
 @Composable
-fun MaintenancePane(settings: SettingsRepository, channels: ChannelsRepository, check: ChannelCheckRepository) {
+fun MaintenancePane(
+    settings: SettingsRepository,
+    channels: ChannelsRepository,
+    check: ChannelCheckRepository,
+    playlists: app.tvplayer.data.PlaylistRepository? = null,
+) {
     val colors = AppTheme.colors
     val scope = rememberCoroutineScope()
     val hours by settings.autoRefreshHours.collectAsStateWithLifecycle(initialValue = 24)
@@ -66,8 +72,9 @@ fun MaintenancePane(settings: SettingsRepository, channels: ChannelsRepository, 
 
         Label(text = "Check channels", style = AppType.headline, modifier = Modifier.padding(top = 16.dp))
         Label(
-            text = "Opens each channel for a moment to see whether it sends a picture, one at a time as most providers allow only one " +
-                "connection. Channels that don't respond get a red mark in the TV guide. Stop anything you're watching first.",
+            text = "Opens each channel for a moment to see whether it sends a picture: several at once when your account has " +
+                "connections free, otherwise one at a time. Channels that don't respond get a red mark in the TV guide. " +
+                "Stop anything you're watching first.",
             style = AppType.body,
             color = colors.textDim,
             maxLines = 3,
@@ -76,7 +83,9 @@ fun MaintenancePane(settings: SettingsRepository, channels: ChannelsRepository, 
         if (progress.running) {
             Label(
                 text = "Checking ${progress.label}: ${progress.checked} of ${progress.total}" +
-                    if (progress.failed.isNotEmpty()) " · ${progress.failed.size} not working" else "",
+                    (if (progress.failed.isNotEmpty()) " · ${progress.failed.size} not working" else "") +
+                    (if (progress.lanes > 1) " · ${progress.lanes} at a time" else "") +
+                    (progress.minutesLeft?.let { " · about $it min left" } ?: ""),
                 style = AppType.title,
                 color = colors.accent,
             )
@@ -86,20 +95,39 @@ fun MaintenancePane(settings: SettingsRepository, channels: ChannelsRepository, 
             }
             ActionButton("Stop") { check.stop() }
         } else {
+            // As many at once as the accounts have connections free (up to 4); one if they don't say.
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            fun start(label: String, list: List<LineupChannel>) {
+                scope.launch {
+                    val ids = list.map { it.playlistId }.toSet()
+                    val free = playlists?.let { repo ->
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            repo.allBlocking().filter { it.id in ids }.map { p ->
+                                val account = repo.subscription(p, maxAgeMillis = 0)
+                                val max = account?.maxConnections ?: return@map 1
+                                (max - (account.activeConnections ?: 0)).coerceAtLeast(1)
+                            }
+                        }
+                    }
+                    check.check(label, list, lanes = free?.minOrNull() ?: 1)
+                }
+            }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Every channel first, then favourites and each category.
+                if (all.isNotEmpty()) item { SettingChip("All channels (${all.size})", false) { start("all channels", all) } }
                 val favouriteChannels = all.filter { it.key in favourites }
                 if (favouriteChannels.isNotEmpty()) {
-                    item { SettingChip("Favourites (${favouriteChannels.size})", false) { check.check("Favourites", favouriteChannels) } }
+                    item { SettingChip("Favourites (${favouriteChannels.size})", false) { start("Favourites", favouriteChannels) } }
                 }
                 items(all.mapNotNull { it.group }.distinct()) { group ->
                     val inGroup = all.filter { it.group == group }
-                    SettingChip("$group (${inGroup.size})", false) { check.check(group, inGroup) }
+                    SettingChip("$group (${inGroup.size})", false) { start(group, inGroup) }
                 }
-                if (all.isNotEmpty()) item { SettingChip("All channels (${all.size})", false) { check.check("all channels", all) } }
             }
             if (progress.total > 0) {
                 Label(
-                    text = "Last check (${progress.label}): ${progress.total - progress.failed.size} of ${progress.total} working.",
+                    text = "Last check (${progress.label}): ${progress.total - progress.failed.size - progress.skipped} of ${progress.total} working." +
+                        if (progress.skipped > 0) " ${progress.skipped} couldn't be checked (the provider was busy) and keep their earlier mark." else "",
                     style = AppType.title,
                     color = colors.accent,
                 )

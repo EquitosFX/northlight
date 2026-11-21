@@ -1258,6 +1258,10 @@ class ScreenshotTest {
         press("down", "ok")
         expectShown("Keep playlists up to date", "Refresh and check pane")
         expectShown("Check channels", "Refresh and check pane offers the channel check")
+        // Every channel is the first choice, before favourites and each category.
+        val chips = rule.onAllNodesWithText("(", substring = true).fetchSemanticsNodes()
+            .map { textOf(it) }.filter { Regex(".+ \\(\\d+\\)$").matches(it) }
+        if (chips.firstOrNull()?.startsWith("All channels") != true) problems += "The channel check should offer All channels first, but the first choice was ${chips.firstOrNull()}"
         shot("22c-settings-refresh-check")
         press("down", "ok")
         expectShown("Save a backup now", "Backup pane")

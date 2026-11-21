@@ -115,7 +115,7 @@ fun SettingsScreen(
                 SettingsSection.FILM_INFO -> TmdbPane(settings = settings, metadata = metadata)
                 SettingsSection.APPEARANCE -> AppearancePane(themeId = themeId, onThemeChange = onThemeChange, settings = settings)
                 SettingsSection.PLAYER -> PlayerPane(settings = settings, subtitles = subtitles)
-                SettingsSection.MAINTENANCE -> if (channels != null && check != null) MaintenancePane(settings, channels, check)
+                SettingsSection.MAINTENANCE -> if (channels != null && check != null) MaintenancePane(settings, channels, check, playlists)
                 SettingsSection.BACKUP -> backup?.let { BackupPane(it) }
                 SettingsSection.UPDATES -> UpdatesPane(updates = updates)
             }
