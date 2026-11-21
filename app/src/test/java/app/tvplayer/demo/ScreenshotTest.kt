@@ -1055,6 +1055,26 @@ class ScreenshotTest {
         }
     }
 
+    /**
+     * The steps that flashed the Shield's screen black: a channel opened from Search, then Back to the
+     * guide, its top, its categories, the menu, and OK on Search. Every frame of each step is checked.
+     */
+    @Test fun searchChannelBackNoBlackFlashes() {
+        open(Dest.SEARCH)
+        press("right")
+        press("ok")
+        type("atlas")
+        press("back")
+        press("down")
+        println("  search result highlighted: \"${focusedText()}\"")
+        watchFrames("play the channel", "ok")
+        for (step in listOf("Back to the guide", "Back to the top of the guide", "Back to the categories", "Back to the menu")) {
+            watchFrames(step, "back")
+        }
+        moveTo("Search", "down", max = 12, step = "Down the menu to Search")
+        watchFrames("OK on Search", "ok")
+    }
+
     /** The share of the screen (in %) that's black or nearly. */
     private fun darkShare(bitmap: Bitmap): Int {
         var dark = 0
