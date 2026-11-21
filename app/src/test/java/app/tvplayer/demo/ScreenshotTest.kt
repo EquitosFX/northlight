@@ -1075,6 +1075,40 @@ class ScreenshotTest {
         watchFrames("OK on Search", "ok")
     }
 
+    /**
+     * The remote's voice key listens once. Coming back to Search later (from the menu, or after a channel
+     * opened from Search) mustn't listen again: on the Shield that opened Google's voice screen each
+     * time, flashing the screen black and restarting the channel.
+     */
+    @Test fun voiceKeyListensOnce() {
+        open(Dest.HOME)
+        fun voiceAsks() = shadowOf(rule.activity).lastRequestedPermission
+        val before = voiceAsks()
+        rule.runOnUiThread {
+            sendKey(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_SEARCH))
+            sendKey(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_SEARCH))
+        }
+        settle()
+        val first = voiceAsks()
+        if (first == null || first === before) problems += "The remote's voice key should start listening (asking for the microphone here)"
+        // Away to the guide and back to Search through the menu.
+        press("back")
+        moveTo("TV guide", "up", max = 12, step = "Up the menu to the TV guide")
+        press("ok")
+        press("back")
+        moveTo("Search", "down", max = 12, step = "Down the menu to Search")
+        press("ok")
+        expectShown("Search", "Back in Search")
+        if (voiceAsks() !== first) problems += "Coming back to Search listened again for the same press of the voice key"
+        // A new press listens again.
+        rule.runOnUiThread {
+            sendKey(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_SEARCH))
+            sendKey(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_SEARCH))
+        }
+        settle()
+        if (voiceAsks() === first) problems += "A new press of the voice key should listen again"
+    }
+
     /** The share of the screen (in %) that's black or nearly. */
     private fun darkShare(bitmap: Bitmap): Int {
         var dark = 0

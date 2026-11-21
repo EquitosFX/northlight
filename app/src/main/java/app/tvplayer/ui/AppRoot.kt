@@ -150,12 +150,23 @@ fun AppRoot(
     DisposableEffect(controller) { onDispose { controller.release() } }
 
     // Let go of the stream when the app goes into the background, and pick it up again on return.
+    // Google's voice screen is the exception: it covers Skyfall for a few seconds, and stopping and
+    // restarting the channel for it flashed the screen black and left things slow while it restarted.
+    // The channel carries on (quietly, so it doesn't drown out the voice) unless the voice screen is
+    // left open for half a minute.
     val lifecycleOwner = LocalLifecycleOwner.current
+    val voiceScreen = remember { booleanArrayOf(false) }
+    val voiceVolume = remember { floatArrayOf(1f) }
+    val handler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     DisposableEffect(lifecycleOwner, controller) {
+        val stopLater = Runnable { if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) controller.onStop() }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> controller.onStop()
-                Lifecycle.Event.ON_START -> controller.onStart()
+                Lifecycle.Event.ON_STOP -> if (voiceScreen[0]) handler.postDelayed(stopLater, 30_000) else controller.onStop()
+                Lifecycle.Event.ON_START -> {
+                    handler.removeCallbacks(stopLater)
+                    controller.onStart()
+                }
                 else -> Unit
             }
         }
@@ -858,6 +869,15 @@ fun AppRoot(
                         metadata = container.metadata,
                         voiceToken = voiceToken,
                         settings = container.settings,
+                        onVoiceScreen = { open ->
+                            if (open && !voiceScreen[0]) {
+                                voiceVolume[0] = controller.player.volume
+                                controller.player.volume = 0f
+                            } else if (!open && voiceScreen[0]) {
+                                controller.player.volume = voiceVolume[0]
+                            }
+                            voiceScreen[0] = open
+                        },
                         memory = searchMemory,
                         onPerson = { chosen ->
                             holdFocus()

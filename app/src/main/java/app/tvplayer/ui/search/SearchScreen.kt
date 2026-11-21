@@ -60,6 +60,8 @@ fun SearchScreen(
     onPerson: (TmdbPerson) -> Unit,
     voiceToken: Int = 0,
     settings: app.tvplayer.data.SettingsRepository? = null,
+    /** Google's voice screen opened (true) or closed: what's playing carries on, quietly, meanwhile. */
+    onVoiceScreen: (Boolean) -> Unit = {},
     /** The search kept while a result is open, so coming back finds it as it was. */
     memory: SearchMemory = remember { SearchMemory() },
 ) {
@@ -98,6 +100,7 @@ fun SearchScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val useGoogle by (settings?.voiceGoogle ?: kotlinx.coroutines.flow.flowOf(true)).collectAsStateWithLifecycle(initialValue = true)
     val googleVoice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        onVoiceScreen(false)
         val guesses = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS).orEmpty()
         if (result.resultCode == android.app.Activity.RESULT_OK && guesses.isNotEmpty()) heard(guesses)
     }
@@ -105,7 +108,10 @@ fun SearchScreen(
         if (voice.listening) {
             voice.stop()
         } else if (useGoogle && recognitionIntent(context).resolveActivity(context.packageManager) != null &&
-            runCatching { googleVoice.launch(recognitionIntent(context)) }.isSuccess
+            runCatching {
+                onVoiceScreen(true)
+                googleVoice.launch(recognitionIntent(context))
+            }.onFailure { onVoiceScreen(false) }.isSuccess
         ) {
             voice.problem = null
         } else if (voice.hasPermission()) {
@@ -114,7 +120,14 @@ fun SearchScreen(
             askMic.launch(android.Manifest.permission.RECORD_AUDIO)
         }
     }
-    LaunchedEffect(voiceToken) { if (voiceToken > 0) listen() }
+    // A new press of the remote's voice key listens; coming back to Search (or Search being drawn for a
+    // moment on the way somewhere else) doesn't listen again for the same press.
+    LaunchedEffect(voiceToken) {
+        if (voiceToken > memory.voiceHandled) {
+            memory.voiceHandled = voiceToken
+            listen()
+        }
+    }
 
     val text = query.trim()
     val results by produceState<List<VodRow>?>(initialValue = emptyList(), text) {
@@ -295,6 +308,8 @@ fun SearchScreen(
 /** The search in progress, kept while a result is open (the search screen itself is rebuilt each time). */
 class SearchMemory {
     var query: String = ""
+    /** The last press of the remote's voice key already listened for, so coming back doesn't listen again. */
+    var voiceHandled: Int = 0
     /** The result opened, to highlight again on coming back. */
     var opened: String? = null
 }
