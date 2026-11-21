@@ -132,7 +132,7 @@ fun PlayerHost(
             },
     ) {
         // A new view when the setting changes: the kind of surface is fixed once a view is made.
-        key(smoothResizing) { AndroidView(
+        androidx.compose.runtime.key(smoothResizing) { AndroidView(
             factory = { context ->
                 val made = if (smoothResizing) {
                     android.view.LayoutInflater.from(context).inflate(app.tvplayer.R.layout.player_view_texture, null) as PlayerView
