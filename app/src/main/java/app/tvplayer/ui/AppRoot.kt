@@ -150,23 +150,12 @@ fun AppRoot(
     DisposableEffect(controller) { onDispose { controller.release() } }
 
     // Let go of the stream when the app goes into the background, and pick it up again on return.
-    // Google's voice screen is the exception: it covers Skyfall for a few seconds, and stopping and
-    // restarting the channel for it flashed the screen black and left things slow while it restarted.
-    // The channel carries on (quietly, so it doesn't drown out the voice) unless the voice screen is
-    // left open for half a minute.
     val lifecycleOwner = LocalLifecycleOwner.current
-    val voiceScreen = remember { booleanArrayOf(false) }
-    val voiceVolume = remember { floatArrayOf(1f) }
-    val handler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     DisposableEffect(lifecycleOwner, controller) {
-        val stopLater = Runnable { if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) controller.onStop() }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> if (voiceScreen[0]) handler.postDelayed(stopLater, 30_000) else controller.onStop()
-                Lifecycle.Event.ON_START -> {
-                    handler.removeCallbacks(stopLater)
-                    controller.onStart()
-                }
+                Lifecycle.Event.ON_STOP -> controller.onStop()
+                Lifecycle.Event.ON_START -> controller.onStart()
                 else -> Unit
             }
         }
@@ -228,6 +217,19 @@ fun AppRoot(
     var voiceToken by remember { mutableIntStateOf(0) }
     // The search in progress, kept while one of its results is open.
     val searchMemory = remember { app.tvplayer.ui.search.SearchMemory() }
+    // Search starts blank each time it's opened. Only coming back from a film or series opened from its
+    // results keeps the search as it was (with that result highlighted).
+    val lastDest = remember { arrayOfNulls<Dest>(1) }
+    if (lastDest[0] != dest) {
+        val backFromResult = (lastDest[0] == Dest.FILMS || lastDest[0] == Dest.SERIES) && searchMemory.opened != null
+        if (dest == Dest.SEARCH && !backFromResult) {
+            searchMemory.query = ""
+            searchMemory.opened = null
+        } else if (dest != Dest.SEARCH && dest != Dest.FILMS && dest != Dest.SERIES) {
+            searchMemory.opened = null
+        }
+        lastDest[0] = dest
+    }
     // The guide's category, kept while Skyfall is open.
 
     fun play(channelId: Long?) {
@@ -868,16 +870,6 @@ fun AppRoot(
                         channels = container.channels,
                         metadata = container.metadata,
                         voiceToken = voiceToken,
-                        settings = container.settings,
-                        onVoiceScreen = { open ->
-                            if (open && !voiceScreen[0]) {
-                                voiceVolume[0] = controller.player.volume
-                                controller.player.volume = 0f
-                            } else if (!open && voiceScreen[0]) {
-                                controller.player.volume = voiceVolume[0]
-                            }
-                            voiceScreen[0] = open
-                        },
                         memory = searchMemory,
                         onPerson = { chosen ->
                             holdFocus()

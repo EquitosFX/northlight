@@ -59,9 +59,6 @@ fun SearchScreen(
     onOpen: (VodRow) -> Unit,
     onPerson: (TmdbPerson) -> Unit,
     voiceToken: Int = 0,
-    settings: app.tvplayer.data.SettingsRepository? = null,
-    /** Google's voice screen opened (true) or closed: what's playing carries on, quietly, meanwhile. */
-    onVoiceScreen: (Boolean) -> Unit = {},
     /** The search kept while a result is open, so coming back finds it as it was. */
     memory: SearchMemory = remember { SearchMemory() },
 ) {
@@ -96,24 +93,9 @@ fun SearchScreen(
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) voice.start() else voice.problem = "Allow the microphone to search by voice."
     }
-    // Or Google's own voice screen, as Google TV's search and YouTube use (Settings › Appearance).
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val useGoogle by (settings?.voiceGoogle ?: kotlinx.coroutines.flow.flowOf(true)).collectAsStateWithLifecycle(initialValue = true)
-    val googleVoice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        onVoiceScreen(false)
-        val guesses = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS).orEmpty()
-        if (result.resultCode == android.app.Activity.RESULT_OK && guesses.isNotEmpty()) heard(guesses)
-    }
     fun listen() {
         if (voice.listening) {
             voice.stop()
-        } else if (useGoogle && recognitionIntent(context).resolveActivity(context.packageManager) != null &&
-            runCatching {
-                onVoiceScreen(true)
-                googleVoice.launch(recognitionIntent(context))
-            }.onFailure { onVoiceScreen(false) }.isSuccess
-        ) {
-            voice.problem = null
         } else if (voice.hasPermission()) {
             voice.start()
         } else {

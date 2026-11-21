@@ -1197,6 +1197,17 @@ class ScreenshotTest {
         expectFocus("priya", "Down from the search box to the most recent search")
         press("ok")
         expectShown("Priya Desai", "OK on an earlier search searches again")
+        // Leaving Search and opening it again from the menu starts it blank (the earlier searches stay listed).
+        press("back")
+        moveTo("TV guide", "up", max = 12, step = "Up the menu to the TV guide")
+        press("ok")
+        press("back")
+        moveTo("Search", "down", max = 12, step = "Down the menu to Search")
+        press("ok")
+        expectHidden("Priya Desai", "Opening Search again starts with no results")
+        expectShown("Recent searches", "Opening Search again lists the earlier searches")
+        expectHidden("Films and series", "Opening Search again starts with an empty box")
+        shot("19b-search-fresh")
     }
 
     /** The Speed report shows how long the guide's parts took, once the guide has been opened. */

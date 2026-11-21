@@ -24,7 +24,7 @@ class SettingsRepository(private val context: Context) {
     private val catchupOffsetKey = intPreferencesKey("catchup_offset_minutes")
     private val autoRefreshKey = intPreferencesKey("auto_refresh_hours")
     private val backupPlayerKey = androidx.datastore.preferences.core.booleanPreferencesKey("backup_player")
-    private val voiceGoogleKey = androidx.datastore.preferences.core.booleanPreferencesKey("voice_google")
+
     private val audioDelayKey = intPreferencesKey("audio_delay_ms")
     private val guideTextKey = intPreferencesKey("guide_text_size")
     private val guideLogosKey = androidx.datastore.preferences.core.booleanPreferencesKey("guide_logos")
@@ -68,13 +68,6 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setBackupPlayer(on: Boolean) {
         context.settingsStore.edit { prefs -> prefs[backupPlayerKey] = on }
-    }
-
-    /** Voice search through Google's voice screen (true) or listening inside Skyfall (false). */
-    val voiceGoogle: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[voiceGoogleKey] ?: true }
-
-    suspend fun setVoiceGoogle(on: Boolean) {
-        context.settingsStore.edit { prefs -> prefs[voiceGoogleKey] = on }
     }
 
     /** How often playlists are refreshed by themselves, in hours (0: never). */

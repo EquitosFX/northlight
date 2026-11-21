@@ -89,19 +89,6 @@ private fun GuideLookOptions(settings: app.tvplayer.data.SettingsRepository) {
             OptionChip("Show", details) { scope.launch { settings.setGuideDetails(true) } }
             OptionChip("Hide", !details) { scope.launch { settings.setGuideDetails(false) } }
         }
-        val google by settings.voiceGoogle.collectAsStateWithLifecycle(initialValue = true)
-        Label(text = "Voice search", style = AppType.headline, modifier = Modifier.padding(top = 10.dp))
-        Label(
-            text = "Google's voice screen is the one Google TV's own search and YouTube use. Skyfall's own " +
-                "shows the words in the search box as you speak.",
-            style = AppType.body,
-            color = colors.textDim,
-            maxLines = 2,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OptionChip("Google's voice screen", google) { scope.launch { settings.setVoiceGoogle(true) } }
-            OptionChip("Skyfall's own", !google) { scope.launch { settings.setVoiceGoogle(false) } }
-        }
     }
 }
 
