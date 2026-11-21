@@ -55,6 +55,7 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
     val language by settings.subtitleLanguage.collectAsStateWithLifecycle(initialValue = "en")
     val offset by settings.catchupOffsetMinutes.collectAsStateWithLifecycle(initialValue = 0)
     val backupPlayer by settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
+    val smoothResizing by settings.smoothResizing.collectAsStateWithLifecycle(initialValue = false)
     val audioDelay by settings.audioDelayMs.collectAsStateWithLifecycle(initialValue = 0)
     val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = false)
     val look by settings.subtitleLook.collectAsStateWithLifecycle(initialValue = SubtitleLook())
@@ -99,6 +100,19 @@ fun PlayerPane(settings: SettingsRepository, subtitles: SubtitlesRepository) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(label = "Use when needed", selected = backupPlayer) { scope.launch { settings.setBackupPlayer(true) } }
             Chip(label = "Off", selected = !backupPlayer) { scope.launch { settings.setBackupPlayer(false) } }
+        }
+
+        Label(text = "Picture", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))
+        Label(
+            text = "If the screen flashes black when the picture shrinks, grows or slides (often with 4K channels), " +
+                "try Smooth resizing. It draws the video as part of the screen: no flashes, but no HDR, and more work for the box.",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 3,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(label = "Standard", selected = !smoothResizing) { scope.launch { settings.setSmoothResizing(false) } }
+            Chip(label = "Smooth resizing", selected = smoothResizing) { scope.launch { settings.setSmoothResizing(true) } }
         }
 
         Label(text = "Buffer", style = AppType.headline, modifier = Modifier.padding(top = 14.dp))

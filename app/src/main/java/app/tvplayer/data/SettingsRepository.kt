@@ -24,6 +24,7 @@ class SettingsRepository(private val context: Context) {
     private val catchupOffsetKey = intPreferencesKey("catchup_offset_minutes")
     private val autoRefreshKey = intPreferencesKey("auto_refresh_hours")
     private val backupPlayerKey = androidx.datastore.preferences.core.booleanPreferencesKey("backup_player")
+    private val smoothResizingKey = androidx.datastore.preferences.core.booleanPreferencesKey("smooth_resizing")
 
     private val audioDelayKey = intPreferencesKey("audio_delay_ms")
     private val guideTextKey = intPreferencesKey("guide_text_size")
@@ -65,6 +66,16 @@ class SettingsRepository(private val context: Context) {
 
     /** Whether the backup player takes over when the normal one can't play a stream. */
     val backupPlayer: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[backupPlayerKey] ?: true }
+
+    /**
+     * Draw the video as part of the screen (true) rather than on its own layer (false, the usual): no
+     * black flashes when the picture changes size or moves, but no HDR, and more work for the box.
+     */
+    val smoothResizing: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[smoothResizingKey] ?: false }
+
+    suspend fun setSmoothResizing(on: Boolean) {
+        context.settingsStore.edit { prefs -> prefs[smoothResizingKey] = on }
+    }
 
     suspend fun setBackupPlayer(on: Boolean) {
         context.settingsStore.edit { prefs -> prefs[backupPlayerKey] = on }

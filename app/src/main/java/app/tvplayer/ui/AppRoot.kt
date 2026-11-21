@@ -256,6 +256,7 @@ fun AppRoot(
     val reminderIds = remember(reminders) { reminders.map { it.id }.toSet() }
     val deadChannels by container.channelCheck.dead.collectAsStateWithLifecycle()
     val backupPlayerOn by container.settings.backupPlayer.collectAsStateWithLifecycle(initialValue = true)
+    val smoothResizingOn by container.settings.smoothResizing.collectAsStateWithLifecycle(initialValue = false)
     val matchFrameRateOn by container.settings.matchFrameRate.collectAsStateWithLifecycle(initialValue = false)
     val subtitleLook by container.settings.subtitleLook.collectAsStateWithLifecycle(initialValue = SubtitleLook())
     fun setReminder(reminder: Reminder) {
@@ -1005,6 +1006,7 @@ fun AppRoot(
                 metadata = container.metadata,
                 intros = container.intros,
                 backupPlayer = backupPlayerOn,
+                smoothResizing = smoothResizingOn,
                 matchFrameRate = matchFrameRateOn,
                 subtitleLook = subtitleLook,
                 mode = mode,

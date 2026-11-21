@@ -99,6 +99,8 @@ fun PlayerHost(
     modifier: Modifier = Modifier,
     /** Switch to the backup player by itself when the normal one can't play a stream. */
     backupPlayer: Boolean = true,
+    /** Draw the video as part of the screen (Settings › Player › Picture), not on its own layer. */
+    smoothResizing: Boolean = false,
     /** Switch the TV to a refresh rate that suits the video. */
     matchFrameRate: Boolean = false,
     subtitleLook: SubtitleLook = SubtitleLook(),
@@ -129,10 +131,19 @@ fun PlayerHost(
                 }
             },
     ) {
-        AndroidView(
+        // A new view when the setting changes: the kind of surface is fixed once a view is made.
+        key(smoothResizing) { AndroidView(
             factory = { context ->
-                PlayerView(context).apply {
+                val made = if (smoothResizing) {
+                    android.view.LayoutInflater.from(context).inflate(app.tvplayer.R.layout.player_view_texture, null) as PlayerView
+                } else {
+                    PlayerView(context)
+                }
+                made.apply {
                     useController = false
+                    // Android 14 (the Google TV Streamer) can show the video a frame out of step with the
+                    // rest of the screen when it changes size; Media3's fix for that, for the usual layer.
+                    if (!smoothResizing) setEnableComposeSurfaceSyncWorkaround(true)
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
                     // Hold the last picture while the next channel starts, instead of flashing black.
                     setKeepContentOnPlayerReset(true)
@@ -158,7 +169,7 @@ fun PlayerHost(
                 view.player = null
             },
             modifier = Modifier.fillMaxSize(),
-        )
+        ) }
 
         if (mode == PlayerMode.FULL) SubtitleOverlay(cues = controller.cues, look = subtitleLook)
         if (mode == PlayerMode.FULL && controller.vod != null) {

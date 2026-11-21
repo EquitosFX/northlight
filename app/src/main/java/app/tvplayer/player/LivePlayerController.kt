@@ -1314,6 +1314,12 @@ class LivePlayerController(
             }
             val fps = video.frameRate.takeIf { it > 0f } ?: frameRate
             if (fps != null) parts.add("${fps.roundToInt()}fps")
+            // HDR, so it's clear when the TV is switching into it.
+            when {
+                video.sampleMimeType == androidx.media3.common.MimeTypes.VIDEO_DOLBY_VISION -> parts.add("Dolby Vision")
+                video.colorInfo?.colorTransfer == C.COLOR_TRANSFER_ST2084 -> parts.add("HDR10")
+                video.colorInfo?.colorTransfer == C.COLOR_TRANSFER_HLG -> parts.add("HLG")
+            }
         }
         player.audioFormat?.let { audio ->
             audioName(audio.sampleMimeType)?.let(parts::add)
