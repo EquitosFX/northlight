@@ -80,6 +80,11 @@ fun MaintenancePane(
             maxLines = 3,
         )
         val all = lineup?.channels.orEmpty()
+        val sportEvents by produceState(initialValue = channels.cachedSport()) { value = runCatching { channels.sport() }.getOrNull() }
+        val sportChannels = androidx.compose.runtime.remember(all, sportEvents) {
+            val onSportTab = sportEvents.orEmpty().flatMap { event -> event.channels.map { it.key } }.toSet()
+            all.filter { it.key in onSportTab || it.group?.contains("sport", ignoreCase = true) == true }
+        }
         if (progress.running) {
             Label(
                 text = "Checking ${progress.label}: ${progress.checked} of ${progress.total}" +
@@ -113,8 +118,13 @@ fun MaintenancePane(
                 }
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Every channel first, then favourites and each category.
+                // Every channel first, then the sport channels, favourites and each category.
                 if (all.isNotEmpty()) item { SettingChip("All channels (${all.size})", false) { start("all channels", all) } }
+                // Sport channels together: every category with "sport" in its name, and every channel
+                // showing something on the Sport tab. Ones that don't work drop off the Sport tab.
+                if (sportChannels.isNotEmpty()) {
+                    item { SettingChip("Sport channels (${sportChannels.size})", false) { start("sport channels", sportChannels) } }
+                }
                 val favouriteChannels = all.filter { it.key in favourites }
                 if (favouriteChannels.isNotEmpty()) {
                     item { SettingChip("Favourites (${favouriteChannels.size})", false) { start("Favourites", favouriteChannels) } }

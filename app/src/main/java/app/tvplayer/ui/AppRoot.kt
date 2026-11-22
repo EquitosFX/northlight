@@ -840,6 +840,7 @@ fun AppRoot(
                     Dest.SPORT -> TopInset {
                         SportScreen(
                             scores = container.scores,
+                            dead = deadChannels,
                             channels = container.channels,
                             reminders = reminderIds,
                             onWatch = { channel -> play(channel.variantIds.first()) },

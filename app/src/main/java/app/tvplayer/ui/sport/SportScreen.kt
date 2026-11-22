@@ -62,9 +62,18 @@ fun SportScreen(
     onRemind: (SportEvent, LineupChannel) -> Unit,
     /** Live scores (ESPN), for matches on now. */
     scores: app.tvplayer.data.ScoresRepository? = null,
+    /** Channels the channel check found not working: left off the Sport tab (they stay in the guide). */
+    dead: Set<String> = emptySet(),
 ) {
     val colors = AppTheme.colors
-    val events by produceState(initialValue = channels.cachedSport()) { value = channels.sport() }
+    val found by produceState(initialValue = channels.cachedSport()) { value = channels.sport() }
+    val events = remember(found, dead) {
+        found?.mapNotNull { event ->
+            val working = event.channels.filter { it.key !in dead }
+            if (working.isEmpty()) null else event.copy(channels = working)
+        }
+    }
+    val hiddenChannels = remember(found, dead) { found.orEmpty().flatMap { e -> e.channels.map { it.key } }.toSet().count { it in dead } }
     // The live score of each match on now, read every half minute while any is on. Only for programmes on
     // now whose match started while they're on: never a replay or catch-up.
     var live by remember { mutableStateOf<Map<String, app.tvplayer.core.sport.LiveScore>>(emptyMap()) }
@@ -119,10 +128,16 @@ fun SportScreen(
         item { Label(text = "Sport", style = AppType.display.copy(fontSize = 32.sp, lineHeight = 38.sp)) }
         item {
             Label(
-                text = "Live and upcoming sport from your TV guide. OK on something live to watch it, or on something to come to set a reminder.",
+                text = "Live and upcoming sport from your TV guide. OK on something live to watch it, or on something to come to set a reminder." +
+                    if (hiddenChannels > 0) {
+                        " $hiddenChannels channel${if (hiddenChannels == 1) "" else "s"} the channel check found not working " +
+                            "${if (hiddenChannels == 1) "is" else "are"} left out (still in the TV guide)."
+                    } else {
+                        ""
+                    },
                 style = AppType.body,
                 color = colors.textDim,
-                maxLines = 2,
+                maxLines = 3,
             )
         }
         if (list == null) {

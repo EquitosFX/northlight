@@ -763,6 +763,17 @@ class ScreenshotTest {
         shot("30-sport")
     }
 
+    /** A channel the channel check found not working is left off the Sport tab (it stays in the guide). */
+    @Test fun sportLeavesOutChannelsNotWorking() {
+        val sport1 = runBlocking { app.container.channels.lineup() }.channels.first { it.name.startsWith("Atlas Sport 1") }
+        app.getSharedPreferences("channel_check", android.content.Context.MODE_PRIVATE).edit()
+            .putStringSet("dead", setOf(sport1.key)).commit()
+        open(Dest.SPORT)
+        expectHidden("Harbour City v Kestrel United", "A match only on a channel that isn't working is left off Sport")
+        expectShown("left out", "Sport says channels that aren't working are left out")
+        shot("30b-sport-not-working-left-out")
+    }
+
     @Test fun catchup() {
         open(Dest.GUIDE)
         press("right", "ok")
@@ -1263,6 +1274,7 @@ class ScreenshotTest {
         press("down", "ok")
         expectShown("Keep playlists up to date", "Refresh and check pane")
         expectShown("Check channels", "Refresh and check pane offers the channel check")
+        expectShown("Sport channels (", "The channel check offers every sport channel together")
         // Every channel is the first choice, before favourites and each category.
         val chips = rule.onAllNodesWithText("(", substring = true).fetchSemanticsNodes()
             .map { textOf(it) }.filter { Regex(".+ \\(\\d+\\)$").matches(it) }
