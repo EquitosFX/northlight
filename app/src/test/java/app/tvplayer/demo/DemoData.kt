@@ -25,6 +25,9 @@ import okhttp3.ResponseBody.Companion.toResponseBody
  * Nothing here is a real channel or title.
  */
 object DemoData {
+    /** Whether GitHub pretends to have a newer build (only where a test wants an update offered). */
+    @Volatile var offerUpdate = false
+
 
     private const val MINUTE = 60_000L
     private const val HALF_HOUR = 30 * MINUTE
@@ -144,11 +147,14 @@ object DemoData {
                 reply(404, "")
             }
             // Settings › Updates: pretend GitHub has a newer build.
-            url.host == "api.github.com" && path.endsWith("/releases/latest") -> reply(
-                200,
-                """{"name":"Skyfall build 999","body":"Automatic build 999.","assets":[{"name":"northlight.apk","size":13915963,""" +
-                    """"browser_download_url":"https://github.com/EquitosFX/northlight/releases/download/latest/northlight.apk"}]}""",
-            )
+            url.host == "api.github.com" && path.endsWith("/releases/latest") -> {
+                val build = if (offerUpdate) 999 else 1
+                reply(
+                    200,
+                    """{"name":"Skyfall build $build","body":"Automatic build $build.","assets":[{"name":"northlight.apk","size":13915963,""" +
+                        """"browser_download_url":"https://github.com/EquitosFX/northlight/releases/download/latest/northlight.apk"}]}""",
+                )
+            }
             // ESPN's scoreboard: the demo's Premier League match, 20 minutes in.
             url.host == "site.api.espn.com" -> if (path.contains("/soccer/eng.1/")) {
                 val kickoff = java.time.Instant.ofEpochMilli(System.currentTimeMillis() - 20 * 60_000L)

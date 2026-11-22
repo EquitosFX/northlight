@@ -52,6 +52,8 @@ enum class SettingsSection(val label: String) {
 /** Settings: a list of sections on the left, the chosen section on the right. */
 @Composable
 fun SettingsScreen(
+    /** The section to open on (Updates, when an update was chosen from the offer on opening). */
+    startSection: SettingsSection? = null,
     themeId: ThemeId,
     onThemeChange: (ThemeId) -> Unit,
     playlists: PlaylistRepository,
@@ -64,7 +66,7 @@ fun SettingsScreen(
     check: ChannelCheckRepository? = null,
 ) {
     val colors = AppTheme.colors
-    var section by rememberSaveable { mutableStateOf(SettingsSection.PLAYLISTS) }
+    var section by rememberSaveable { mutableStateOf(startSection ?: SettingsSection.PLAYLISTS) }
     val firstFocus = remember { FocusRequester() }
     EntryPoint(firstFocus)
     val autoFocus = LocalAutoFocus.current

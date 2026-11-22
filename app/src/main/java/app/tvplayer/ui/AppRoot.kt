@@ -359,7 +359,14 @@ fun AppRoot(
     val contentFocus = remember { FocusRequester() }
     // Skyfall checks GitHub for a newer build once a day; a dot on Settings says one is ready.
     val updateReady by container.updates.available.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { container.updates.checkDaily() }
+    // Check for a newer build each time Skyfall opens (a few seconds in, once it's settled).
+    LaunchedEffect(Unit) {
+        delay(4_000)
+        container.updates.checkOnOpening()
+    }
+    // A newer build found: offered once each time Skyfall opens, until it's installed.
+    var updateOffered by remember { mutableStateOf<Int?>(null) }
+    var settingsStart by remember { mutableStateOf<app.tvplayer.ui.settings.SettingsSection?>(null) }
     val entryFocus = remember { EntryFocus() }
     val autoFocusAllowed = remember { { !(menuFocused || pictureFocused || startupPending) } }
 
@@ -924,6 +931,7 @@ fun AppRoot(
                     }
                     Dest.SETTINGS -> TopInset {
                         SettingsScreen(
+                            startSection = settingsStart.also { settingsStart = null },
                             themeId = themeId,
                             onThemeChange = onThemeChange,
                             playlists = container.playlists,
@@ -972,6 +980,22 @@ fun AppRoot(
                 },
                 onDismiss = { dueReminder = null },
             )
+        }
+
+        // A newer build: offered once, after any reminder or crash report, and not over full-screen TV.
+        updateReady?.let { update ->
+            if (updateOffered != update.build && dueReminder == null && crash == null && mode != PlayerMode.FULL) {
+                UpdatePopup(
+                    build = update.build,
+                    onUpdate = {
+                        updateOffered = update.build
+                        settingsStart = app.tvplayer.ui.settings.SettingsSection.UPDATES
+                        dest = Dest.SETTINGS
+                        container.updates.downloadAndInstall()
+                    },
+                    onLater = { updateOffered = update.build },
+                )
+            }
         }
 
         crash?.let { text ->
@@ -1102,6 +1126,54 @@ private fun CrashReport(text: String, onDismiss: () -> Unit) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
             runCatching { okFocus.requestFocus() }
+        }
+    }
+}
+
+/** "Build N is ready": offered when Skyfall opens and finds a newer build. */
+@Composable
+private fun UpdatePopup(build: Int, onUpdate: () -> Unit, onLater: () -> Unit) {
+    val colors = AppTheme.colors
+    val update = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onLater) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .width(520.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(colors.groundMid)
+                .padding(24.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+        ) {
+            Label(text = "UPDATE", style = AppType.label, color = colors.accent)
+            Label(text = "Skyfall build $build is ready", style = AppType.headline)
+            Label(
+                text = "Update now downloads and installs it (a minute or so); Skyfall opens again afterwards. " +
+                    "Later leaves it in Settings › Updates.",
+                style = AppType.body,
+                color = colors.textDim,
+                maxLines = 3,
+            )
+            androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                app.tvplayer.ui.components.FocusSurface(
+                    onClick = onUpdate,
+                    modifier = Modifier.height(42.dp).focusRequester(update),
+                    focusedContainer = colors.accent,
+                ) { focused ->
+                    Label(
+                        text = "Update now",
+                        style = AppType.title,
+                        color = if (focused) colors.onAccent else colors.text,
+                        modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp),
+                    )
+                }
+                app.tvplayer.ui.components.FocusSurface(onClick = onLater, modifier = Modifier.height(42.dp)) {
+                    Label(text = "Later", style = AppType.title, modifier = Modifier.align(Alignment.Center).padding(horizontal = 22.dp))
+                }
+            }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            runCatching { update.requestFocus() }
         }
     }
 }

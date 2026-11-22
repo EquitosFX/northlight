@@ -64,10 +64,19 @@ class UpdateRepository(
         if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
     }
 
-    /** Checks quietly at most once every 20 hours; called when the app opens. */
+    /** Checks quietly at most once every 20 hours. */
     fun checkDaily() {
         val last = prefs.getLong(LAST_CHECK, 0L)
         if (System.currentTimeMillis() - last > 20 * 60 * 60 * 1000L) check()
+    }
+
+    /**
+     * Checks each time Skyfall opens, unless it checked in the last 10 minutes (GitHub allows 60 checks
+     * an hour from one address, so opening and closing it repeatedly mustn't use them up).
+     */
+    fun checkOnOpening() {
+        val last = prefs.getLong(LAST_CHECK, 0L)
+        if (System.currentTimeMillis() - last > 10 * 60 * 1000L) check()
     }
 
     fun check() {

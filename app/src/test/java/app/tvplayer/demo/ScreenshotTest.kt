@@ -1132,6 +1132,23 @@ class ScreenshotTest {
         if (voiceAsks() === first) problems += "A new press of the voice key should listen again"
     }
 
+    /** Opening Skyfall checks for an update and, if there's a newer build, offers it; Later puts it off. */
+    @Test fun updateOfferedOnOpening() {
+        DemoData.offerUpdate = true
+        try {
+            open(Dest.HOME)
+            expectShown("Skyfall build 999 is ready", "Opening Skyfall offers the newer build")
+            expectShown("Update now", "The offer can install it straight away")
+            shot("40-update-offered")
+            press("right")
+            expectFocus("Later", "Along to Later")
+            press("ok")
+            expectHidden("Skyfall build 999 is ready", "Later puts the offer away")
+        } finally {
+            DemoData.offerUpdate = false
+        }
+    }
+
     /** The share of the screen (in %) that's black or nearly. */
     private fun darkShare(bitmap: Bitmap): Int {
         var dark = 0
@@ -1292,7 +1309,11 @@ class ScreenshotTest {
         expectShown("Save a backup now", "Backup pane")
         shot("22d-settings-backup")
         shot("22a-settings-player")
+        DemoData.offerUpdate = true
         press("down", "ok")
+        press("right")
+        moveTo("Check for updates", "down", max = 4, step = "Down to Check for updates")
+        press("ok")
         expectShown("Build 999 is ready", "Updates pane finds the newer build")
         expectShown("Download and install", "Updates pane offers to install it")
         shot("22b-settings-updates")
