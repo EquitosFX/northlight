@@ -39,12 +39,24 @@ class ChannelsRepository(
     /** Looks up logos for channels without one; rebuilds the channel list if any were found. */
     suspend fun findMissingLogos() = withContext(Dispatchers.IO) {
         val library = logoLibrary ?: return@withContext
+        // Only when the playlists have changed since last time, or the library is due its weekly download.
+        val stamp = db.playlists().stampBlocking()
+        if (stamp == logosCheckedFor && !library.isStale()) return@withContext
+        val started = System.nanoTime()
         val missing = db.channels().liveRowsBlocking().filter { it.logo.isNullOrBlank() }.map { it.baseName to it.epgId }.distinct()
-        if (library.update(missing)) {
+        val found = library.update(missing)
+        logosCheckedFor = stamp
+        app.tvplayer.ui.components.Timing.note(
+            "Logo check",
+            "${missing.size} channels without a logo, checked in ${(System.nanoTime() - started) / 1_000_000} ms",
+        )
+        if (found) {
             cached = null
             logoVersion++
         }
     }
+
+    @Volatile private var logosCheckedFor: LiveStamp? = null
 
     /** Every live channel across all playlists, quality copies merged. Built once and reused until the channels change. */
     /**

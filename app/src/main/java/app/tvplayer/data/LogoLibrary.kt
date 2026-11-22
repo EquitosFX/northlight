@@ -21,6 +21,9 @@ class LogoLibrary(private val http: OkHttpClient?, private val dir: File) {
     /** Channel ("name|guide id") → logo, or "" when the library has none. */
     @Volatile private var found: Map<String, String>? = null
 
+    /** True when the library hasn't been downloaded this week. */
+    fun isStale(): Boolean = !libraryFile.exists() || System.currentTimeMillis() - libraryFile.lastModified() > WEEK_MILLIS
+
     /** The logo found for a channel, if any. */
     fun logoFor(name: String, guideId: String?): String? = found()[key(name, guideId)]?.takeIf { it.isNotEmpty() }
 
@@ -41,7 +44,7 @@ class LogoLibrary(private val http: OkHttpClient?, private val dir: File) {
     suspend fun update(missing: List<Pair<String, String?>>): Boolean = withContext(Dispatchers.IO) {
         if (missing.isEmpty()) return@withContext false
         val known = found()
-        val stale = !libraryFile.exists() || System.currentTimeMillis() - libraryFile.lastModified() > WEEK_MILLIS
+        val stale = isStale()
         val unknown = missing.filter { key(it.first, it.second) !in known }
         if (unknown.isEmpty() && !stale) return@withContext false
         val started = System.currentTimeMillis()

@@ -751,9 +751,13 @@ class ScreenshotTest {
         }
         val title = runBlocking(Dispatchers.IO) { app.container.channels.findTitle("series", "Cobalt Street", "") }
         if (title == null) problems += "Cobalt Street (in My list) wasn't found in the playlist"
-        repeat(6) {
-            if (rule.onAllNodesWithText("New episodes today", ignoreCase = true).fetchSemanticsNodes().isEmpty()) press("down")
+        // Scroll Home down to the row (it sits below Continue watching and My list).
+        val row = androidx.compose.ui.test.hasText("New episodes today", ignoreCase = true)
+        val lists = rule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction())
+        for (i in 0 until lists.fetchSemanticsNodes().size) {
+            if (runCatching { lists[i].performScrollToNode(row) }.isSuccess) break
         }
+        settle(3)
         if (rule.onAllNodesWithText("New episodes today", ignoreCase = true).fetchSemanticsNodes().isEmpty()) {
             problems += "Rows on Home: " + rule.onAllNodes(androidx.compose.ui.test.hasText("", substring = true)).fetchSemanticsNodes().map { textOf(it) }.take(40)
         }
