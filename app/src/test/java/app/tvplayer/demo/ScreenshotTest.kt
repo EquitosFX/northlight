@@ -1,5 +1,7 @@
 package app.tvplayer.demo
 
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithText
 import app.tvplayer.CrashLog
 import java.time.LocalDate
 import app.tvplayer.core.seasonal.Christmas
@@ -1140,9 +1142,9 @@ class ScreenshotTest {
             expectShown("Skyfall build 999 is ready", "Opening Skyfall offers the newer build")
             expectShown("Update now", "The offer can install it straight away")
             shot("40-update-offered")
-            press("right")
-            expectFocus("Later", "Along to Later")
-            press("ok")
+            // The pop-up has its own window, which the test's keys don't reach: choose Later directly.
+            rule.onNodeWithText("Later").performClick()
+            settle()
             expectHidden("Skyfall build 999 is ready", "Later puts the offer away")
         } finally {
             DemoData.offerUpdate = false
