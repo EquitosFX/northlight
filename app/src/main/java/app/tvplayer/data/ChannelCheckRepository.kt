@@ -58,9 +58,11 @@ class ChannelCheckRepository(
 ) {
     private val prefs = context.getSharedPreferences("channel_check", Context.MODE_PRIVATE)
     private val client = http.newBuilder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(6, TimeUnit.SECONDS)
-        .callTimeout(9, TimeUnit.SECONDS)
+        // A working channel answers in a second or two; waiting longer only slows the check down on
+        // dead ones (it gave up after 12 seconds at first, then 9, now 7).
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .callTimeout(7, TimeUnit.SECONDS)
         .build()
 
     private val deadState = MutableStateFlow(prefs.getStringSet(DEAD, emptySet()).orEmpty().toSet())
@@ -165,7 +167,8 @@ class ChannelCheckRepository(
             if (response.code in BUSY_CODES || (response.code == 403 && progressState.value.lanes > 1)) return@use Result.BUSY
             if (!response.isSuccessful) return@use Result.DEAD
             val body = response.body ?: return@use Result.DEAD
-            val buffer = ByteArray(4_096)
+            // Five video packets are enough to know it's sending a picture (it read 4 KB at first).
+            val buffer = ByteArray(940)
             var read = 0
             val stream = body.byteStream()
             while (read < buffer.size) {

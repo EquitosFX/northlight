@@ -125,6 +125,11 @@ fun MaintenancePane(
                 if (sportChannels.isNotEmpty()) {
                     item { SettingChip("Sport channels (${sportChannels.size})", false) { start("sport channels", sportChannels) } }
                 }
+                // Just the ones marked not working last time: a quick look at whether they're back.
+                val marked = all.filter { it.key in dead }
+                if (marked.isNotEmpty()) {
+                    item { SettingChip("Not working last time (${marked.size})", false) { start("channels not working last time", marked) } }
+                }
                 val favouriteChannels = all.filter { it.key in favourites }
                 if (favouriteChannels.isNotEmpty()) {
                     item { SettingChip("Favourites (${favouriteChannels.size})", false) { start("Favourites", favouriteChannels) } }
