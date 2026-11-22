@@ -749,13 +749,20 @@ class ScreenshotTest {
         if (airing.none { it.item.name == "Cobalt Street" && it.episode.code == "S2 E5" }) {
             problems += "TVmaze's next episode of Cobalt Street (S2 E5, tonight) wasn't found: $airing"
         }
-        repeat(5) { if (rule.onAllNodesWithText("New episodes today").fetchSemanticsNodes().isEmpty()) press("down") }
+        val title = runBlocking(Dispatchers.IO) { app.container.channels.findTitle("series", "Cobalt Street", "") }
+        if (title == null) problems += "Cobalt Street (in My list) wasn't found in the playlist"
+        repeat(6) {
+            if (rule.onAllNodesWithText("New episodes today", ignoreCase = true).fetchSemanticsNodes().isEmpty()) press("down")
+        }
+        if (rule.onAllNodesWithText("New episodes today", ignoreCase = true).fetchSemanticsNodes().isEmpty()) {
+            problems += "Rows on Home: " + rule.onAllNodes(androidx.compose.ui.test.hasText("", substring = true)).fetchSemanticsNodes().map { textOf(it) }.take(40)
+        }
         expectShown("New episodes today", "Home has a row for series in My list with an episode out today")
         expectShown("S2 E5", "The row says which episode")
         shot("28a-new-episode-tonight")
     }
 
-    @Test fun missingChannelLogos() {
+    @Test fun missingChannelLogos() = runBlocking<Unit>(Dispatchers.IO) {
         val db = app.container.database
         val pid = db.playlists().getAllBlocking().first().id
         db.channels().insertAllBlocking(
@@ -768,11 +775,9 @@ class ScreenshotTest {
             ),
         )
         db.playlists().updateBlocking(db.playlists().getBlocking(pid)!!.copy(refreshedAt = System.currentTimeMillis()))
-        runBlocking { app.container.channels.findMissingLogos() }
-        val logo = runBlocking { app.container.channels.lineup() }.channels.firstOrNull { it.name.contains("Kestrel News") }?.logo
+        app.container.channels.findMissingLogos()
+        val logo = app.container.channels.lineup().channels.firstOrNull { it.name.contains("Kestrel News") }?.logo
         if (logo != "https://demo.invalid/kestrel-news.png") problems += "A channel without a logo should get one from the channel library, but had $logo"
-        open(Dest.GUIDE)
-        shot("07h-guide-filled-logo")
     }
 
     @Test fun reminderPopup() {
