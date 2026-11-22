@@ -89,9 +89,14 @@ class AppContainer(context: Context) {
         PlaylistRepository(database, http, scope, addedDates, guideDir = java.io.File(appContext.cacheDir, "guides"))
     }
 
-    val channels: ChannelsRepository by lazy { ChannelsRepository(database, addedDates) }
+    /** Logos for channels without one (iptv-org). */
+    val logoLibrary: LogoLibrary by lazy { LogoLibrary(http, appContext.filesDir) }
 
-    val metadata: MetadataRepository by lazy { MetadataRepository(database, http, settings) }
+    val channels: ChannelsRepository by lazy { ChannelsRepository(database, addedDates, logoLibrary) }
+
+    val metadata: MetadataRepository by lazy {
+        MetadataRepository(database, http, settings, extrasFile = java.io.File(appContext.filesDir, "title-extras.properties"))
+    }
 
     val updates: UpdateRepository by lazy { UpdateRepository(appContext, http, scope) }
 
@@ -104,6 +109,9 @@ class AppContainer(context: Context) {
     val myList: MyListRepository by lazy { MyListRepository(appContext) }
 
     val newEpisodes: NewEpisodes by lazy { NewEpisodes(appContext, channels, playlists) }
+
+    /** When series in My list have episodes out today (TVmaze). */
+    val airingToday: AiringToday by lazy { AiringToday(appContext, http, metadata) }
 
     val backup: BackupRepository by lazy { BackupRepository(appContext, database, settings, myList, playlists) }
 

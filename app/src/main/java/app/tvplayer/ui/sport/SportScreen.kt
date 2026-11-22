@@ -241,13 +241,15 @@ private fun EventCard(
             }
             Label(text = event.title, style = AppType.title.copy(fontSize = 16.sp, lineHeight = 20.sp), maxLines = 2)
             if (score != null) {
-                // The live score: "HAR 2–1 KES · 63'", or "· FT" once it's over.
-                Label(
-                    text = score.line + (score.detail?.let { " · $it" } ?: ""),
-                    style = AppType.title.copy(fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                    color = if (score.state == app.tvplayer.core.sport.LiveScore.State.PLAYING) Color(0xFFFF5A5F) else colors.text,
-                    maxLines = 1,
-                )
+                // The live score between the teams' crests: "[crest] HAR 2–1 KES [crest] · 63'", or "· FT" once it's over.
+                val scoreStyle = AppType.title.copy(fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                val scoreColour = if (score.state == app.tvplayer.core.sport.LiveScore.State.PLAYING) Color(0xFFFF5A5F) else colors.text
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    score.home.logo?.let { Logo(url = it, modifier = Modifier.size(20.dp)) }
+                    Label(text = score.line, style = scoreStyle, color = scoreColour, maxLines = 1)
+                    score.away.logo?.let { Logo(url = it, modifier = Modifier.size(20.dp)) }
+                    score.detail?.let { Label(text = "· $it", style = scoreStyle, color = scoreColour, maxLines = 1) }
+                }
             } else {
                 Label(
                     text = if (onNow) "Until ${clockTime(event.stop)}" else "${clockTime(event.start)}–${clockTime(event.stop)}",

@@ -1,5 +1,6 @@
 package app.tvplayer.ui.settings
 
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,10 +34,14 @@ fun TmdbPane(settings: SettingsRepository, metadata: MetadataRepository) {
     var key by remember(saved) { mutableStateOf(saved) }
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val savedOmdb by settings.omdbKey.collectAsStateWithLifecycle(initialValue = "")
+    var omdbKey by remember(savedOmdb) { mutableStateOf(savedOmdb) }
+    var omdbStatus by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
             .padding(horizontal = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -84,6 +89,47 @@ fun TmdbPane(settings: SettingsRepository, metadata: MetadataRepository) {
             }
         }
         status?.let { Label(text = it, style = AppType.body, color = colors.accent, maxLines = 2) }
+
+        // OMDb: IMDb, Rotten Tomatoes and Metacritic scores beside TMDB's.
+        Label(text = "More ratings", style = AppType.title, modifier = Modifier.padding(top = 14.dp))
+        Label(
+            text = "Add a free OMDb key to show IMDb, Rotten Tomatoes and Metacritic scores beside TMDB's. " +
+                "Get one at omdbapi.com (API Key, Free); it arrives by email. Needs the TMDB key above too.",
+            style = AppType.body,
+            color = colors.textDim,
+            maxLines = 3,
+        )
+        TvTextField(
+            value = omdbKey,
+            onValueChange = { omdbKey = it },
+            label = "OMDb key",
+            placeholder = "Press OK to type or paste",
+            isPassword = true,
+            modifier = Modifier.width(430.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
+            PaneButton(text = "Save and test OMDb") {
+                scope.launch {
+                    omdbStatus = "Checking with OMDb…"
+                    val problem = metadata.checkOmdbKey(omdbKey)
+                    if (problem == null) {
+                        settings.setOmdbKey(omdbKey)
+                        omdbStatus = "The key works. Film and series pages now show IMDb, Rotten Tomatoes and Metacritic scores."
+                    } else {
+                        omdbStatus = problem
+                    }
+                }
+            }
+            if (savedOmdb.isNotEmpty()) {
+                PaneButton(text = "Remove OMDb key") {
+                    scope.launch {
+                        settings.setOmdbKey("")
+                        omdbStatus = "OMDb key removed."
+                    }
+                }
+            }
+        }
+        omdbStatus?.let { Label(text = it, style = AppType.body, color = colors.accent, maxLines = 2) }
         Label(
             text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
             style = AppType.caption,

@@ -12,6 +12,7 @@ import app.tvplayer.core.seasonal.Christmas
 import app.tvplayer.ui.components.NewEpisodeMarks
 import app.tvplayer.ui.components.LocalNewEpisodes
 import app.tvplayer.data.NewEpisodes
+import app.tvplayer.data.AiringToday
 import app.tvplayer.ui.components.WatchedMarks
 import app.tvplayer.ui.components.LocalWatched
 import androidx.compose.runtime.SideEffect
@@ -181,6 +182,7 @@ fun AppRoot(
         delay(3_000)
         while (true) {
             val warmed = runCatching { container.channels.changeStamp() }.getOrNull()
+            val warmedLogos = container.channels.logoVersion
             runCatching {
                 // The TV guide first: its channel list and first screenful of programmes.
                 guideMemory.warmUp(container.channels)
@@ -193,11 +195,14 @@ fun AppRoot(
                 // Every name, ready for searching.
                 container.channels.prepareSearch()
             }
+            // Logos for channels without one, looked up last so nothing waits for them.
+            runCatching { container.channels.findMissingLogos() }
             // Checked every 15 seconds (an instant look at the playlists); at least every 10 minutes.
             val since = android.os.SystemClock.uptimeMillis()
             while (android.os.SystemClock.uptimeMillis() - since < 10 * 60_000L) {
                 delay(15_000)
                 if (runCatching { container.channels.changeStamp() }.getOrNull() != warmed) break
+                if (container.channels.logoVersion != warmedLogos) break
             }
         }
     }
@@ -647,6 +652,29 @@ fun AppRoot(
             )
         }
     }
+    // Series in My list with a new episode out today ("Tonight 21:00 · S3 E2"), checked every few hours.
+    var airingRefresh by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(AiringToday.KEEP_MILLIS)
+            airingRefresh++
+        }
+    }
+    val airingRail by produceState(initialValue = emptyList<Tile>(), watchlist, playlistList, airingRefresh) {
+        delay(3_000)
+        val airing = runCatching { container.airingToday.today(watchlist) }.getOrDefault(emptyList())
+        value = airing.mapNotNull { soon ->
+            val row = container.channels.findTitle(soon.item.kind, soon.item.name, soon.item.url) ?: return@mapNotNull null
+            Tile(
+                title = soon.item.name,
+                caption = airingCaption(soon.episode),
+                badge = "New episode",
+                color = tileColor(soon.item.url),
+                logo = soon.item.poster ?: row.logo,
+                open = row,
+            )
+        }
+    }
     // Keep the Shield's home screen rows in step with Continue watching and recent channels.
     LaunchedEffect(progress, history) { container.homeRows.update(progress, history) }
     // Open what was picked on the Shield's home screen.
@@ -666,6 +694,7 @@ fun AppRoot(
     val homeRails = listOf(
         HomeRail("Continue watching", continueWatching),
         HomeRail("My list", savedRail),
+        HomeRail("New episodes today", airingRail),
         HomeRail("Christmas films and series", christmasRail),
     ) + suggestions + listOf(
         HomeRail("Recent channels", recentTiles),
@@ -1232,4 +1261,16 @@ private fun ReminderPopup(reminder: Reminder, onWatch: () -> Unit, onDismiss: ()
             runCatching { watch.requestFocus() }
         }
     }
+}
+
+/** "Tonight 21:00 · S3 E2" (after 5pm), "Today 14:00 · S3 E2", or "Out now · S3 E2" once it has aired. */
+internal fun airingCaption(episode: app.tvplayer.core.extras.NextEpisode, now: Long = System.currentTimeMillis()): String {
+    val at = java.time.Instant.ofEpochMilli(episode.airsAt).atZone(java.time.ZoneId.systemDefault())
+    val time = "%02d:%02d".format(at.hour, at.minute)
+    val word = when {
+        episode.airsAt <= now -> "Out now"
+        at.hour >= 17 -> "Tonight $time"
+        else -> "Today $time"
+    }
+    return listOf(word, episode.code).filter { it.isNotBlank() }.joinToString(" · ")
 }

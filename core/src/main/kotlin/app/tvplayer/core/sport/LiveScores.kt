@@ -19,7 +19,7 @@ data class LiveScore(
     /** ESPN's short word for where it's got to: "63'", "HT", "FT", "Q3 4:12". */
     val detail: String?,
 ) {
-    data class Team(val names: List<String>, val abbreviation: String?, val score: String?)
+    data class Team(val names: List<String>, val abbreviation: String?, val score: String?, val logo: String? = null)
 
     enum class State { BEFORE, PLAYING, FINISHED }
 
@@ -101,7 +101,10 @@ object LiveScores {
                 else -> null
             }
         }
-        return LiveScore.Team(names, team.text("abbreviation"), score)
+        // The crest: "logo", or the first of "logos".
+        val logo = team.text("logo")
+            ?: ((team["logos"] as? JsonArray)?.firstOrNull() as? JsonObject)?.text("href")
+        return LiveScore.Team(names, team.text("abbreviation"), score, logo?.takeIf { it.startsWith("http") })
     }
 
     private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull

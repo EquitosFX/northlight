@@ -23,9 +23,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Read-only access to the live channels and their TV guide, for the player and the guide screen. */
-class ChannelsRepository(private val db: AppDatabase, private val added: AddedDatesStore? = null) {
+class ChannelsRepository(
+    private val db: AppDatabase,
+    private val added: AddedDatesStore? = null,
+    /** Logos for channels the playlist gives none. */
+    private val logoLibrary: LogoLibrary? = null,
+) {
 
     @Volatile private var cached: Pair<LiveStamp, Lineup>? = null
+
+    /** Goes up each time logos are found for channels that had none (the channel list is rebuilt then). */
+    @Volatile var logoVersion: Int = 0
+        private set
+
+    /** Looks up logos for channels without one; rebuilds the channel list if any were found. */
+    suspend fun findMissingLogos() = withContext(Dispatchers.IO) {
+        val library = logoLibrary ?: return@withContext
+        val missing = db.channels().liveRowsBlocking().filter { it.logo.isNullOrBlank() }.map { it.baseName to it.epgId }.distinct()
+        if (library.update(missing)) {
+            cached = null
+            logoVersion++
+        }
+    }
 
     /** Every live channel across all playlists, quality copies merged. Built once and reused until the channels change. */
     /**
@@ -87,7 +106,7 @@ class ChannelsRepository(private val db: AppDatabase, private val added: AddedDa
                     variantKey = it.variantKey,
                     quality = it.quality,
                     isBackup = it.isBackup,
-                    logo = it.logo,
+                    logo = it.logo?.takeIf { logo -> logo.isNotBlank() } ?: logoLibrary?.logoFor(it.baseName, it.epgId),
                     group = it.groupName,
                     number = it.number,
                     guideId = it.epgId,

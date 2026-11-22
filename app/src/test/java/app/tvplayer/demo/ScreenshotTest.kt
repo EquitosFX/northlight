@@ -6,6 +6,7 @@ import app.tvplayer.CrashLog
 import java.time.LocalDate
 import app.tvplayer.core.seasonal.Christmas
 import app.tvplayer.core.mylist.WatchItem
+import app.tvplayer.data.db.ChannelEntity
 import app.tvplayer.core.mylist.Reminder
 import org.junit.rules.TestName
 import android.graphics.Bitmap
@@ -739,6 +740,41 @@ class ScreenshotTest {
         shot("28-my-list")
     }
 
+    @Test fun newEpisodeTonight() {
+        app.container.myList.toggleWatch(WatchItem("series", "Cobalt Street", null, "", System.currentTimeMillis()))
+        open(Dest.HOME)
+        settle()
+        settle()
+        val airing = runBlocking { app.container.airingToday.today(app.container.myList.watchlist.value) }
+        if (airing.none { it.item.name == "Cobalt Street" && it.episode.code == "S2 E5" }) {
+            problems += "TVmaze's next episode of Cobalt Street (S2 E5, tonight) wasn't found: $airing"
+        }
+        repeat(5) { if (rule.onAllNodesWithText("New episodes today").fetchSemanticsNodes().isEmpty()) press("down") }
+        expectShown("New episodes today", "Home has a row for series in My list with an episode out today")
+        expectShown("S2 E5", "The row says which episode")
+        shot("28a-new-episode-tonight")
+    }
+
+    @Test fun missingChannelLogos() {
+        val db = app.container.database
+        val pid = db.playlists().getAllBlocking().first().id
+        db.channels().insertAllBlocking(
+            listOf(
+                ChannelEntity(
+                    playlistId = pid, kind = ChannelEntity.KIND_LIVE, name = "UK: Kestrel News HD", baseName = "UK: Kestrel News",
+                    variantKey = "kestrel news", quality = 1, url = "http://demo.invalid/live/demo/demo/900.ts",
+                    remoteId = 900L, logo = null, groupName = "News", number = 190, guideId = null, epgId = null, position = 900,
+                ),
+            ),
+        )
+        db.playlists().updateBlocking(db.playlists().getBlocking(pid)!!.copy(refreshedAt = System.currentTimeMillis()))
+        runBlocking { app.container.channels.findMissingLogos() }
+        val logo = runBlocking { app.container.channels.lineup() }.channels.firstOrNull { it.name.contains("Kestrel News") }?.logo
+        if (logo != "https://demo.invalid/kestrel-news.png") problems += "A channel without a logo should get one from the channel library, but had $logo"
+        open(Dest.GUIDE)
+        shot("07h-guide-filled-logo")
+    }
+
     @Test fun reminderPopup() {
         val now = System.currentTimeMillis()
         app.container.myList.toggleReminder(
@@ -765,7 +801,7 @@ class ScreenshotTest {
         val onNow = runBlocking { app.container.channels.sport() }.any { it.title.contains("Harbour City") && time in it.start until it.stop }
         if (onNow) {
             expectShown("HAR 2–1 KES", "A match on now shows its live score")
-            expectShown("20'", "The live score says how far into the match it is")
+            expectShown("· 20'", "The live score says how far into the match it is")
         } else {
             println("  the demo match isn't on now, so its live score isn't checked this time")
             expectHidden("HAR 2–1 KES", "A match not on now shows no score")
@@ -928,6 +964,9 @@ class ScreenshotTest {
         press("ok")
         expectFocus("Play", "Opening a film")
         expectHidden("CARRY ON WATCHING", "Opening a film shouldn't go Home")
+        settle()
+        expectShown("TMDB", "The film page shows TMDB's rating")
+        expectShown("IMDb 7.8 · RT 91% · MC 74", "The film page shows IMDb, Rotten Tomatoes and Metacritic beside TMDB")
         shot("13-film-page")
 
         press("down")
@@ -1278,6 +1317,8 @@ class ScreenshotTest {
         expectShown("1 of 2 streams in use", "Playlists pane shows the streams in use")
         shot("20-settings-playlists")
         press("down", "ok")
+        expectShown("More ratings", "Film info offers more ratings")
+        expectShown("OMDb key", "Film info has a place for the OMDb key")
         shot("21-settings-tmdb")
         press("down", "ok")
         expectShown("Skyfall", "Appearance pane")

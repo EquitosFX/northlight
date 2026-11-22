@@ -13,7 +13,7 @@ class LiveScoresTest {
            "status":{"displayClock":"63'","type":{"state":"in","completed":false,"detail":"63'","shortDetail":"63'"}},
            "competitions":[{"competitors":[
              {"homeAway":"home","score":"2","team":{"displayName":"Manchester United","shortDisplayName":"Man United","abbreviation":"MUN","name":"Manchester United","location":"Manchester United"}},
-             {"homeAway":"away","score":"1","team":{"displayName":"Arsenal","shortDisplayName":"Arsenal","abbreviation":"ARS"}}]}]},
+             {"homeAway":"away","score":"1","team":{"displayName":"Arsenal","shortDisplayName":"Arsenal","abbreviation":"ARS","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/359.png"}}]}]},
           {"id":"2","date":"2026-11-21T17:30Z",
            "competitions":[{"status":{"type":{"state":"pre","shortDetail":"5:30 PM"}},"competitors":[
              {"homeAway":"home","score":"0","team":{"displayName":"Tottenham Hotspur","shortDisplayName":"Tottenham","abbreviation":"TOT"}},
@@ -31,6 +31,8 @@ class LiveScoresTest {
         assertEquals(LiveScore.State.PLAYING, first.state)
         assertEquals("63'", first.detail)
         assertEquals("MUN 2–1 ARS", first.line)
+        assertEquals("https://a.espncdn.com/i/teamlogos/soccer/500/359.png", first.away.logo)
+        assertEquals(null, first.home.logo)
         assertEquals(kickoff, first.start)
         assertEquals(LiveScore.State.BEFORE, scores[1].state)
         assertEquals(emptyList<LiveScore>(), LiveScores.parse("not json"))

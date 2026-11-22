@@ -79,6 +79,8 @@ internal fun FilmPane(
     }
 
     val details = info
+    // IMDb, Rotten Tomatoes and Metacritic, when an OMDb key is saved.
+    val ratings by produceState<app.tvplayer.core.extras.Ratings?>(initialValue = null, info?.tmdbId) { value = metadata.ratings(info, isSeries = false) }
     val title = details?.title ?: film.name
     val item = VodItem(film.url, title, details?.poster ?: film.logo, film.userAgent, film.referrer)
     val resumeMinutes = progress?.positionMs?.takeIf { it > 30_000 }?.let { it / 60_000 }
@@ -113,7 +115,8 @@ internal fun FilmPane(
             val meta = listOfNotNull(
                 details?.year?.toString(),
                 details?.runtimeMinutes?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
-                details?.rating?.let { "★ %.1f".format(it) },
+                details?.rating?.let { "★ TMDB %.1f".format(it) },
+                ratings?.line,
                 details?.genres?.takeIf { it.isNotEmpty() },
             ).joinToString(" · ")
             if (meta.isNotEmpty()) Label(text = meta, style = AppType.label, color = colors.accent)

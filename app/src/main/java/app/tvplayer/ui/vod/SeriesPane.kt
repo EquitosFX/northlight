@@ -112,6 +112,8 @@ internal fun SeriesPane(
     val info by produceState(initialValue = metadata.peek(series.name, ChannelEntity.KIND_SERIES), series.id) {
         value = metadata.lookup(series.name, ChannelEntity.KIND_SERIES)
     }
+    // IMDb, Rotten Tomatoes and Metacritic, when an OMDb key is saved.
+    val ratings by produceState<app.tvplayer.core.extras.Ratings?>(initialValue = null, info?.tmdbId) { value = metadata.ratings(info, isSeries = true) }
     val logo by produceState(initialValue = metadata.peekLogo(info?.tmdbId), info?.tmdbId) {
         value = info?.tmdbId?.let { metadata.titleLogo(it, isSeries = true) }
     }
@@ -372,6 +374,7 @@ internal fun SeriesPane(
                         val meta = listOfNotNull(
                             info?.genres?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.take(3)?.joinToString("  •  ")?.takeIf { it.isNotEmpty() },
                             info?.rating?.let { "TMDB %.1f/10".format(it) },
+                            ratings?.line?.replace(" · ", "  •  "),
                             "${seasonEpisodes.size} episodes".takeIf { seasonEpisodes.isNotEmpty() },
                             info?.year?.toString(),
                         ).joinToString("  •  ")

@@ -31,7 +31,68 @@ class MetadataRepository(
     private val db: AppDatabase,
     private val http: OkHttpClient,
     private val settings: SettingsRepository,
+    /** Where IMDb ids and OMDb ratings are kept between runs. */
+    private val extrasFile: java.io.File? = null,
 ) {
+    /** "imdb.movie.123" → "tt…"; "ratings.tt…" → "time|imdb|rt|mc". */
+    private val extras = java.util.Properties().also { props ->
+        runCatching { extrasFile?.takeIf { it.exists() }?.inputStream()?.use(props::load) }
+    }
+
+    private fun saveExtras() = synchronized(extras) {
+        runCatching { extrasFile?.outputStream()?.use { extras.store(it, null) } }
+    }
+
+    /** The IMDb id of a TMDB film or series ("tt…"), kept once found. Needs a TMDB key. */
+    suspend fun imdbId(tmdbId: Long, isSeries: Boolean): String? = withContext(Dispatchers.IO) {
+        val name = "imdb.${if (isSeries) "tv" else "movie"}.$tmdbId"
+        extras.getProperty(name)?.let { return@withContext it.ifEmpty { null } }
+        val key = settings.tmdbKey.first().trim()
+        if (key.isEmpty()) return@withContext null
+        val url = "https://api.themoviedb.org/3/${if (isSeries) "tv" else "movie"}/$tmdbId/external_ids?language=en-GB"
+        val found = runCatching { app.tvplayer.core.extras.Omdb.imdbIdFromTmdb(get(url, key)) }.getOrElse { return@withContext null }
+        extras.setProperty(name, found.orEmpty())
+        saveExtras()
+        found
+    }
+
+    /**
+     * IMDb, Rotten Tomatoes and Metacritic ratings from OMDb, beside TMDB's own. Needs an OMDb key (and a
+     * TMDB key, to find the IMDb id). Kept for a week.
+     */
+    suspend fun ratings(info: MetadataEntity?, isSeries: Boolean): app.tvplayer.core.extras.Ratings? = withContext(Dispatchers.IO) {
+        val tmdbId = info?.tmdbId ?: return@withContext null
+        val omdb = settings.omdbKey.first().trim()
+        if (omdb.isEmpty()) return@withContext null
+        val imdb = imdbId(tmdbId, isSeries) ?: return@withContext null
+        extras.getProperty("ratings.$imdb")?.let { kept ->
+            val at = kept.substringBefore("|").toLongOrNull() ?: 0L
+            if (System.currentTimeMillis() - at < WEEK_MILLIS) {
+                return@withContext app.tvplayer.core.extras.Ratings.decode(kept.substringAfter("|")).takeIf { !it.isEmpty }
+            }
+        }
+        val text = runCatching {
+            http.newCall(Request.Builder().url(app.tvplayer.core.extras.Omdb.url(imdb, omdb)).build()).execute().use { it.body?.string() }
+        }.getOrNull() ?: return@withContext null
+        val found = app.tvplayer.core.extras.Omdb.parse(text) ?: app.tvplayer.core.extras.Ratings(null, null, null)
+        extras.setProperty("ratings.$imdb", "${System.currentTimeMillis()}|${found.encode()}")
+        saveExtras()
+        found.takeIf { !it.isEmpty }
+    }
+
+    /** Null if an OMDb key works, else why not. */
+    suspend fun checkOmdbKey(key: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val text = http.newCall(Request.Builder().url(app.tvplayer.core.extras.Omdb.url(app.tvplayer.core.extras.Omdb.TEST_ID, key)).build())
+                .execute().use { it.body?.string().orEmpty() }
+            app.tvplayer.core.extras.Omdb.error(text) ?: if (app.tvplayer.core.extras.Omdb.parse(text) != null) null else "OMDb didn't answer as expected."
+        } catch (e: UnknownHostException) {
+            "Couldn't reach OMDb. Check the internet connection."
+        } catch (e: Exception) {
+            e.message ?: "The check failed."
+        }
+    }
+
     private class KeyRejected : IOException("TMDB didn't accept that key.")
 
     /** The playlist's films and series, indexed by cleaned title; rebuilt when the number of titles changes. */
@@ -364,6 +425,8 @@ class MetadataRepository(
     }
 
     private companion object {
+        const val WEEK_MILLIS = 7 * 86_400_000L
+
         /** A title TMDB didn't know is tried again after a week. */
         const val RETRY_MISS_MILLIS = 7 * 86_400_000L
 

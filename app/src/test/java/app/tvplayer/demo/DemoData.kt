@@ -163,13 +163,50 @@ object DemoData {
                     200,
                     """{"events":[{"id":"9","date":"$kickoff","status":{"displayClock":"20'","type":{"state":"in","shortDetail":"20'"}},""" +
                         """"competitions":[{"competitors":[""" +
-                        """{"homeAway":"home","score":"2","team":{"displayName":"Harbour City","shortDisplayName":"Harbour City","abbreviation":"HAR"}},""" +
+                        """{"homeAway":"home","score":"2","team":{"displayName":"Harbour City","shortDisplayName":"Harbour City","abbreviation":"HAR","logo":"https://demo.invalid/crest-har.png"}},""" +
                         """{"homeAway":"away","score":"1","team":{"displayName":"Kestrel United","shortDisplayName":"Kestrel Utd","abbreviation":"KES"}}]}]}]}""",
                 )
             } else {
                 reply(200, """{"events":[]}""")
             }
+            // OMDb: the same three scores for every title (with the demo's key).
+            url.host == "www.omdbapi.com" -> if (url.queryParameter("apikey") == "demo-omdb") {
+                reply(
+                    200,
+                    """{"Title":"Demo","imdbRating":"7.8","Metascore":"74","Ratings":[{"Source":"Internet Movie Database","Value":"7.8/10"},""" +
+                        """{"Source":"Rotten Tomatoes","Value":"91%"},{"Source":"Metacritic","Value":"74/100"}],"Response":"True"}""",
+                )
+            } else {
+                reply(401, """{"Response":"False","Error":"Invalid API key!"}""")
+            }
+            // TVmaze: Cobalt Street (TMDB 5020, IMDb tt95020) has its next episode out tonight.
+            url.host == "api.tvmaze.com" && path.startsWith("/lookup/shows") ->
+                if (url.queryParameter("imdb") == "tt95020") reply(200, """{"id":77,"name":"Cobalt Street"}""") else reply(404, "")
+            url.host == "api.tvmaze.com" && path == "/shows/77" -> {
+                val zone = java.time.ZoneId.systemDefault()
+                val nine = java.time.LocalDate.now(zone).atTime(21, 0).atZone(zone)
+                val airs = if (nine.toInstant().toEpochMilli() > System.currentTimeMillis()) nine.toOffsetDateTime()
+                else java.time.OffsetDateTime.now(zone).minusMinutes(30)
+                reply(200, """{"id":77,"name":"Cobalt Street","_embedded":{"nextepisode":{"id":1,"name":"Night Shift","season":2,"number":5,"airstamp":"$airs"}}}""")
+            }
+            url.host == "api.tvmaze.com" -> reply(404, "")
+            // iptv-org's channel library: a logo for the demo's channel that has none.
+            url.host == "iptv-org.github.io" && path.endsWith("/channels.json") -> reply(
+                200,
+                """[{"id":"KestrelNews.uk","name":"Kestrel News","alt_names":[],"country":"UK","closed":null},""" +
+                    """{"id":"Other.us","name":"Other","alt_names":[],"country":"US","closed":null}]""",
+            )
+            url.host == "iptv-org.github.io" && path.endsWith("/logos.json") -> reply(
+                200,
+                """[{"channel":"KestrelNews.uk","feed":null,"in_use":true,"format":"PNG","url":"https://demo.invalid/kestrel-news.png"},""" +
+                    """{"channel":"Other.us","feed":null,"in_use":true,"format":"PNG","url":"https://demo.invalid/other.png"}]""",
+            )
             url.host != "api.themoviedb.org" -> reply(404, "")
+            // IMDb ids: "tt9" and the TMDB id.
+            path.endsWith("/external_ids") -> {
+                val id = Regex("/(movie|tv)/(\\d+)/external_ids").find(path)?.groupValues?.get(2)
+                reply(200, """{"id":$id,"imdb_id":"tt9$id"}""")
+            }
             // "Because you watched…": TMDB suggests three of the demo films.
             path.endsWith("/recommendations") -> reply(
                 200,
@@ -356,6 +393,7 @@ object DemoData {
 
         kotlinx.coroutines.runBlocking {
             container.settings.setTmdbKey("demo-key")
+            container.settings.setOmdbKey("demo-omdb")
 
             fun peopleFor(seed: Int): String {
                 val (director, cast) = crew(seed)

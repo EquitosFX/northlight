@@ -20,6 +20,7 @@ class SettingsRepository(private val context: Context) {
     private val themeKey = stringPreferencesKey("theme")
     private val lastChannelKey = stringPreferencesKey("last_channel")
     private val tmdbKeyKey = stringPreferencesKey("tmdb_key")
+    private val omdbKeyKey = stringPreferencesKey("omdb_key")
     private val timeshiftKey = intPreferencesKey("timeshift_minutes")
     private val catchupOffsetKey = intPreferencesKey("catchup_offset_minutes")
     private val autoRefreshKey = intPreferencesKey("auto_refresh_hours")
@@ -48,6 +49,13 @@ class SettingsRepository(private val context: Context) {
 
     /** The viewer's own TMDB key; empty when they haven't added one. */
     val tmdbKey: Flow<String> = context.settingsStore.data.map { prefs -> prefs[tmdbKeyKey].orEmpty() }
+
+    /** The viewer's OMDb key, for IMDb, Rotten Tomatoes and Metacritic ratings ("" when none). */
+    val omdbKey: Flow<String> = context.settingsStore.data.map { prefs -> prefs[omdbKeyKey].orEmpty() }
+
+    suspend fun setOmdbKey(key: String) {
+        context.settingsStore.edit { prefs -> prefs[omdbKeyKey] = key.trim() }
+    }
 
     suspend fun setTmdbKey(key: String) {
         context.settingsStore.edit { prefs -> prefs[tmdbKeyKey] = key.trim() }
