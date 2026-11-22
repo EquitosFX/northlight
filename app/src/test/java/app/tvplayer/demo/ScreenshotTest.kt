@@ -1,5 +1,6 @@
 package app.tvplayer.demo
 
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import app.tvplayer.CrashLog
