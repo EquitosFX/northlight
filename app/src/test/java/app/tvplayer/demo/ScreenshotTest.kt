@@ -757,9 +757,17 @@ class ScreenshotTest {
         press("ok")
         expectShown("Harbour City v Kestrel United", "Sport finds matches in the guide")
         expectHidden("Cricket: Second Test", "The Football filter shows only football")
-        // The live score from ESPN, on the match's card.
-        expectShown("HAR 2–1 KES", "A match on now shows its live score")
-        expectShown("20'", "The live score says how far into the match it is")
+        // The live score from ESPN, on the match's card (when the demo guide has it on now: the demo's
+        // channels take turns through the day).
+        val time = System.currentTimeMillis()
+        val onNow = runBlocking { app.container.channels.sport() }.any { it.title.contains("Harbour City") && time in it.start until it.stop }
+        if (onNow) {
+            expectShown("HAR 2–1 KES", "A match on now shows its live score")
+            expectShown("20'", "The live score says how far into the match it is")
+        } else {
+            println("  the demo match isn't on now, so its live score isn't checked this time")
+            expectHidden("HAR 2–1 KES", "A match not on now shows no score")
+        }
         shot("30-sport")
     }
 
