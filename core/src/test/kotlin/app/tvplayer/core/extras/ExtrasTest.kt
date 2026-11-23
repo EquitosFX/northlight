@@ -46,6 +46,11 @@ class ExtrasTest {
         assertEquals("https://logo/c4uk.png", library.find("Channel 4 (1080p)", null))
         assertEquals("https://logo/dave.png", library.find("Dave +1", null))
         assertNull(library.find("Unknown Channel", null))
+        // Only what's wanted is kept.
+        val some = ChannelLogos.build(channels, logos, wanted = listOf("UK: Dave HD" to null, "Whatever" to "BBCOne.uk"))
+        assertEquals("https://logo/dave.png", some.find("Dave", null))
+        assertEquals("https://logo/bbcone.png", some.find("Whatever", "BBCOne.uk"))
+        assertNull(some.find("Channel 4", null))
     }
 
     @Test fun channelLogosPreferInUsePictures() {

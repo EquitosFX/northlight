@@ -1,6 +1,7 @@
 package app.tvplayer
 
 import android.content.Context
+import app.tvplayer.ui.components.Timing
 import java.io.File
 
 /**
@@ -34,10 +35,25 @@ object CrashLog {
             val prefs = app.getSharedPreferences("crash_log", Context.MODE_PRIVATE)
             if (last.timestamp <= prefs.getLong("seen_exit", 0L)) return
             prefs.edit().putLong("seen_exit", last.timestamp).apply()
+            // How much memory Skyfall itself was using when it was closed (0 when Android didn't say).
+            val usedMb = (maxOf(last.pss, last.rss) / 1024).toInt()
+            val using = if (usedMb > 0) " Skyfall was using $usedMb MB." else ""
+            // Cleared out of memory while in the background (another app open, or the TV asleep): that's
+            // Android making room, as it does on every box, not a crash, so it's noted quietly instead.
+            if (last.reason == android.app.ApplicationExitInfo.REASON_LOW_MEMORY &&
+                last.importance > android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_PERCEPTIBLE
+            ) {
+                val at = java.text.SimpleDateFormat("EEE HH:mm", java.util.Locale.UK).format(java.util.Date(last.timestamp))
+                Timing.note(
+                    "Last closed",
+                    "$at · Android cleared Skyfall from memory while it was in the background.$using",
+                )
+                return
+            }
             val what = when (last.reason) {
                 android.app.ApplicationExitInfo.REASON_ANR -> "Skyfall stopped responding (froze) and Android closed it."
                 android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "Skyfall's video or sound engine crashed."
-                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "Android closed Skyfall because the box ran out of memory."
+                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "Android closed Skyfall while you were using it because the box ran out of memory.$using"
                 else -> return
             }
             // A Java crash already wrote its own, fuller note.

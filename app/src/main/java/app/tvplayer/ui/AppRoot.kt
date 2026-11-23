@@ -197,6 +197,17 @@ fun AppRoot(
             }
             // Logos for channels without one, looked up last so nothing waits for them.
             runCatching { container.channels.findMissingLogos() }
+            // How much memory Skyfall uses, and how much the box has left (shown in Settings' speed notes).
+            runCatching {
+                val manager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                val box = android.app.ActivityManager.MemoryInfo().also(manager::getMemoryInfo)
+                val ours = withContext(Dispatchers.Default) { android.os.Debug.getPss() / 1024 }
+                app.tvplayer.ui.components.Timing.note(
+                    "Memory",
+                    "Skyfall $ours MB · box ${box.totalMem / 1_048_576} MB, ${box.availMem / 1_048_576} MB free" +
+                        if (box.lowMemory) " (low)" else "",
+                )
+            }
             // Checked every 15 seconds (an instant look at the playlists); at least every 10 minutes.
             val since = android.os.SystemClock.uptimeMillis()
             while (android.os.SystemClock.uptimeMillis() - since < 10 * 60_000L) {
